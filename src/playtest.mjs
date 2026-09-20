@@ -8,7 +8,9 @@
 // and the touch steps tap:<x>x<y>, hold:<x>x<y>@<ms> and drag:<x1>x<y1>><x2>x<y2>[@<ms>]. Steps are comma
 // separated, so touch coordinates use x and @ rather than commas.
 // Screenshots land in <output dir>/<label>.png, console output and exceptions in <output dir>/console.txt.
-// The game's keys: Z action, X cancel, arrows (a modernized build also takes W/A/S/D, J and K). CHROME overrides the browser binary; SIZE=<w>x<h> the window
+// The game's keys: Z action, X cancel, arrows (a modernized build also takes W/A/S/D, J and K). The page is opened with
+// ?nosw, which keeps the service worker out of the run; SW=1 leaves it in, to test offline play. CHROME overrides the
+// browser binary; SIZE=<w>x<h> the window
 // (default 1024x768). DEVICE=<w>x<h>[@<dpr>] emulates a phone instead (touch events, mobile viewport), which is what
 // the touch overlay of patch modernized/09 needs. The browser is muted unless AUDIO=1.
 import { spawn } from 'node:child_process';
@@ -101,7 +103,9 @@ if (device) {
   await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   await send('Emulation.setEmitTouchEventsForMouse', { enabled: true, configuration: 'mobile' });
 }
-await send('Page.navigate', { url: `${HTTP}/index.html` });
+// ?nosw keeps the service worker out of a play-test: it would cache the whole build from the little python
+// server on every run. SW=1 leaves it in, to test offline play itself.
+await send('Page.navigate', { url: `${HTTP}/index.html${process.env.SW === '1' ? '' : '?nosw=1'}` });
 // Builds from import.mjs wait for a click on their Start button (enabled once the game code loads); older builds have none.
 for (let i = 0; i < 50; i++) {
   const { result } = await send('Runtime.evaluate', {

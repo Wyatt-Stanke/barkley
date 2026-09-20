@@ -69,6 +69,7 @@ import { createHash } from 'node:crypto';
 import { renameSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
+import { writeBuild } from './offline.mjs';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const CHROME =
@@ -1534,8 +1535,10 @@ function build(yyp, outDir, minify = false) {
     }
     rmSync(outDir, { recursive: true, force: true });
     cpSync(path.join(tmp, 'out'), outDir, { recursive: true });
+    // the service worker and the file list it caches the build from (a page under the fuzz harness never registers it)
+    const v = writeBuild(outDir);
     harness(outDir); // checks it's fuzzable
-    console.log(`built ${outDir}`);
+    console.log(`built ${outDir}: v${v.version}, build ${v.id}, ${v.files.length} files to cache`);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
