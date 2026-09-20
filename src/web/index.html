@@ -197,6 +197,14 @@
             #start .hint {
                 color: var(--mute);
             }
+            /* The version, and how far the offline copy has got (sw.js) */
+            #start #offline {
+                margin-top: 14px;
+                font-size: 13px;
+            }
+            #start #offline[hidden] {
+                display: none;
+            }
             #start:disabled .key,
             #start:disabled .touch,
             #start:not(:disabled) .load {
@@ -574,6 +582,7 @@
             <span class="hint load">Loading</span>
             <span class="hint key">Click or press any key</span>
             <span class="hint touch">Tap anywhere</span>
+            <span class="hint" id="offline" hidden></span>
         </button>
         <!-- Start resumes where the last session left off, if resume.js kept its state; this starts at the title screen instead. -->
         <div id="fresh" hidden>
@@ -674,6 +683,7 @@
                     var fresh = document.getElementById("fresh-go");
                     if (fresh) fresh.disabled = false;
                     if (!window.__fuzz) barkley_early_music();
+                    barkley_offline();
                 };
                 // fresh: forget the resume state before Game Start reads it (resume_take), so the game starts at the title
                 B.start = function (fresh) {
@@ -830,6 +840,50 @@
                         barkley_early.buffer.catch(function () {});
                     })
                     .catch(function () {});
+            }
+            // Offline play: sw.js keeps a whole build in the browser's storage and downloads a newer one in full before
+            // it takes over from the one in use. It is registered once the game has loaded, so it never shares the
+            // first visit's bandwidth, and it asks for a check then, whenever the tab comes back, and when the machine
+            // comes back online. Never under the fuzz harness or with ?nosw in the URL: the tooling's own servers
+            // would be handing out a hundred megabytes a run, and the fuzzer needs each build served fresh.
+            var barkley_offline_at = 0; // the last check, so coming back to the tab doesn't ask over and over
+            function barkley_offline() {
+                if (window.__fuzz || /(^|[?&])nosw\b/.test(location.search) || !navigator.serviceWorker) return;
+                navigator.serviceWorker.addEventListener("message", function (e) {
+                    if (e.data && e.data.type === "offline") barkley_offline_say(e.data);
+                });
+                navigator.serviceWorker.register("sw.js").then(function () {
+                    navigator.serviceWorker.ready.then(function (reg) {
+                        var check = function () {
+                            var w = reg.active || navigator.serviceWorker.controller;
+                            if (!w || document.visibilityState !== "visible" || Date.now() - barkley_offline_at < 60000) return;
+                            barkley_offline_at = Date.now();
+                            w.postMessage({ type: "check" });
+                        };
+                        addEventListener("online", check);
+                        addEventListener("visibilitychange", check);
+                        check();
+                    });
+                }, function () {});
+                // Before the worker has anything to say (a first visit), the version is still worth showing.
+                fetch("version.json", { cache: "no-store" })
+                    .then(function (r) { return r.json(); })
+                    .then(function (v) { barkley_offline_say({ version: v.version }); })
+                    .catch(function () {});
+            }
+            function barkley_offline_say(s) {
+                var e = document.getElementById("offline");
+                if (!e) return; // the Start screen is gone: the download carries on without anywhere to show it
+                var text = s.version ? "v" + s.version : "";
+                if (s.downloading) {
+                    var d = s.downloading;
+                    text =
+                        "v" + d.version +
+                        (d.core ? " · Saving for offline play " : " · Saving the music ") +
+                        Math.floor((100 * d.done) / Math.max(1, d.total)) + "%";
+                } else if (s.complete) text += " · Ready to play offline";
+                e.textContent = text;
+                e.hidden = !text;
             }
             // The runtime plays a streamed sound (all the music) by downloading and decoding it, and then starts the
             // sound object that asked, even if the game stopped it meanwhile; by then the runtime may have reused that

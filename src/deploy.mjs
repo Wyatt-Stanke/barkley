@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { writeBuild } from './offline.mjs';
 
 const REPO = 'Wyatt-Stanke/bsuajg-test';
 const SITE = 'https://wyatt-stanke.github.io/bsuajg-test/';
@@ -54,6 +55,10 @@ if (dir.endsWith('.yyp')) {
 const index = readFileSync(path.join(dir, 'index.html'), 'utf8');
 const game = index.match(/html5game\/([\w.-]+\.js)/)?.[1];
 if (!game || !existsSync(path.join(dir, 'html5game', game))) throw new Error(`${dir} isn't an HTML5 build`);
+// The service worker and its file list, made from the tree that is about to go up, whatever built it. Players on the
+// live site download this build in full before it replaces the one they have (src/offline.mjs, src/web/sw.js).
+const version = writeBuild(dir);
+console.log(`version ${version.version}, build ${version.id}: ${version.files.length} files for offline play`);
 
 // 2. check
 step('check');
@@ -81,6 +86,13 @@ git('fetch', '--depth', '1', 'origin', 'main');
 git('checkout', '-B', 'main', 'origin/main');
 git('reset', '--hard', 'origin/main');
 git('clean', '-fdx');
+// A build that changed without its version changing leaves players unable to tell the two apart (their browsers
+// still update: the check is on the build id, not the version).
+const live = existsSync(path.join(CLONE, 'version.json'))
+  ? JSON.parse(readFileSync(path.join(CLONE, 'version.json'), 'utf8'))
+  : null;
+if (live && live.id !== version.id && live.version === version.version)
+  console.warn(`warning: the live site is already v${version.version} with different files; bump src/version.json`);
 run('rsync', ['-a', '--delete', '--exclude=.git', '--exclude=.github', '--exclude=README.md', `${dir}/`, `${CLONE}/`]);
 git('add', '-A');
 if (!git('status', '--porcelain')) {
@@ -119,7 +131,13 @@ console.log(`workflow run ${id} succeeded`);
 
 // 5. verify the live site
 step('verify');
-const want = { 'index.html': md5(index), [`html5game/${game}`]: md5(readFileSync(path.join(dir, 'html5game', game))) };
+// version.json is what a player's browser checks to find this build, and sw.js is what does the checking
+const want = {
+  'index.html': md5(index),
+  'version.json': md5(readFileSync(path.join(dir, 'version.json'))),
+  'sw.js': md5(readFileSync(path.join(dir, 'sw.js'))),
+  [`html5game/${game}`]: md5(readFileSync(path.join(dir, 'html5game', game))),
+};
 for (const [file, sum] of Object.entries(want)) {
   let got;
   for (let i = 0; i < 36 && got !== sum; i++) {
@@ -136,4 +154,4 @@ for (const f of readdirSync(path.join(dir, 'html5game')).filter((f) => f.endsWit
   console.log(`live html5game/${f}: 200`);
 }
 if (built) rmSync(built, { recursive: true, force: true });
-console.log(`\ndeployed ${sha.slice(0, 7)} to ${SITE}`);
+console.log(`\ndeployed v${version.version} (${sha.slice(0, 7)}) to ${SITE}`);

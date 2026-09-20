@@ -5,6 +5,17 @@ GameMaker: Studio 1.4 export plus the original game folder and produces a GMX pr
 the removed legacy systems replaced, ready for GameMaker LTS's *Import GMS 1.4 project*.
 The final export target is **HTML5** (a web port).
 
+## Versions
+
+The port's version is semver and lives in one place, `src/version.json`. Everything that needs it
+reads it from there: the importer writes it into the HTML5 options, `writeBuild` stamps it into each
+build's `version.json`, the Start screen shows it, and `deploy.mjs` prints it and warns when the live
+site already has that version with different files.
+
+Bump it by hand before a deploy: **patch** for a fix, **minor** for something a player can see,
+**major** for a break in what carries over (saves, resume states, crash reports). Migrations and their
+imports are named after it too — `build/outputs/barkley-<version>.gmx` and `build/outputs/barkley-<version>/`.
+
 ## Requirements
 
 - Node.js 22+ (no npm packages; `playtest.mjs` uses the built-in `WebSocket`). Peggy is only needed to regenerate the parser after editing the grammar: `npx -y peggy@5.1.0 --format es --allowed-start-rules Program,Tokens -o src/lib/gml.parser.mjs src/lib/gml.peggy`
@@ -78,6 +89,49 @@ node src/playtest.mjs <dir>/out <test dir> 'wait:14000,shot:title,key:Z,wait:300
 Runtime errors from the default build are obfuscated. For readable stacks, build with a copy of the user folder whose
 `local_settings.json` sets `"machine.Platform Settings.HTML5.obfuscate": false` and
 `"machine.Platform Settings.HTML5.pretty_print": true`.
+
+A play-test opens the page with `?nosw`, which keeps the service worker out of it; the whole build
+would otherwise be cached from the little python server on every run. `SW=1 node src/playtest.mjs …`
+leaves it in.
+
+## Offline play (`src/offline.mjs`, `src/web/sw.js`)
+
+The installed app plays with no network, and a new build reaches a player whole or not at all.
+
+`writeBuild(dir)`, which `fuzz.mjs build` and `deploy.mjs` both run over the finished build, puts
+`sw.js` at its root — a service worker only controls pages under its own path, so it can't ship from
+`html5game/` the way the other page files do — and writes `version.json` beside it: the semver version,
+an **id** that is the hash of the whole file list, and every file with its hash, its size and whether
+the game needs it before the first frame. Of a 157 MB build it lists 101 MB in 260 files: the `.ogg`
+copies are left out (the page reports no Ogg support, so the runtime only ever asks for the MP3s), and
+the 51 MB of streamed music is marked as not needed to start.
+
+The worker has no version of its own; it does what the manifest it fetches tells it to.
+
+- **Caches.** One per build, `barkley-build-<id>`, plus `barkley-meta` holding which build is served.
+  Each build's cache carries its own manifest, so the worker can tell what any cache on disk holds.
+- **A check** (on load, on coming back to the tab, on coming back online — at most once a minute)
+  fetches `version.json` past the browser's cache. A different id means a new build: it downloads into
+  that build's own cache, four files at a time, **copying from the caches already on disk every file
+  whose hash hasn't changed** — across the usual rebuild that is all the sound and all the textures, so
+  an update moves a few megabytes, not a hundred.
+- **The switch.** The files the game needs to start come first, and once they are all in, that build is
+  the one served. The build it replaces is deleted **only once every last file of the new one is in**,
+  so a download cut off halfway leaves the player exactly what they had, and the next check picks up
+  from the files already stored. Until then a file the new build hasn't got yet is served from an older
+  cache that has it with the same hash.
+- **Serving** is cache first, network after. A page keeps the build it loaded with (pinned by client
+  id), so a build that finishes arriving mid-session never mixes into a running game; it is in use at
+  the next load. Range requests are answered from the whole cached file, which is what Safari needs to
+  play audio from an `<audio>` element.
+It caches unconditionally — no Save-Data or metered-connection check — because a player who opens the
+game at all downloads 41 MB to reach the title screen. If that ever has to change, the check belongs
+in `barkley_offline()` in `index.html`, not in the worker.
+
+- **The page** (`index.html`) registers the worker only once the game has loaded, so it never competes
+  with the first visit's own download, and never under the fuzz harness or with `?nosw` in the URL. The
+  Start screen carries the one line it has to say: `v1.0.0 · Saving for offline play 42%`, then
+  `v1.0.0 · Ready to play offline`.
 
 ## Fuzzing (HTML5)
 
