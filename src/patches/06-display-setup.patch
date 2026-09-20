@@ -1,0 +1,20 @@
+--- a/objects/oController/7_2.gml
++++ b/objects/oController/7_2.gml
+@@ -34,17 +34,11 @@
+ global.displayc=0; //sets resolution
+ global.displayx=display_get_width();
+ global.displayy=display_get_height();
+-display_reset();
+ if (global.sat[1]=0) {
+ window_set_fullscreen(0);
+ window_set_position((global.displayy/2)-((320*sett)/2),(global.displayy/2)-((240*sett)/2));
+ } else { //640,480
+ window_set_fullscreen(1);
+-if (display_test_all(320,240,-1,-1)) {
+-display_set_size(320,240);
+-window_set_position(0,0);
+-if (global.displayx!=320) { global.displayc=1; }
+-}
+ }
+ //
+ sViewInit();

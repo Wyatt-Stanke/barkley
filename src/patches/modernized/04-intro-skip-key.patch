@@ -1,0 +1,35 @@
+diff -ruN a/objects/oIntror0/9_1.gml b/objects/oIntror0/9_1.gml
+--- a/objects/oIntror0/9_1.gml
++++ b/objects/oIntror0/9_1.gml
+@@ -1,2 +1,3 @@
+ global.titleform=0;
++key_clear(vk_anykey); //modernized: the key that skips the intro must not also pick New season
+ room_goto(RomTitle);
+\ No newline at end of file
+diff -ruN a/objects/oIntror1/9_1.gml b/objects/oIntror1/9_1.gml
+--- a/objects/oIntror1/9_1.gml
++++ b/objects/oIntror1/9_1.gml
+@@ -1,2 +1,3 @@
+ global.titleform=0;
++key_clear(vk_anykey); //modernized: the key that skips the intro must not also pick New season
+ room_goto(RomTitle);
+\ No newline at end of file
+diff -ruN a/objects/oIntror5/5_1.gml b/objects/oIntror5/5_1.gml
+--- a/objects/oIntror5/5_1.gml
++++ b/objects/oIntror5/5_1.gml
+@@ -1,4 +1,5 @@
+ if (dontkill=0) {
+ global.titleform=0;
++key_clear(vk_anykey); //modernized: the key that skips the intro must not also pick New season
+ room_restart();
+ }
+\ No newline at end of file
+diff -ruN a/objects/oOntop/9_1.gml b/objects/oOntop/9_1.gml
+--- a/objects/oOntop/9_1.gml
++++ b/objects/oOntop/9_1.gml
+@@ -1,3 +1,4 @@
+ global.titleform=0;
+ sound_stop_all();
++key_clear(vk_anykey); //modernized: the key that skips the intro must not also pick New season
+ room_goto(RomTitle);
+\ No newline at end of file

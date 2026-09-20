@@ -1,0 +1,292 @@
+--- a/objects/oController/3_1.gml
++++ b/objects/oController/3_1.gml
+@@ -1,3 +1,4 @@
++resume_tick(); //Modernized: keeps the game state for a reload
+ key_release(); //modernized: see key_clear
+ //Timer
+ global.did_action=0; //tells game if press action since i clear it, sand toss
+--- a/objects/oController/7_2.gml
++++ b/objects/oController/7_2.gml
+@@ -71,4 +71,4 @@
+ global.roomer=-1;
+ //Music
+ //Start game sequence
+-room_goto_next();
+\ No newline at end of file
++if (resume_start()=0) room_goto_next(); //Modernized: or resume where a reloaded tab was
+\ No newline at end of file
+--- a/objects/oResumeMark/0_0.gml
++++ b/objects/oResumeMark/0_0.gml
+@@ -0,0 +1 @@
++//Modernized: nothing; resume_save and resume_restore create it to read and advance the instance id counter
+--- a/scripts/resume_dec.gml
++++ b/scripts/resume_dec.gml
+@@ -0,0 +1,20 @@
++//Modernized: undoes resume_enc. argument1 maps the saved ids that restored instances couldn't get back to those
++//instances; instance ids appear as handles and as plain numbers. The marker is ~ because json_parse turns strings
++//starting with @ref into handles of its own, and handle_parse returns 'ref unknown NaN' on HTML5.
++var a, i, n, s, t;
++if (is_real(argument0)) {
++if (argument0>=100000 && frac(argument0)=0) if (variable_struct_exists(argument1,string(argument0))) return variable_struct_get(argument1,string(argument0));
++return argument0;
++}
++if (is_array(argument0)) { n=array_length(argument0); a=array_create(n); for (i=0; i<n; i+=1) a[i]=resume_dec(argument0[i],argument1); return a; }
++if (!is_string(argument0)) return argument0;
++if (string_char_at(argument0,1)!='~') return argument0;
++s=string_delete(argument0,1,1);
++if (s='u') return undefined;
++if (string_char_at(s,1)='~') return s;
++s=string_delete(s,1,4); //'ref <type> <id or name>'
++t=string_copy(s,1,string_pos(' ',s)-1);
++s=string_delete(s,1,string_pos(' ',s));
++if (t='instance' && variable_struct_exists(argument1,s)) return variable_struct_get(argument1,s);
++if (string_digits(s)=s) return real(s);
++return asset_get_index(s);
+--- a/scripts/resume_enc.gml
++++ b/scripts/resume_enc.gml
+@@ -0,0 +1,15 @@
++//Modernized: a value as JSON data for resume_save, which passes numbers and undefined ('~u') through itself.
++//Handles (instances, objects, sounds, ...) become '~ref <type> <id or name>' strings (string() writes
++//'ref <type>(<id or name>)'); a string that starts with ~ gets another.
++var a, i, n, v;
++if (is_handle(argument0)) {
++v=string(argument0);
++if (string_char_at(v,string_length(v))=')') v=string_replace(string_delete(v,string_length(v),1),'(',' ');
++return '~'+v;
++}
++if (is_string(argument0)) { if (string_char_at(argument0,1)='~') return '~'+argument0; return argument0; }
++if (!is_array(argument0)) return argument0;
++n=array_length(argument0);
++a=array_create(n);
++for (i=0; i<n; i+=1) { v=argument0[i]; if (is_real(v)) a[i]=v; else if (is_undefined(v)) a[i]='~u'; else a[i]=resume_enc(v); }
++return a;
+--- a/scripts/resume_play.gml
++++ b/scripts/resume_play.gml
+@@ -0,0 +1,7 @@
++//Modernized: audio_play_sound (the transform resume sends every call here), keeping the newest handle of each sound so
++//resume_save can read its position
++var i;
++i=audio_play_sound(argument0,argument1,argument2);
++if (variable_global_exists('resume_sounds')=0) global.resume_sounds=json_parse('{}');
++variable_struct_set(global.resume_sounds,audio_get_name(argument0),i);
++return i;
+--- a/scripts/resume_restore.gml
++++ b/scripts/resume_restore.gml
+@@ -0,0 +1,100 @@
++//Modernized: rebuilds the state resume_save took before the tab reloaded, as oController, in place of the saved room's
++//Room Start. The room's own instances (whose Create events were skipped) are replaced by the saved ones, created with
++//their Create events skipped too, so nothing runs that didn't run in the saved game. The game keeps instance ids in
++//plain numbers as well as handles, so every instance keeps its saved id where it can: the room's placed instances
++//have theirs from the room, and created ones get theirs by using up the id counter to it with oResumeMark.
++var d, names, i, j, n, list, e, b, v, map, insts, obj, inst, p, k, next;
++d=global.resume_data;
++global.resume_phase=2;
++list=variable_struct_get(d,'instances');
++n=array_length(list);
++for (i=1; i<n; i+=1) { //insertion sort by id: placed instances, then created ones in the order they were created
++e=list[i];
++for (j=i-1; j>=0; j-=1) { if (variable_struct_get(list[j],'iid')<=variable_struct_get(e,'iid')) break; list[j+1]=list[j]; }
++list[j+1]=e;
++}
++map=json_parse('{}'); //first the saved ids and objects, to keep the placed instances the saved game still had
++for (i=0; i<n; i+=1) variable_struct_set(map,string(variable_struct_get(list[i],'iid')),variable_struct_get(list[i],'object'));
++with (all) if (persistent=0) {
++k=string(real(id));
++if (variable_struct_exists(map,k)=0 || variable_struct_get(map,k)!=object_get_name(object_index)) instance_destroy(id,false);
++}
++audio_stop_all();
++insts=array_create(n);
++map=json_parse('{}'); //then the saved ids that the new instances couldn't get
++k=instance_create_depth(0,0,0,oResumeMark); instance_destroy(k,false); next=real(k)+1;
++for (i=0; i<n; i+=1) {
++e=list[i];
++k=variable_struct_get(e,'iid');
++obj=asset_get_index(variable_struct_get(e,'object'));
++b=variable_struct_get(e,'builtin');
++if (instance_exists(k) && k.object_index=obj) inst=k;
++else if (obj=oController || obj=oScreenFill) inst=instance_find(obj,0);
++else {
++while (next<k) { p=instance_create_depth(0,0,0,oResumeMark); instance_destroy(p,false); next=real(p)+1; }
++if (b[25]!='' && layer_exists(b[25])) inst=instance_create_layer(b[0],b[1],b[25],obj);
++else inst=instance_create_depth(b[0],b[1],b[24],obj);
++next=max(next,real(inst)+1);
++}
++insts[i]=inst;
++if (real(inst)!=k) variable_struct_set(map,string(k),inst);
++}
++k=variable_struct_get(d,'nextid'); //ids of instances that no longer exist stay unused
++while (next<k) { p=instance_create_depth(0,0,0,oResumeMark); instance_destroy(p,false); next=real(p)+1; }
++//Globals
++b=variable_struct_get(d,'globals');
++names=variable_struct_get_names(b);
++for (j=0; j<array_length(names); j+=1) variable_global_set(names[j],resume_dec(variable_struct_get(b,names[j]),map));
++if (variable_global_exists('startingTime')) global.startingTime+=current_time-variable_struct_get(d,'time'); //play time
++global.rendrate=current_time;
++list=variable_struct_get(d,'paths');
++for (j=0; j<array_length(list); j+=1) {
++b=list[j];
++path_clear_points(global.path[j]);
++path_set_closed(global.path[j],b[0]); path_set_kind(global.path[j],b[1]); path_set_precision(global.path[j],b[2]);
++for (i=3; i<array_length(b); i+=3) path_add_point(global.path[j],b[i],b[i+1],b[i+2]);
++}
++list=variable_struct_get(d,'instances');
++for (i=0; i<n; i+=1) {
++e=list[i];
++b=variable_struct_get(e,'builtin');
++if (!is_undefined(b)) with (insts[i]) {
++p=resume_dec(b[38],map);
++if (is_string(b[38]) || (b[38]>=0 && path_exists(p))) { //a path (path_add's are plain numbers) starts where the instance is, so start it where this one would have
++x=b[0]-path_get_x(p,b[39])+path_get_x(p,0); y=b[1]-path_get_y(p,b[39])+path_get_y(p,0);
++path_start(p,b[40],b[41],0); path_position=b[39]; path_scale=b[42]; path_orientation=b[43];
++}
++x=b[0]; y=b[1]; xprevious=b[2]; yprevious=b[3]; xstart=b[4]; ystart=b[5];
++hspeed=b[6]; vspeed=b[7]; if (b[6]=0 && b[7]=0) direction=b[8];
++friction=b[9]; gravity=b[10]; gravity_direction=b[11];
++sprite_index=resume_dec(b[12],map); image_index=b[13]; image_speed=b[14]; image_xscale=b[15]; image_yscale=b[16];
++image_angle=b[17]; image_alpha=b[18]; image_blend=b[19];
++mask_index=resume_dec(b[20],map); visible=b[21]; solid=b[22]; persistent=b[23];
++if (b[25]!='' && layer_exists(b[25])) layer=layer_get_id(b[25]);
++else if (layer!=-1 && layer_get_name(layer)!='') { depth=b[24]+1; depth=b[24]; } //a room layer's instance moved to a depth of its own, as depth= did
++else depth=b[24];
++for (j=0; j<12; j+=1) alarm[j]=b[26+j];
++v=variable_struct_get(e,'vars');
++names=variable_struct_get_names(v);
++for (j=0; j<array_length(names); j+=1) variable_instance_set(id,names[j],resume_dec(variable_struct_get(v,names[j]),map));
++}
++}
++//Room state that Room Start or cinemas set
++b=variable_struct_get(d,'views');
++for (j=0; j<8; j+=1) { view_xview[j]=b[j*5]; view_yview[j]=b[j*5+1]; view_wview[j]=b[j*5+2]; view_hview[j]=b[j*5+3]; view_visible[j]=b[j*5+4]; }
++b=variable_struct_get(d,'backgrounds');
++for (j=0; j<8; j+=1) if (background_index[j]!=-1) { background_visible[j]=b[j*5]; background_htiled[j]=b[j*5+1]; background_vtiled[j]=b[j*5+2]; background_x[j]=b[j*5+3]; background_y[j]=b[j*5+4]; } //a slot with no background: reading visible gives the layer's (true), and writing it would turn the empty element on, white over the room
++room_speed=variable_struct_get(d,'roomspeed');
++if (global.battlers>0) { global.grid=mp_grid_create(4,4,room_width/8,room_height/8,8,8); mp_grid_add_instances(global.grid,oWall,0); }
++window_set_caption(sRoomCaption(room));
++if (sRoomCaption(room)='') window_set_caption('Barkley, Shut Up and Jam: Gaiden');
++//Looping sounds and the music continue where they were; other sound effects are dropped
++b=variable_struct_get(d,'sounds');
++for (j=0; j<array_length(b); j+=3) {
++k=asset_get_index(b[j]);
++if (b[j+2] || k=global.lastmusic) { inst=resume_play(k,0,b[j+2]); audio_sound_set_track_position(inst,b[j+1]); }
++}
++global.resume_data=undefined;
++global.resume_phase=3;
++global.resume_count=0;
++resume_put(resume_save());
+--- a/scripts/resume_save.gml
++++ b/scripts/resume_save.gml
+@@ -0,0 +1,74 @@
++//Modernized: the whole game state as JSON, for resume_restore: globals, every instance (built-in and own variables),
++//the mp_grid paths, views, backgrounds and playing sounds
++var s, g, names, i, j, n, list, e, b, v, k;
++s=json_parse('{}');
++variable_struct_set(s,'build',GM_build_date);
++variable_struct_set(s,'room',room_get_name(room));
++variable_struct_set(s,'time',current_time);
++variable_struct_set(s,'roomspeed',room_speed);
++g=json_parse('{}');
++names=variable_instance_get_names(global);
++n=array_length(names);
++for (i=0; i<n; i+=1) {
++k=names[i];
++if (string_pos('resume_',k)=1 || k='path' || k='key_latch' || k='displayx' || k='displayy') continue; //this session's own
++k=variable_global_get(k);
++if (!is_real(k)) { if (is_undefined(k)) k='~u'; else k=resume_enc(k); }
++variable_struct_set(g,names[i],k);
++}
++variable_struct_set(s,'globals',g);
++list=array_create(0);
++with (all) {
++e=json_parse('{}');
++variable_struct_set(e,'object',object_get_name(object_index));
++variable_struct_set(e,'iid',real(id)); //not 'id', which compiles to the built-in
++if (object_index!=oScreenFill) { //its surface doesn't survive a reload; the new one is kept
++b=array_create(0);
++array_push(b,x,y,xprevious,yprevious,xstart,ystart,hspeed,vspeed,direction,friction,gravity,gravity_direction);
++array_push(b,resume_enc(sprite_index),image_index,image_speed,image_xscale,image_yscale,image_angle,image_alpha,image_blend);
++array_push(b,resume_enc(mask_index),visible,solid,persistent,depth);
++if (layer!=-1) array_push(b,layer_get_name(layer)); else array_push(b,'');
++array_push(b,alarm[0],alarm[1],alarm[2],alarm[3],alarm[4],alarm[5],alarm[6],alarm[7],alarm[8],alarm[9],alarm[10],alarm[11]);
++array_push(b,resume_enc(path_index),path_position,path_speed,path_endaction,path_scale,path_orientation);
++variable_struct_set(e,'builtin',b);
++v=json_parse('{}');
++names=variable_instance_get_names(id);
++n=array_length(names);
++for (j=0; j<n; j+=1) {
++k=variable_instance_get(id,names[j]);
++if (!is_real(k)) { if (is_undefined(k)) k='~u'; else k=resume_enc(k); }
++variable_struct_set(v,names[j],k);
++}
++variable_struct_set(e,'vars',v);
++}
++array_push(list,e);
++}
++variable_struct_set(s,'instances',list);
++list=array_create(0);
++for (j=0; j<10; j+=1) {
++b=array_create(0);
++array_push(b,path_get_closed(global.path[j]),path_get_kind(global.path[j]),path_get_precision(global.path[j]));
++n=path_get_number(global.path[j]);
++for (i=0; i<n; i+=1) array_push(b,path_get_point_x(global.path[j],i),path_get_point_y(global.path[j],i),path_get_point_speed(global.path[j],i));
++array_push(list,b);
++}
++variable_struct_set(s,'paths',list);
++b=array_create(0);
++for (j=0; j<8; j+=1) array_push(b,view_xview[j],view_yview[j],view_wview[j],view_hview[j],view_visible[j]);
++variable_struct_set(s,'views',b);
++b=array_create(0);
++for (j=0; j<8; j+=1) array_push(b,background_visible[j],background_htiled[j],background_vtiled[j],background_x[j],background_y[j]);
++variable_struct_set(s,'backgrounds',b);
++b=array_create(0);
++if (variable_global_exists('resume_sounds')) {
++names=variable_struct_get_names(global.resume_sounds);
++for (j=0; j<array_length(names); j+=1) {
++i=variable_struct_get(global.resume_sounds,names[j]);
++if (audio_is_playing(i)) array_push(b,names[j],audio_sound_get_track_position(i),audio_sound_get_loop(i));
++}
++}
++variable_struct_set(s,'sounds',b);
++k=instance_create_depth(0,0,0,oResumeMark); //the next instance id
++instance_destroy(k,false);
++variable_struct_set(s,'nextid',real(k)+1);
++return json_stringify(s);
+--- a/scripts/resume_skip.gml
++++ b/scripts/resume_skip.gml
+@@ -0,0 +1,7 @@
++//Modernized: 1 while resume_start rebuilds a reloaded game, so the event calling it exits: Create events and instance
++//creation code (argument0=0) until the state is restored, Room Start events (1) until the next step.
++//The first Room Start in the saved room restores the state.
++if (variable_global_exists('resume_phase')=0) return 0;
++if (global.resume_phase=1 && argument0=1 && room=global.resume_room) with (oController) resume_restore();
++if (global.resume_phase=3) return argument0=1;
++return global.resume_phase!=0;
+--- a/scripts/resume_start.gml
++++ b/scripts/resume_start.gml
+@@ -0,0 +1,14 @@
++//Modernized: resume after the tab reloads. Called at Game Start; if the page kept a game state (migrate/resume.js),
++//goes straight to its room and returns 1. The transform resumeGate makes that room's Create and Room Start events
++//exit, and resume_skip rebuilds the saved state there instead.
++var s;
++global.resume_phase=0;
++global.resume_count=-1;
++s=resume_take();
++if (s='') return 0;
++global.resume_data=json_parse(s);
++if (abs(variable_struct_get(global.resume_data,'build')-GM_build_date)>0.00001) return 0; //saved by another build
++global.resume_room=asset_get_index(variable_struct_get(global.resume_data,'room'));
++global.resume_phase=1;
++room_goto(global.resume_room);
++return 1;
+--- a/scripts/resume_tick.gml
++++ b/scripts/resume_tick.gml
+@@ -0,0 +1,10 @@
++//Modernized: oController's Begin Step. Every 30 steps (half a second) the game state goes to the page
++//(migrate/resume.js), which stores it when the tab is hidden or closed. The intro, title and menus aren't kept:
++//entering them forgets the state.
++if (global.resume_phase=3) global.resume_phase=0;
++if (room=RomInit || room=RomStarter || room=RomIntro0 || room=RomIntro1 || room=RomTitle || room=RomLoad || room=RomConfig) {
++if (global.resume_count!=-1) { resume_clear(); global.resume_count=-1; }
++exit;
++}
++global.resume_count+=1;
++if (global.resume_count mod 30=0) resume_put(resume_save());

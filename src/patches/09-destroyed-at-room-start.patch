@@ -1,0 +1,40 @@
+diff -ruN a/objects/oBalthios/0_0.gml b/objects/oBalthios/0_0.gml
+--- a/objects/oBalthios/0_0.gml
++++ b/objects/oBalthios/0_0.gml
+@@ -1,3 +1,4 @@
++if (!instance_exists(id)) exit; //destroyed by an earlier instance's Create at room start
+ event_inherited();
+ sprt=sBalthios;
+ if (global.victorian=0) name='Balthios';
+diff -ruN a/objects/oCyberdwarf/0_0.gml b/objects/oCyberdwarf/0_0.gml
+--- a/objects/oCyberdwarf/0_0.gml
++++ b/objects/oCyberdwarf/0_0.gml
+@@ -1,3 +1,4 @@
++if (!instance_exists(id)) exit; //destroyed by an earlier instance's Create at room start
+ event_inherited();
+ sprt=sCyberdwarf;
+ if (global.victorian=0) name='Cyber Dwarf';
+diff -ruN a/objects/oHoopz/0_0.gml b/objects/oHoopz/0_0.gml
+--- a/objects/oHoopz/0_0.gml
++++ b/objects/oHoopz/0_0.gml
+@@ -1,3 +1,4 @@
++if (!instance_exists(id)) exit; //destroyed by an earlier instance's Create at room start
+ event_inherited();
+ sprt=sHoopz0;
+ if (global.victorian=0) name='Hoopz';
+diff -ruN a/objects/oIntror5/0_0.gml b/objects/oIntror5/0_0.gml
+--- a/objects/oIntror5/0_0.gml
++++ b/objects/oIntror5/0_0.gml
+@@ -1,3 +1,4 @@
++if (!instance_exists(id)) exit; //destroyed by an earlier instance's Create at room start
+ fade=1;
+ qqq=1;
+ alarm[0]=65;
+diff -ruN a/objects/oSuitToll/0_0.gml b/objects/oSuitToll/0_0.gml
+--- a/objects/oSuitToll/0_0.gml
++++ b/objects/oSuitToll/0_0.gml
+@@ -1,3 +1,4 @@
++if (!instance_exists(id)) exit; //destroyed by an earlier instance's Create at room start
+ event_inherited();
+ sprt=sSuitBlue;
+ t=2;

@@ -1,0 +1,32 @@
+diff -ruN pa/scripts/sCredits.gml pb/scripts/sCredits.gml
+--- a/scripts/sCredits.gml
++++ b/scripts/sCredits.gml
+@@ -1,5 +1,5 @@
+ jjj="~-_" + string_upper(argument[0]) + "_-~#";
+-for (l=1; string(argument[l])!='0'; l+=1) {
++for (l=1; l<argument_count && string(argument[l])!='0'; l+=1) {
+ jjj+=argument[l]+"#";
+ }
+ if (cou<18) jjj+="####";
+diff -ruN pa/scripts/sR.gml pb/scripts/sR.gml
+--- a/scripts/sR.gml
++++ b/scripts/sR.gml
+@@ -1,4 +1,4 @@
+ //Gets a bunch of arguments and randomizes them
+ var ww;
+-for (ww=0; string(argument[ww])!="0"; ww+=1) ww=ww;
++for (ww=0; ww<argument_count && string(argument[ww])!="0"; ww+=1) ww=ww;
+ return(argument[floor(random(ww))]);
+\ No newline at end of file
+diff -ruN pa/scripts/sS.gml pb/scripts/sS.gml
+--- a/scripts/sS.gml
++++ b/scripts/sS.gml
+@@ -4,7 +4,7 @@
+ sound_play(argument0);
+ return(argument0);
+ } else {
+-for (ww=0; argument[ww]!=0; ww+=1) ww=ww;
++for (ww=0; ww<argument_count && argument[ww]!=0; ww+=1) ww=ww;
+ dcf=floor(random(ww));
+ sound_play(argument[dcf]);
+ return(argument[dcf]);

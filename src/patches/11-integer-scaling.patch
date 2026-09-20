@@ -1,0 +1,45 @@
+diff -ruN a/objects/oController/7_2.gml b/objects/oController/7_2.gml
+--- a/objects/oController/7_2.gml
++++ b/objects/oController/7_2.gml
+@@ -36,11 +36,11 @@
+ global.displayy=display_get_height();
+ if (global.sat[1]=0) {
+ window_set_fullscreen(0);
+-window_set_position((global.displayy/2)-((320*sett)/2),(global.displayy/2)-((240*sett)/2));
+ } else { //640,480
+ window_set_fullscreen(1);
+ }
+ //
++if (instance_exists(oScreenFill)=0) instance_create(0,0,oScreenFill); //fills the browser window
+ sViewInit();
+ //Schemes
+ global.bl_=0; //Battle load
+diff -ruN a/objects/oScreenFill/0_0.gml b/objects/oScreenFill/0_0.gml
+--- a/objects/oScreenFill/0_0.gml
++++ b/objects/oScreenFill/0_0.gml
+@@ -0,0 +1,3 @@
++//The canvas fills the browser window; oScreenFill draws the 320x240 game as large as fits, with black borders
++persistent=1;
++application_surface_draw_enable(0);
+diff -ruN a/objects/oScreenFill/3_1.gml b/objects/oScreenFill/3_1.gml
+--- a/objects/oScreenFill/3_1.gml
++++ b/objects/oScreenFill/3_1.gml
+@@ -0,0 +1,4 @@
++if (window_get_width()!=browser_width || window_get_height()!=browser_height) {
++window_set_size(browser_width,browser_height);
++window_set_position(0,0);
++}
+diff -ruN a/objects/oScreenFill/8_77.gml b/objects/oScreenFill/8_77.gml
+--- a/objects/oScreenFill/8_77.gml
++++ b/objects/oScreenFill/8_77.gml
+@@ -0,0 +1,10 @@
++var ww, wh, aw, ah, s;
++ww=window_get_width();
++wh=window_get_height();
++aw=surface_get_width(application_surface);
++ah=surface_get_height(application_surface);
++s=min(ww/aw,wh/ah);
++if (s>=1) s=floor(s); //whole-number scale, so every game pixel is the same size
++draw_clear(c_black);
++gpu_set_texfilter(0);
++draw_surface_ext(application_surface,floor((ww-aw*s)/2),floor((wh-ah*s)/2),s,s,0,c_white,1);

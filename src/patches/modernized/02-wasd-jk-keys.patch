@@ -1,0 +1,35 @@
+diff -ruN a/objects/key_makestuff/7_10.gml b/objects/key_makestuff/7_10.gml
+--- a/objects/key_makestuff/7_10.gml
++++ b/objects/key_makestuff/7_10.gml
+@@ -2,4 +2,5 @@
+ global.cpref[i]=999;
+ }
+ doall=0;
++keyboard_unset_map(); //modernized: record the real key, not its alias; key_doset maps them again
+ keyboard_lastkey=0;
+\ No newline at end of file
+diff -ruN a/scripts/key_alias.gml b/scripts/key_alias.gml
+--- a/scripts/key_alias.gml
++++ b/scripts/key_alias.gml
+@@ -0,0 +1,4 @@
++//Modernized: makes key argument0 act as key argument1, unless argument0 is itself bound to a control
++var i;
++for (i=0; i<global.key_amount; i+=1) if (global.cpref[i]=argument0) exit;
++keyboard_set_map(argument0,argument1);
+diff -ruN a/scripts/key_doset.gml b/scripts/key_doset.gml
+--- a/scripts/key_doset.gml
++++ b/scripts/key_doset.gml
+@@ -5,5 +5,13 @@
+ global.key_action=global.cpref[4];
+ global.key_cancel=global.cpref[5];
+ global.key_start=global.cpref[6];
++//Modernized: W A S D and J K also work as up, left, down, right, action and cancel
++keyboard_unset_map();
++key_alias(ord("W"),global.key_up);
++key_alias(ord("A"),global.key_left);
++key_alias(ord("S"),global.key_down);
++key_alias(ord("D"),global.key_right);
++key_alias(ord("J"),global.key_action);
++key_alias(ord("K"),global.key_cancel);
+ 
+ 

@@ -1,0 +1,13 @@
+diff -ruN a/objects/oController/7_4.gml b/objects/oController/7_4.gml
+--- a/objects/oController/7_4.gml
++++ b/objects/oController/7_4.gml
+@@ -36,8 +36,7 @@
+ //instance_create(0,0,oTester);
+ global.camera=oBarkley;
+ if (global.cvx!=-1) { //Positions player
+-oBarkley.x=global.cvx;
+-oBarkley.y=global.cvy;
++with (oBarkley) { x=global.cvx; y=global.cvy; } //GM6 skipped assigning to absent instances (RomLoad has no oBarkley)
+ global.cvx=-1;
+ }
+ if (global.scheme[28]=-999) global.cinema=0; //unfreeze after bball

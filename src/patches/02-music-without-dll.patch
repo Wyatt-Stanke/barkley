@@ -1,0 +1,115 @@
+--- a/objects/oController/7_16.gml
++++ b/objects/oController/7_16.gml
+@@ -1,51 +1 @@
+-//Possibly have global music array so it spans to sMusic
+-ddd=current_time;
+-if (directory_exists("Music")=1) {
+-sound_replace(mSpaceshort,'Music\_spaceshort.wav',0,0); //wav sound
+-}
+-if (false) { //directory_exists("Music")=1
+-sound_replace(mSadness,'Music\_sadness.mp3',3,0);
+-sound_replace(mSpace,'Music\_space.mp3',3,0);
+-sound_replace(mRunaway,'Music\_runaway.mp3',3,0);
+-sound_replace(mFalling,'Music\_falling.mp3',3,0);
+-sound_replace(mChurch,'Music\_church.mp3',3,0);
+-sound_replace(mCatacomb,'Music\_catacomb.mp3',3,0);
+-sound_replace(mSewer,'Music\_sewer.mp3',3,0);
+-sound_replace(mSpirit,'Music\_spirit.mp3',3,0);
+-sound_replace(mDoctor,'Music\_doctor.mp3',3,0);
+-sound_replace(mCyberdwarf,'Music\_cyberdwarf.mp3',3,0);
+-sound_replace(mParade,'Music\_parade.mp3',3,0);
+-sound_replace(mProto,'Music\_proto.mp3',3,0);
+-sound_replace(mQuest,'Music\_quest.mp3',3,0);
+-sound_replace(mSpalding,'Music\_spalding.mp3',3,0);
+-sound_replace(mGameover,'Music\_gameover.mp3',3,0);
+-sound_replace(mToot,'Music\_toot.mp3',3,0);
+-sound_replace(mMoe,'Music\_moe.mp3',3,0);
+-sound_replace(mBasedow,'Music\_basedow.mp3',3,0);
+-sound_replace(mSurf,'Music\_surf.mp3',3,0);
+-sound_replace(mEpicbattle,'Music\_epicbattle.mp3',3,0);
+-sound_replace(mBattle,'Music\_battle.mp3',3,0);
+-sound_replace(mDating,'Music\_dating.mp3',3,0);
+-sound_replace(mLiberty,'Music\_liberty.mp3',3,0);
+-sound_replace(mOutskirt,'Music\_outskirt.mp3',3,0);
+-sound_replace(mSweet,'Music\_sweet.mp3',3,0);
+-sound_replace(mJordan,'Music\_jordan.mp3',3,0);
+-sound_replace(mVictory,'Music\_victory.mp3',3,0);
+-sound_replace(mFinal,'Music\_final.mp3',3,0);
+-sound_replace(mChup,'Music\_chup.mp3',3,0);
+-sound_replace(mDeath,'Music\_death.mp3',3,0);
+-sound_replace(mCuch,'Music\_cuch.mp3',3,0);
+-sound_replace(mEternity,'Music\_eternity.mp3',3,0);
+-sound_replace(mNecron,'Music\_necron.mp3',3,0);
+-}
+-if (directory_exists("Voice")=1) {
+-sound_replace(mPart0,'Voice\_part0.wav',0,0);
+-sound_replace(mPart1,'Voice\_part1.wav',0,0);
+-sound_replace(mPart2,'Voice\_part2.wav',0,0);
+-sound_replace(mPart3,'Voice\_part3.wav',0,0);
+-sound_replace(mBase,'Voice\_base.wav',0,0);
+-sound_replace(mNeoshek,'Voice\_neoshek.wav',0,0);
+-sound_replace(mWeari,'Voice\_weari.wav',0,0);
+-sound_replace(mThatbal,'Voice\_thatbal.wav',0,0);
+-}
+-//show_message('time:'+string(current_time-ddd));
+\ No newline at end of file
++//Music and voice clips are imported sound resources; nothing to load at runtime
+--- a/objects/oController/7_2.gml
++++ b/objects/oController/7_2.gml
+@@ -76,7 +76,5 @@
+ global.posser=-1;
+ global.roomer=-1;
+ //Music
+-bgm_Init();
+-if (global.devplay=0) event_user(6);
+ //Start game sequence
+ room_goto_next();
+\ No newline at end of file
+--- a/objects/oController/7_3.gml
++++ b/objects/oController/7_3.gml
+@@ -1 +1 @@
+-bgm_Close();
+\ No newline at end of file
++//Music DLL shutdown removed
+--- a/objects/oOntop/0_0.gml
++++ b/objects/oOntop/0_0.gml
+@@ -4,5 +4,3 @@
+ dalp=1;
+ amt=0.2;
+ alarm[0]=30;
+-sound_replace(mTOG,'Music\_togs.wav',0,1);
+-sound_replace(mTOGS,'Music\_togsound.wav',0,1);
+\ No newline at end of file
+--- a/scripts/sA.gml
++++ b/scripts/sA.gml
+@@ -1,24 +1,15 @@
+-namt=sound_get_name(argument1);
+-namt=string_replace(namt,"m","_");
+-namt=string_lower(namt);
+-namt=working_directory + "\Music\" + namt + ".mp3";
+-global.musicstring=namt;
+-if (argument0='play') {
+-//saud_Close("sound");
+-//saud_Load(namt,"sound");
+-bgm_Play(namt);
+-} else if (argument0='loop') {
+-//saud_Close("sound");
+-//saud_Load(namt,"sound");
+-bgm_Play(namt,1);
++//Music player: one track at a time, played from imported sound resources
++if (argument0='play' || argument0='loop') {
++if (global.lastmusic!=-1) sound_stop(global.lastmusic);
++if (argument0='loop') sound_loop(argument1);
++else sound_play(argument1);
+ } else if (argument0='stop') {
++if (global.lastmusic!=-1) sound_stop(global.lastmusic);
+ global.lastmusic=-1;
+-bgm_Stop();
+ return(1);
+ } else if (argument0='stopall') {
+ global.lastmusic=-1;
+ sound_stop_all();
+-bgm_Stop();
+ return(1);
+ } else if (argument0='check') {
+ if (global.lastmusic=argument1) return(1);

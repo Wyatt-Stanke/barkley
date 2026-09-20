@@ -1,0 +1,24 @@
+diff -ruN a/objects/oController/2_0.gml b/objects/oController/2_0.gml
+--- a/objects/oController/2_0.gml
++++ b/objects/oController/2_0.gml
+@@ -1,6 +1,6 @@
+ //Variables are persistant too it seems! Maybe this is error.
+-name=sAlBhed(room_caption);
+-if (global.cinema=1 || global.lastname=sAlBhed(room_caption)) exit;
++name=sAlBhed(sRoomCaption(room));
++if (global.cinema=1 || global.lastname=sAlBhed(sRoomCaption(room))) exit;
+ sco=75;
+ fal=0;
+ global.lastname=name;
+\ No newline at end of file
+diff -ruN a/objects/oController/7_4.gml b/objects/oController/7_4.gml
+--- a/objects/oController/7_4.gml
++++ b/objects/oController/7_4.gml
+@@ -1,5 +1,7 @@
+ //if (global.devplay=1) show_message('Did controller');
+ //Battles
++window_set_caption(sRoomCaption(room)); //GM6 showed the room caption in the title bar
++if (sRoomCaption(room)='') window_set_caption('Barkley, Shut Up and Jam: Gaiden');
+ if (room=RomInter) exit;
+ stef=0;event_user(3); //retain keys
+ global.sprinter=100;

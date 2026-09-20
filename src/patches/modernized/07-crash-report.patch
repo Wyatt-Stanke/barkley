@@ -1,0 +1,44 @@
+--- a/objects/oController/3_1.gml
++++ b/objects/oController/3_1.gml
+@@ -5,6 +5,7 @@
+ if (global.displayc=1) { room_goto(RomConfig); exit; }
+ global.rendt=min(33,(current_time-global.rendrate))/100; //Lowest rate 15 fps - was 66 now 33
+ global.rendt=max(.1,global.rendt*100)/100; //At least 1 milli counted
++global.rendt=crash_step(global.rendt); //Modernized: logged for crash reports, which replay it (migrate/crash.js)
+ global.rendrate=current_time;
+ global.rd=global.rendt*3;
+ //Joy pad
+--- a/scripts/resume_restore.gml
++++ b/scripts/resume_restore.gml
+@@ -98,3 +98,4 @@
+ global.resume_phase=3;
+ global.resume_count=0;
+ resume_put(resume_save());
++if (variable_global_exists('crash_seed')) random_set_seed(global.crash_seed); //the checkpoint's random numbers (modernized/07)
+--- a/scripts/resume_tick.gml
++++ b/scripts/resume_tick.gml
+@@ -1,10 +1,22 @@
+ //Modernized: oController's Begin Step. Every 30 steps (half a second) the game state goes to the page
+ //(migrate/resume.js), which stores it when the tab is hidden or closed. The intro, title and menus aren't kept:
+ //entering them forgets the state.
++//The same state goes to migrate/crash.js as a checkpoint for crash reports, which replay the game from one: each
++//checkpoint reseeds the random numbers (global.crash_seed) and hands over the keys key_clear has latched.
++var s, i, l;
+ if (global.resume_phase=3) global.resume_phase=0;
++if (crash_wanted()) crash_end(resume_save()); //a bug report asked for: the state it ends with
+ if (room=RomInit || room=RomStarter || room=RomIntro0 || room=RomIntro1 || room=RomTitle || room=RomLoad || room=RomConfig) {
+-if (global.resume_count!=-1) { resume_clear(); global.resume_count=-1; }
++if (global.resume_count!=-1) { resume_clear(); crash_put('',''); global.resume_count=-1; }
+ exit;
+ }
+ global.resume_count+=1;
+-if (global.resume_count mod 30=0) resume_put(resume_save());
++if (global.resume_count mod 30=0) {
++global.crash_seed=irandom(999999999);
++s=resume_save();
++resume_put(s);
++l='';
++if (variable_global_exists('key_latch')) for (i=8; i<256; i+=1) if (global.key_latch[i]=1) l+=string(i)+' ';
++crash_put(s,l);
++random_set_seed(global.crash_seed);
++}

@@ -1,0 +1,58 @@
+--- a/objects/oBCamera/0_0.gml
++++ b/objects/oBCamera/0_0.gml
+@@ -55,7 +55,6 @@
+ global.b_evade=0;
+ global.b_victory=0;
+ //Create background image
+-sprite_replace(sBBattle,"BG\BG"+ string(global.b_back) +".gif",1,0,0,0,1,0,0);
+ backdrop=instance_create(0,20.5,oBDummy);
+ backdrop.depth=5;
+ backdrop.visible=1;
+--- a/objects/oBG0/0_0.gml
++++ b/objects/oBG0/0_0.gml
+@@ -1,10 +1,2 @@
+-if (background_index[0]!=-1 && background_index[0]!=background86) {
+-ggg=background_get_name(background_index[0]);
+-sprite_replace(sBG0,"BG\"+ggg+".gif",1,background_get_transparent(background_index[0]),0,0,1,0,0);
+-x=background_x[0];
+-y=background_y[0];
+-visible=background_visible[0]; 
+-sprite_index=sBG0;
+-hspeed=background_hspeed[0];
+-vspeed=background_vspeed[0];
+-}
+\ No newline at end of file
++//Room backgrounds are imported resources now, so the room draws them itself
++instance_destroy();
+--- a/objects/oBG1/0_0.gml
++++ b/objects/oBG1/0_0.gml
+@@ -1,10 +1,2 @@
+-if (background_index[1]!=-1) {
+-ggg=background_get_name(background_index[1]);
+-sprite_replace(sBG1,"BG\"+ggg+".gif",1,0,background_get_transparent(background_index[1]),0,1,0,0);
+-x=background_x[1];
+-y=background_y[1];
+-visible=background_visible[1]; 
+-sprite_index=sBG1;
+-hspeed=background_hspeed[1];
+-vspeed=background_vspeed[1];
+-}
+\ No newline at end of file
++//Room backgrounds are imported resources now, so the room draws them itself
++instance_destroy();
+--- a/objects/oBG2/0_0.gml
++++ b/objects/oBG2/0_0.gml
+@@ -1,10 +1,2 @@
+-if (background_index[2]!=-1) {
+-ggg=background_get_name(background_index[2]);
+-sprite_replace(sBG2,"BG\"+ggg+".gif",1,0,background_get_transparent(background_index[2]),0,1,0,0);
+-x=background_x[2];
+-y=background_y[2]; 
+-visible=background_visible[2]; 
+-sprite_index=sBG2;
+-hspeed=background_hspeed[2];
+-vspeed=background_vspeed[2];
+-}
+\ No newline at end of file
++//Room backgrounds are imported resources now, so the room draws them itself
++instance_destroy();

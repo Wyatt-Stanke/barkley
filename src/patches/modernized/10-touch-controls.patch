@@ -1,0 +1,77 @@
+diff -ruN a/objects/oController/3_1.gml b/objects/oController/3_1.gml
+--- a/objects/oController/3_1.gml	2026-09-17 19:07:57
++++ b/objects/oController/3_1.gml	2026-09-17 19:07:57
+@@ -1,5 +1,6 @@
+ resume_tick(); //Modernized: keeps the game state for a reload
+ key_release(); //modernized: see key_clear
++touch_context(sTouchContext()); //Modernized: the touch overlay dims in dialog and cutscenes (migrate/touch.js)
+ //Timer
+ global.did_action=0; //tells game if press action since i clear it, sand toss
+ if (global.displayc=1) { room_goto(RomConfig); exit; }
+diff -ruN a/objects/oScreenFill/3_1.gml b/objects/oScreenFill/3_1.gml
+--- a/objects/oScreenFill/3_1.gml	2026-09-17 19:07:57
++++ b/objects/oScreenFill/3_1.gml	2026-09-17 19:07:57
+@@ -1,4 +1,8 @@
+-if (window_get_width()!=browser_width || window_get_height()!=browser_height) {
+-window_set_size(browser_width,browser_height);
++var dw, dh, r;
++r=touch_dpr(); //Modernized: the runtime ignores devicePixelRatio, so the canvas gets real device pixels
++dw=floor(browser_width*r);
++dh=floor(browser_height*r);
++if (window_get_width()!=dw || window_get_height()!=dh) {
++window_set_size(dw,dh);
+ window_set_position(0,0);
+ }
+diff -ruN a/objects/oScreenFill/8_77.gml b/objects/oScreenFill/8_77.gml
+--- a/objects/oScreenFill/8_77.gml	2026-09-17 19:07:57
++++ b/objects/oScreenFill/8_77.gml	2026-09-17 19:07:57
+@@ -1,14 +1,17 @@
+-var ww, wh, aw, ah, s, k;
++var ww, wh, aw, ah, s, k, vx, vy, vw, vh;
+ ww=window_get_width();
+ wh=window_get_height();
+ aw=surface_get_width(application_surface);
+ ah=surface_get_height(application_surface);
+-s=min(ww/aw,wh/ah);
++//Modernized: with touch controls the picture gets part of the window and the rest holds the controls
++if (touch_active()) { vx=touch_view_x(); vy=touch_view_y(); vw=touch_view_w(); vh=touch_view_h(); }
++else { vx=0; vy=0; vw=ww; vh=wh; }
++s=min(vw/aw,vh/ah);
+ draw_clear(c_black);
+ gpu_set_texfilter(0);
+ if (global.sat[0]=0 || s<1 || s=floor(s)) { //Integer: whole-number scale, so every game pixel is the same size
+ if (s>=1) s=floor(s);
+-draw_surface_ext(application_surface,floor((ww-aw*s)/2),floor((wh-ah*s)/2),s,s,0,c_white,1);
++draw_surface_ext(application_surface,vx+floor((vw-aw*s)/2),vy+floor((vh-ah*s)/2),s,s,0,c_white,1);
+ } else { //Sharp fit: nearest-neighbour up to the next whole scale, then bilinear down to the exact fit
+ k=ceil(s);
+ if (!surface_exists(surf) || surface_get_width(surf)!=aw*k || surface_get_height(surf)!=ah*k) {
+@@ -19,6 +22,6 @@
+ draw_surface_ext(application_surface,0,0,k,k,0,c_white,1);
+ surface_reset_target();
+ gpu_set_texfilter(1);
+-draw_surface_ext(surf,floor((ww-aw*s)/2),floor((wh-ah*s)/2),s/k,s/k,0,c_white,1);
++draw_surface_ext(surf,vx+floor((vw-aw*s)/2),vy+floor((vh-ah*s)/2),s/k,s/k,0,c_white,1);
+ gpu_set_texfilter(0);
+ }
+diff -ruN a/scripts/key_doset.gml b/scripts/key_doset.gml
+--- a/scripts/key_doset.gml	2026-09-17 19:07:56
++++ b/scripts/key_doset.gml	2026-09-17 19:07:57
+@@ -15,3 +15,5 @@
+ key_alias(ord("K"),global.key_cancel);
+ 
+ 
++//Modernized: the touch overlay sends the bound keys, so it follows SET KEYS (migrate/touch.js)
++touch_keys(global.key_up,global.key_down,global.key_left,global.key_right,global.key_action,global.key_cancel,global.key_start);
+diff -ruN a/scripts/sTouchContext.gml b/scripts/sTouchContext.gml
+--- a/scripts/sTouchContext.gml	1969-12-31 19:00:00
++++ b/scripts/sTouchContext.gml	2026-09-17 19:07:57
+@@ -0,0 +1,8 @@
++//Modernized: what the player is doing, so the touch overlay can dim itself (migrate/touch.js)
++//0 overworld, 1 menu, 2 dialog, 3 cutscene, 4 rebinding keys
++if (instance_exists(key_makestuff)) { if (key_makestuff.doall!=-1) return 4; }
++if (global.cinema=1 || global.freeze=1) return 3;
++if (instance_exists(oDialog)) return 2;
++if (instance_exists(oStartmenu)) return 1;
++if (room=RomTitle || room=RomLoad || room=RomConfig || room=RomStarter || room=RomGameover || room=RomInter) return 1;
++return 0;

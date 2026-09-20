@@ -1,0 +1,50 @@
+diff -ruN a/objects/oScreenFill/0_0.gml b/objects/oScreenFill/0_0.gml
+--- a/objects/oScreenFill/0_0.gml
++++ b/objects/oScreenFill/0_0.gml
+@@ -1,3 +1,4 @@
+ //The canvas fills the browser window; oScreenFill draws the 320x240 game as large as fits, with black borders
+ persistent=1;
+ application_surface_draw_enable(0);
++surf=-1; //Modernized: sharp-fit scaling draws through this surface
+diff -ruN a/objects/oScreenFill/8_77.gml b/objects/oScreenFill/8_77.gml
+--- a/objects/oScreenFill/8_77.gml
++++ b/objects/oScreenFill/8_77.gml
+@@ -1,10 +1,24 @@
+-var ww, wh, aw, ah, s;
++var ww, wh, aw, ah, s, k;
+ ww=window_get_width();
+ wh=window_get_height();
+ aw=surface_get_width(application_surface);
+ ah=surface_get_height(application_surface);
+ s=min(ww/aw,wh/ah);
+-if (s>=1) s=floor(s); //whole-number scale, so every game pixel is the same size
+ draw_clear(c_black);
+ gpu_set_texfilter(0);
++if (global.sat[0]=0 || s<1 || s=floor(s)) { //Integer: whole-number scale, so every game pixel is the same size
++if (s>=1) s=floor(s);
+ draw_surface_ext(application_surface,floor((ww-aw*s)/2),floor((wh-ah*s)/2),s,s,0,c_white,1);
++} else { //Sharp fit: nearest-neighbour up to the next whole scale, then bilinear down to the exact fit
++k=ceil(s);
++if (!surface_exists(surf) || surface_get_width(surf)!=aw*k || surface_get_height(surf)!=ah*k) {
++if (surface_exists(surf)) surface_free(surf);
++surf=surface_create(aw*k,ah*k);
++}
++surface_set_target(surf);
++draw_surface_ext(application_surface,0,0,k,k,0,c_white,1);
++surface_reset_target();
++gpu_set_texfilter(1);
++draw_surface_ext(surf,floor((ww-aw*s)/2),floor((wh-ah*s)/2),s/k,s/k,0,c_white,1);
++gpu_set_texfilter(0);
++}
+diff -ruN a/objects/oStartConfig/0_0.gml b/objects/oStartConfig/0_0.gml
+--- a/objects/oStartConfig/0_0.gml
++++ b/objects/oStartConfig/0_0.gml
+@@ -16,7 +16,7 @@
+ if (img<5) {
+ instance_create(x,y+48,oStartConfig);
+ }
+-if (img=0) { s1='x1      x2      x3'; s0='SCALING'; xs=x+32; spc=31; global.tt[img]=3; }
++if (img=0) { global.sat[0]=min(global.sat[0],1); s1='Integer          Sharp fit'; s0='SCALING'; xs=x+18; spc=59; global.tt[img]=2; } //Modernized: Integer or Sharp fit (see oScreenFill)
+ if (img=1) { s1='Windowed      Full Screen'; s0='SCREEN'; xs=x+9; spc=69; global.tt[img]=2; }
+ if (img=2) { s1='1      2      3      4      5'; s0='BRIGHTNESS'; xs=x+18; spc=24; global.tt[img]=5; }
+ if (img=3) { s1='Slow        Normal      Fast'; s0='TEXT SPEED'; xs=x+10; spc=49; global.tt[img]=3; }

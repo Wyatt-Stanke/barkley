@@ -1,0 +1,42 @@
+diff -ruN a/objects/oStartConfig/0_0.gml b/objects/oStartConfig/0_0.gml
+--- a/objects/oStartConfig/0_0.gml	2026-09-17 16:16:32
++++ b/objects/oStartConfig/0_0.gml	2026-09-17 18:43:19
+@@ -21,7 +21,7 @@
+ s1='Windowed      Full Screen'; s0='SCREEN'; xs=x+9; spc=69; global.tt[img]=2; }
+ if (img=2) { s1='1      2      3      4      5'; s0='BRIGHTNESS'; xs=x+18; spc=24; global.tt[img]=5; }
+ if (img=3) { s1='Slow        Normal      Fast'; s0='TEXT SPEED'; xs=x+10; spc=49; global.tt[img]=3; }
+-if (img=4) { s1='Default     Test          Exit'; s0='SETTINGS'; xs=x+8; spc=52; global.tt[img]=3; }
++if (img=4) { s1='Default     Saves         Exit'; s0='SETTINGS'; xs=x+8; spc=52; global.tt[img]=3; } //Modernized: Saves replaces Test, which opened the RomTest view-scaling screen that oScreenFill and the new SCALING row make meaningless
+ if (img=5) { y=145; x=1; ys=y+27; srp=sStartLanguage; s1='English      Al Bhed'; s0='LANGUAGE'; xs=x+15; spc=55; global.tt[img]=2; } //.5
+ //Modernized: VOLUME, in the free slot under LANGUAGE. The blip is the slider's handle; the Draw event draws its track
+ //and the percentage, and the Begin Step hands the value to audio_master_gain. vseen is the value already applied.
+diff -ruN a/objects/oStartConfig/3_1.gml b/objects/oStartConfig/3_1.gml
+--- a/objects/oStartConfig/3_1.gml	2026-09-17 16:16:32
++++ b/objects/oStartConfig/3_1.gml	2026-09-17 18:43:19
+@@ -18,12 +18,7 @@
+ if (sKey(global.key_action,1) || sKey(vk_enter,1)) { sP(1);
+ if (global.edit=4) {
+ if (global.sat[4]=0) { key_init(); sConfig(0); }
+-if (global.sat[4]=1) { 
+-if (global.sat[1]=0) sett=global.sat[0]+1;
+-else sett=2;
+-room_set_view(RomTest,0,1,0,0,320,240,0,0,320*sett,240*sett,0,0,0,0,-1);
+-with (key_makestuff) { event_user(1); } sConfig(1); sFileData(0); global.croom=RomTest; global.cvx=144; global.cvy=64; room_goto(RomTest); 
+-}
++if (global.sat[4]=1) sSaveData(); //Modernized: Saves, the browser save transfer
+ if (global.sat[4]=2) { with (key_makestuff) { event_user(1); } sConfig(1); sound_stop_all(); game_restart(); }
+ } else {
+ if (global.control=9) with (key_makestuff) event_user(0);
+diff -ruN a/scripts/sSaveData.gml b/scripts/sSaveData.gml
+--- a/scripts/sSaveData.gml	1969-12-31 19:00:00
++++ b/scripts/sSaveData.gml	2026-09-17 16:17:02
+@@ -0,0 +1,9 @@
++//Modernized: opens the browser save transfer (migrate/saves.js), so a player can carry their save slots between
++//browsers and devices. The runtime keeps each save file under a prefix of its own in browser storage; writing a probe
++//file and handing saves.js its name is how the page finds that prefix without knowing how the runtime builds it.
++prb='transfer.tmp';
++tfl=file_text_open_write(prb);
++file_text_write_string(tfl,'x');
++file_text_close(tfl);
++saves_open(prb);
++file_delete(prb);

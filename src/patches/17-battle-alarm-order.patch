@@ -1,0 +1,11 @@
+diff -ruN a/objects/oBCamera/2_11.gml b/objects/oBCamera/2_11.gml
+--- a/objects/oBCamera/2_11.gml
++++ b/objects/oBCamera/2_11.gml
+@@ -1,3 +1,7 @@
++//The battlers' Alarm 10 (sets the _h* stat floors sVerifyStats reads) is due in the same step as this. LTS runs every
++//alarm of one instance before the next instance, so this older instance came first and sVerifyStats read undefined;
++//the battle works in GM6, which evidently ran each alarm number for all instances in turn. Run it first.
++with (oBattler) if (alarm[10]=1) { alarm[10]=-1; event_perform(ev_alarm, 10); }
+ for (i=0; global.b_party[i]!=-999; i+=1) {
+ if (global.b_pid[i]._vp<=0) global.b_pid[i].kill=1;
+ }

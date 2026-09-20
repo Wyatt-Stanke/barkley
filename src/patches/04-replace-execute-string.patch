@@ -1,0 +1,324 @@
+--- a/objects/oBCamera/7_10.gml
++++ b/objects/oBCamera/7_10.gml
+@@ -3,8 +3,7 @@
+ //Enemy creation
+ for (k=0; global.bene[k]!=""; k+=1) {
+ sDelimit(global.bene[k]);
+-sto="cfc=instance_create(view_xview[0]+8+"+arr[2]+",view_yview[0]+4+"+arr[3]+","+arr[0]+");";
+-execute_string(sto);
++cfc=instance_create(view_xview[0]+8+real(arr[2]),view_yview[0]+4+real(arr[3]),asset_get_index(arr[0]));
+ with (cfc) level=real(oBCamera.arr[1]);
+ //with (cfc) refEnemy(orgname,real(oBCamera.arr[1]));
+ }
+\ No newline at end of file
+--- a/objects/oBHoopz/7_10.gml
++++ b/objects/oBHoopz/7_10.gml
+@@ -39,7 +39,7 @@
+ 
+ /////////////////////////////////////shoot
+ if (out=1) {
+-execute_string('sound_play(mBGun'+string(imgz)+');');
++sound_play(asset_get_index('mBGun'+string(imgz)));
+ out=2;
+ dir=point_direction(x+xo,y+yo,target.x,target.y); face=dir; rot=face;
+ xx=x+xo+lengthdir_x(shaft,dir-90)+lengthdir_x(barrel,dir);
+--- a/objects/oBHoopz/7_11.gml
++++ b/objects/oBHoopz/7_11.gml
+@@ -75,7 +75,7 @@
+ dir=point_direction(x,y,target.x,target.y);
+ xx=x+lengthdir_x(43,dir+10)//+lengthdir_x(barrel,dir);
+ yy=y+lengthdir_y(43,dir+10)//+lengthdir_y(barrel,dir);
+-execute_string('sound_play(mBGun'+string(imgz)+');');
++sound_play(asset_get_index('mBGun'+string(imgz)));
+ bul=instance_create(xx,yy,oBBullet);
+ bul.type=0;
+ bul.speed=5+random(2.5);
+@@ -94,7 +94,7 @@
+ face=dir;
+ xx=x+11+lengthdir_x(shaft,dir-90)+lengthdir_x(barrel,dir);
+ yy=y-16+lengthdir_y(shaft,dir-90)+lengthdir_y(barrel,dir);
+-execute_string('sound_play(mBGun'+string(imgz)+');');
++sound_play(asset_get_index('mBGun'+string(imgz)));
+ bul=instance_create(xx,yy,oBBullet);
+ bul.type=2;
+ bul.speed=10+random(5);
+--- a/objects/oBHoopz/7_12.gml
++++ b/objects/oBHoopz/7_12.gml
+@@ -41,7 +41,7 @@
+ stray=2;
+ xx=x+lengthdir_x(shaft,dir-90)+lengthdir_x(barrel,dir);
+ yy=y+lengthdir_y(shaft,dir-90)+lengthdir_y(barrel,dir);
+-execute_string('sound_play(mBGun'+string(imgz)+');');
++sound_play(asset_get_index('mBGun'+string(imgz)));
+ bul=instance_create(xx,yy,oBBullet);
+ bul.type=1;
+ bul.speed=15+random(5);
+--- a/objects/oBHoopz/7_13.gml
++++ b/objects/oBHoopz/7_13.gml
+@@ -29,7 +29,7 @@
+ xx=x-30+lengthdir_x(shaft,dir-90)+lengthdir_x(barrel,dir);
+ yy=y-5+lengthdir_y(shaft,dir-90)+lengthdir_y(barrel,dir);
+ barrel-=10;
+-execute_string('sound_play(mBGun'+string(imgz)+');');
++sound_play(asset_get_index('mBGun'+string(imgz)));
+ bul=instance_create(xx,yy,oBBullet);
+ dir=point_direction(xx,yy,target.x,target.y);
+ bul.type=3;
+--- a/objects/oBHoopz/7_22.gml
++++ b/objects/oBHoopz/7_22.gml
+@@ -69,7 +69,7 @@
+ face=dir;
+ xx=x+lengthdir_x(shaft,dir-90)+lengthdir_x(barrel,dir);
+ yy=y+lengthdir_y(shaft,dir-90)+lengthdir_y(barrel,dir);
+-execute_string('sound_play(mBGun'+string(imgz)+');');
++sound_play(asset_get_index('mBGun'+string(imgz)));
+ bul=instance_create(xx,yy,oBBullet);
+ bul.type=2;
+ bul.speed=(10+random(5))/2; //mega shot slow
+@@ -117,7 +117,7 @@
+ 
+ if(shotsoundTimer<10)
+ {
+-    execute_string('sound_play(mBGun'+string(imgz)+');');
++    sound_play(asset_get_index('mBGun'+string(imgz)));
+     shotsoundTimer += 16;
+ }
+ 
+@@ -157,7 +157,7 @@
+ stray=abs(stray-120);
+ xx=x+lengthdir_x(shaft,dir-90)+lengthdir_x(barrel,dir);
+ yy=y+lengthdir_y(shaft,dir-90)+lengthdir_y(barrel,dir);
+-execute_string('sound_play(mBGun'+string(imgz)+');');
++sound_play(asset_get_index('mBGun'+string(imgz)));
+ bul=instance_create(xx,yy,oBBullet);
+ bul.type=1;
+ bul.times=stray;
+--- a/objects/oItem/0_0.gml
++++ b/objects/oItem/0_0.gml
+@@ -1,7 +1,7 @@
+ if (string_count('oExit',object_get_name(object_index))!=0) {
+ jjj=object_get_name(object_index);
+ jjj=string_replace(jjj,'oExit','');
+-if (real(jjj)<200) execute_string('mystart=oStart'+jjj);
++if (real(jjj)<200) mystart=asset_get_index('oStart'+jjj);
+ }
+ desc='Nothing...';
+ depth=-(y+sprite_height);
+--- a/scripts/sBItemEffect.gml
++++ b/scripts/sBItemEffect.gml
+@@ -0,0 +1,19 @@
++//Applies the effect chosen by sBItemSub to player
++switch (argument0) {
++case 0: sBCondition('revive',0,player); break;
++case 1: sBCondition('cure','ailments',player); break;
++case 2: sBCondition('cure','all',player); break;
++case 3: sBCondition('cure',effect,player); break;
++case 4: sBCondition("vp",value,player); break;
++case 5: sBCondition("bp",value,player); break;
++case 6: global.char_cattack[player]+=value; break;
++case 7: global.char_cdefense[player]+=value; break;
++case 8: global.char_cfootwork[player]+=value; break;
++case 9: global.char_czauberacity[player]+=value; break;
++case 10: sBCondition("vp",floor((player._rvp/100)*value),player); break;
++case 11: sBCondition("bp",floor((player._rbp/100)*value),player); break;
++case 12: global.char_cattack[player]+=(global.char_attack[player]/100)*value; break;
++case 13: global.char_cdefense[player]+=(global.char_defense[player]/100)*value; break;
++case 14: global.char_cfootwork[player]+=(global.char_footwork[player]/100)*value; break;
++case 15: global.char_czauberacity[player]+=(global.char_zauberacity[player]/100)*value; break;
++}
+--- a/scripts/sBItemSub.gml
++++ b/scripts/sBItemSub.gml
+@@ -2,46 +2,45 @@
+ value=real(string_digits(argument0));
+ effect=string_letters(argument0);
+ duration='temp';
+-comm='';
++comm=-1;
+ 
+ if (string_count("%",argument0)>0) percent=1;
+ else percent=0;
+ //Cure ailments
+ if (string_count("revive",string_lower(argument0))>0) {
+-comm="sBCondition('revive',0,player)";
++comm=0;
+ } else if (string_count("cure",string_lower(argument0))>0) { //space after efect
+ effect=string_lower(string_replace(effect,"Cure",""));
+-if (string_count("ailments",string_lower(argument0))>0) comm="sBCondition('cure','ailments',player)";
+-else if (string_count("all",string_lower(argument0))>0) comm="sBCondition('cure','all',player)";
+-else comm="sBCondition('cure',effect,player)";
++if (string_count("ailments",string_lower(argument0))>0) comm=1;
++else if (string_count("all",string_lower(argument0))>0) comm=2;
++else comm=3;
+ } else {
+ effect=string_lower(effect);
+ }
+ //Set code for stat modify
+ if (percent=0) {
+-if (effect="vp") { comm='sBCondition("vp",value,player);'; }
+-if (effect="bp") { comm='sBCondition("bp",value,player);'; }
+-if (effect="power") { comm='global.char_cattack[player]+=value;'; }
+-if (effect="guard") { comm='global.char_cdefense[player]+=value;'; }
+-if (effect="speed") { comm='global.char_cfootwork[player]+=value;'; }
+-if (effect="brain") { comm='global.char_czauberacity[player]+=value;'; }
++if (effect="vp") { comm=4; }
++if (effect="bp") { comm=5; }
++if (effect="power") { comm=6; }
++if (effect="guard") { comm=7; }
++if (effect="speed") { comm=8; }
++if (effect="brain") { comm=9; }
+ } else { //percent
+-if (effect="vp") { comm='sBCondition("vp",floor((player._rvp/100)*value),player);'; }
+-if (effect="bp") { comm='sBCondition("bp",floor((player._rbp/100)*value),player);'; }
+-if (effect="power") { comm='global.char_cattack[player]+=(global.char_attack[player]/100)*value;'; }
+-if (effect="guard") { comm='global.char_cdefense[player]+=(global.char_defense[player]/100)*value;'; }
+-if (effect="speed") { comm='global.char_cfootwork[player]+=(global.char_footwork[player]/100)*value;'; }
+-if (effect="brain") { comm='global.char_czauberacity[player]+=(global.char_zauberacity[player]/100)*value;'; }
++if (effect="vp") { comm=10; }
++if (effect="bp") { comm=11; }
++if (effect="power") { comm=12; }
++if (effect="guard") { comm=13; }
++if (effect="speed") { comm=14; }
++if (effect="brain") { comm=15; }
+ }
+ //apply code on objects - ADD DAMAGE OBJECT SHOWING EFFECT
+-global.temp8=comm;
+ if (area='single') {
+ player=who;
+-execute_string(global.temp8);
++sBItemEffect(comm);
+ } else {
+ for (playe=0; global.party[playe]!=-1; playe+=1) {
+ player=global.b_pid[playe];
+-execute_string(global.temp8);
++sBItemEffect(comm);
+ }
+ }
+ //cap all values
+--- a/scripts/sItemShow.gml
++++ b/scripts/sItemShow.gml
+@@ -47,8 +47,15 @@
+ }
+ if (argument0="update") { ////////////////////////////////////////update
+  sEquipped();
+- vvv="for(m=0;"+arr+"[m]!='';m+=1)item[m]="+arr+"[m];";
+- execute_string(vvv);
++ //arr names the item list: global.item_id, itemf, (<keeper>).itemf or global.temp.itemf
++ if (arr="global.item_id") {
++  for (m=0; global.item_id[m]!=''; m+=1) item[m]=global.item_id[m];
++ } else {
++  src=id;
++  if (arr="global.temp.itemf") src=global.temp;
++  else if (string_char_at(arr,1)="(") src=keeper; //"("+string(keeper)+").itemf" from oStartmenu (a shop); string() of a ref doesn't read back as a number in LTS
++  for (m=0; src.itemf[m]!=''; m+=1) item[m]=src.itemf[m];
++ }
+  item[m]='';
+  itemdsc[0]='';
+  itempts[0]='';
+--- a/scripts/sItemUseEffect.gml
++++ b/scripts/sItemUseEffect.gml
+@@ -0,0 +1,25 @@
++//Applies the effect chosen by sItemUseSub to player
++switch (argument0) {
++case 0: global.char_chp[player]=max(global.char_chp[player],1); break;
++case 1: x=x; break;
++case 2: global.char_res2[player]=''; break;
++case 3: global.char_res2[player]=string_replace(global.char_res2[player],effect+' ',''); break;
++case 4: global.char_hp[player]+=value; if (global.char_chp[player]>0) global.char_chp[player]+=value; break;
++case 5: global.char_zp[player]+=value; global.char_czp[player]+=value; break;
++case 6: global.char_attack[player]+=value; break;
++case 7: global.char_defense[player]+=value; break;
++case 8: global.char_footwork[player]+=value; break;
++case 9: global.char_zauberacity[player]+=value; break;
++case 10: if (global.char_chp[player]>0) global.char_chp[player]+=value; break;
++case 11: global.char_czp[player]+=value; break;
++case 12: global.char_cattack[player]+=value; break;
++case 13: global.char_cdefense[player]+=value; break;
++case 14: global.char_cfootwork[player]+=value; break;
++case 15: global.char_czauberacity[player]+=value; break;
++case 16: if (global.char_chp[player]>0) global.char_chp[player]+=floor((global.char_hp[player]/100)*value); break;
++case 17: global.char_czp[player]+=floor((global.char_zp[player]/100)*value); break;
++case 18: global.char_cattack[player]+=floor(global.char_attack[player]/100)*value; break;
++case 19: global.char_cdefense[player]+=floor(global.char_defense[player]/100)*value; break;
++case 20: global.char_cfootwork[player]+=floor(global.char_footwork[player]/100)*value; break;
++case 21: global.char_czauberacity[player]+=floor(global.char_zauberacity[player]/100)*value; break;
++}
+--- a/scripts/sItemUseSub.gml
++++ b/scripts/sItemUseSub.gml
+@@ -13,52 +13,52 @@
+ duration='permanent';
+ effect=string_replace(effect,"Permanent",'');
+ } else duration='temp';
+-comm='';
++comm=-1;
+ if (string_count("%",argument0)>0) percent=1;
+ else percent=0;
+ if (string_count("revive",string_lower(argument0))>0) {
+-comm="global.char_chp[player]=max(global.char_chp[player],1);";
++comm=0;
+ } else if (string_count("cure",string_lower(argument0))>0) { //space after efect
+ effect=string_replace(effect,"Cure",""); //had string lower
+-if (string_count("ailments",string_lower(argument0))>0) comm="x=x;";
+-else if (string_count("all",string_lower(argument0))>0) comm="global.char_res2[player]=''";
+-else comm="global.char_res2[player]=string_replace(global.char_res2[player],effect+' ','')";
++if (string_count("ailments",string_lower(argument0))>0) comm=1;
++else if (string_count("all",string_lower(argument0))>0) comm=2;
++else comm=3;
+ } else {
+ effect=string_lower(effect);
+ }
+ if (duration="permanent") {
+-if (effect="vp") { comm='global.char_hp[player]+=value; if (global.char_chp[player]>0) global.char_chp[player]+=value;'; }
+-if (effect="bp") { comm='global.char_zp[player]+=value; global.char_czp[player]+=value;'; }
+-if (effect="power") { comm='global.char_attack[player]+=value;'; }
+-if (effect="guard") { comm='global.char_defense[player]+=value;'; }
+-if (effect="speed") { comm='global.char_footwork[player]+=value;'; }
+-if (effect="brain") { comm='global.char_zauberacity[player]+=value;'; }
++if (effect="vp") { comm=4; }
++if (effect="bp") { comm=5; }
++if (effect="power") { comm=6; }
++if (effect="guard") { comm=7; }
++if (effect="speed") { comm=8; }
++if (effect="brain") { comm=9; }
+ } else { //temporary diration
+ if (percent=0) {
+-if (effect="vp") { comm='if (global.char_chp[player]>0) global.char_chp[player]+=value;'; }
+-if (effect="bp") { comm='global.char_czp[player]+=value;'; }
+-if (effect="power") { comm='global.char_cattack[player]+=value;'; }
+-if (effect="guard") { comm='global.char_cdefense[player]+=value;'; }
+-if (effect="speed") { comm='global.char_cfootwork[player]+=value;'; }
+-if (effect="brain") { comm='global.char_czauberacity[player]+=value;'; }
++if (effect="vp") { comm=10; }
++if (effect="bp") { comm=11; }
++if (effect="power") { comm=12; }
++if (effect="guard") { comm=13; }
++if (effect="speed") { comm=14; }
++if (effect="brain") { comm=15; }
+ } else { //percent
+-if (effect="vp") { comm='if (global.char_chp[player]>0) global.char_chp[player]+=floor((global.char_hp[player]/100)*value);'; }
+-if (effect="bp") { comm='global.char_czp[player]+=floor((global.char_zp[player]/100)*value);'; }
+-if (effect="power") { comm='global.char_cattack[player]+=floor(global.char_attack[player]/100)*value;'; }
+-if (effect="guard") { comm='global.char_cdefense[player]+=floor(global.char_defense[player]/100)*value;'; }
+-if (effect="speed") { comm='global.char_cfootwork[player]+=floor(global.char_footwork[player]/100)*value;'; }
+-if (effect="brain") { comm='global.char_czauberacity[player]+=floor(global.char_zauberacity[player]/100)*value;'; }
++if (effect="vp") { comm=16; }
++if (effect="bp") { comm=17; }
++if (effect="power") { comm=18; }
++if (effect="guard") { comm=19; }
++if (effect="speed") { comm=20; }
++if (effect="brain") { comm=21; }
+ }
+ }
+ 
+ //One or all
+ if (area='single') {
+ player=who;
+-execute_string(comm);
++sItemUseEffect(comm);
+ } else {
+ for (playe=0; global.party[playe]!=-1; playe+=1) {
+ player=global.party[playe];
+-execute_string(comm);
++sItemUseEffect(comm);
+ }
+ }
+ 

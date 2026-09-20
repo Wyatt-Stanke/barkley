@@ -1,0 +1,10 @@
+--- a/scripts/sBattleStart.gml
++++ b/scripts/sBattleStart.gml
+@@ -7,4 +7,4 @@
+ global.b_room=room;
+ global.batface=argument0;
+ sS(mBattleSound);
+-rt_trans(RomInter);
+\ No newline at end of file
++room_goto(RomInter); //was rt_trans: random blocking transition built on sleep/screen_refresh
+\ No newline at end of file

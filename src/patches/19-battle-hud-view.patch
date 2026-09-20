@@ -1,0 +1,45 @@
+diff -ruN a/objects/oBCamera/0_0.gml b/objects/oBCamera/0_0.gml
+--- a/objects/oBCamera/0_0.gml	2026-09-20 10:14:54
++++ b/objects/oBCamera/0_0.gml	2026-09-20 10:14:54
+@@ -1,4 +1,5 @@
+ sViewInit();
++instance_create(0,0,oBView); //renders view 0 into a surface so the HUD view can draw over it
+ //Rest
+ enemy=0; finish=0.5; global.turn=id; //stall ai
+ alarm[0]=60; //turns
+diff -ruN a/objects/oBView/0_0.gml b/objects/oBView/0_0.gml
+--- a/objects/oBView/0_0.gml	1969-12-31 19:00:00
++++ b/objects/oBView/0_0.gml	2026-09-20 10:14:54
+@@ -0,0 +1,4 @@
++//Drawn before everything else in both views (see the Draw event).
++depth=16000;
++visible=1;
++surf=-1;
+diff -ruN a/objects/oBView/3_1.gml b/objects/oBView/3_1.gml
+--- a/objects/oBView/3_1.gml	1969-12-31 19:00:00
++++ b/objects/oBView/3_1.gml	2026-09-20 10:14:54
+@@ -0,0 +1,8 @@
++//Hold a surface the size of the application surface, so the field renders at the resolution it would have on screen.
++var w, h;
++if (!variable_instance_exists(id,'surf')) surf=-1; //a resume restores Create's variables after it is skipped
++w=surface_get_width(application_surface);
++h=surface_get_height(application_surface);
++if (surface_exists(surf) && (surface_get_width(surf)!=w || surface_get_height(surf)!=h)) { surface_free(surf); surf=-1; }
++if (!surface_exists(surf)) surf=surface_create(w,h);
++view_surface_id[0]=surf;
+diff -ruN a/objects/oBView/7_5.gml b/objects/oBView/7_5.gml
+--- a/objects/oBView/7_5.gml	1969-12-31 19:00:00
++++ b/objects/oBView/7_5.gml	2026-09-20 10:14:54
+@@ -0,0 +1,3 @@
++view_surface_id[0]=-1; //the surface belongs to this room only
++if (surface_exists(surf)) surface_free(surf);
++surf=-1;
+diff -ruN a/objects/oBView/8_0.gml b/objects/oBView/8_0.gml
+--- a/objects/oBView/8_0.gml	1969-12-31 19:00:00
++++ b/objects/oBView/8_0.gml	2026-09-20 10:14:54
+@@ -0,0 +1,5 @@
++//The battle draws the field in view 0 and the HUD in view 1. GM6 drew both views onto the window in turn; LTS clears
++//a viewport before drawing it, so view 1 wiped the field (the battle showed as a blank screen). Instead view 0 renders
++//into surf, and this draws surf across view 1 before the HUD. This object's depth puts it first in both views.
++if (view_current=0) { draw_clear(c_black); exit; } //GM6 left what no view covered the window colour
++if (surface_exists(surf)) draw_surface_stretched(surf,view_xview[1],view_yview[1],view_wview[1],view_hview[1]);

@@ -1,0 +1,15 @@
+diff -ruN a/objects/oController/7_2.gml b/objects/oController/7_2.gml
+--- a/objects/oController/7_2.gml
++++ b/objects/oController/7_2.gml
+@@ -35,9 +35,9 @@
+ global.displayx=display_get_width();
+ global.displayy=display_get_height();
+ if (global.sat[1]=0) {
+-window_set_fullscreen(0);
++fullscreen_set(0); //HTML5: window_set_fullscreen does nothing (fullscreen_set is migrate/fullscreen.js)
+ } else { //640,480
+-window_set_fullscreen(1);
++fullscreen_set(1);
+ }
+ //
+ if (instance_exists(oScreenFill)=0) instance_create(0,0,oScreenFill); //fills the browser window

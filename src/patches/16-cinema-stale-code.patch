@@ -1,0 +1,15 @@
+diff -ruN a/objects/oCinema/7_11.gml b/objects/oCinema/7_11.gml
+--- a/objects/oCinema/7_11.gml
++++ b/objects/oCinema/7_11.gml
+@@ -90,7 +90,10 @@
+ event_user(0);
+ }
+ if (sub='code') {
+-if (start=0) { start=1; execute_string(queue[0,2]); }
++//A finished command runs the next one at once (User Event 0 calls this event again), and that can leave sub and start
++//from an inner call: with halt set, the inner call exits before reading sub. Only run code the queue holds (GM6 ran
++//execute_string on the wait time that was next, which did nothing; a number here is no script).
++if (start=0) { start=1; if (queue[0,1]='code') execute_string(queue[0,2]); }
+ event_user(0);
+ }
+ if (sub='effect') {

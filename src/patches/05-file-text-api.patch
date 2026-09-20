@@ -1,0 +1,53 @@
+--- a/objects/nametext/0_0.gml
++++ b/objects/nametext/0_0.gml
+@@ -1,4 +1,4 @@
+-file_open_write('victorian.txt'); file_close();
++file_text_close(file_text_open_write('victorian.txt'));
+ draw_set_font(CreditsText);
+ cre="";
+ cou=0;
+--- a/scripts/key_load.gml
++++ b/scripts/key_load.gml
+@@ -1,14 +1,15 @@
++var f;
+ if (file_exists('controls.txt')) {
+-file_open_read('controls.txt');
+-if (file_read_string()='Do not edit or delete this file.') {
+-file_readln();
++f=file_text_open_read('controls.txt');
++if (file_text_read_string(f)='Do not edit or delete this file.') {
++file_text_readln(f);
+ uu=0;
+ repeat(global.key_amount) { //+5
+-global.cpref[uu]=file_read_real();
+-file_readln();
++global.cpref[uu]=file_text_read_real(f);
++file_text_readln(f);
+ uu+=1;
+ }
+ } else key_init();
+-file_close();
++file_text_close(f);
+ } else key_init();
+ key_doset();
+--- a/scripts/key_save.gml
++++ b/scripts/key_save.gml
+@@ -1,11 +1,12 @@
+-file_open_write('controls0.txt');
+-file_write_string('Do not edit or delete this file.');
+-file_writeln();
++var f;
++f=file_text_open_write('controls0.txt');
++file_text_write_string(f,'Do not edit or delete this file.');
++file_text_writeln(f);
+ uu=0;
+ repeat(global.key_amount) { //+5
+-file_write_real(global.cpref[uu]);
+-file_writeln();
++file_text_write_real(f,global.cpref[uu]);
++file_text_writeln(f);
+ uu+=1;
+ }
+-file_close();
++file_text_close(f);
+ sConvert('controls0.txt','controls.txt');
