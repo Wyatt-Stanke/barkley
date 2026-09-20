@@ -38,7 +38,7 @@
 +s=resume_save();
 +resume_put(s);
 +l='';
-+if (variable_global_exists('key_latch')) for (i=8; i<256; i+=1) if (global.key_latch[i]=1) l+=string(i)+' ';
++if (variable_global_exists('key_latch')) for (i=8; i<256; i+=1) if (global.key_latch[i]!=0) l+=string(i)+' ';
 +crash_put(s,l);
 +random_set_seed(global.crash_seed);
 +}

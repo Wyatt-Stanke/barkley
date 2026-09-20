@@ -55,7 +55,9 @@ const step = (name, fn) => {
   fn();
 };
 
-step('copy project', () => fs.cpSync(src, out, { recursive: true }));
+// dereference: a symlinked input would otherwise be copied as a symlink, and every write below would land in
+// the pristine export instead of the output.
+step('copy project', () => fs.cpSync(src, out, { recursive: true, dereference: true }));
 step('unpack code', () => unpack(out, code));
 
 let sounds;
