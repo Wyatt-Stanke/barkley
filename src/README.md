@@ -251,7 +251,20 @@ Pipeline order:
    - `04-replace-execute-string`: enemy spawning, gun sounds and `oStartNN` lookup via `asset_get_index`; item lists copied directly (a shop's from `oStartmenu`'s `keeper`); item effects become numbered `switch` scripts.
    - `05-file-text-api`: `key_load`/`key_save` and `nametext` use `file_text_*`.
    - `06-display-setup`: fullscreen via `window_set_fullscreen` only.
-   - `07-battle-transition`: battle start uses `room_goto` instead of `rt_trans`.
+   - `07-battle-transition`: the battle-start transition, rebuilt. GM6 called `rt_trans`, which picked one of 36
+     effects from the `rt_` library; each built its transition object with `object_add`/`object_event_add`, grabbed
+     the screen with `screen_redraw` and cross-faded two grabs in a loop of `sleep`/`screen_refresh`. LTS has none
+     of those functions, and a loop that holds the frame draws nothing on HTML5, so the effect is played a frame at
+     a time instead. `sBattleStart` calls the new `sBattleTrans(room)`, which creates the new persistent object
+     `oBattleTrans` and picks one of the 19 effects in the new `sBattleTransDraw`. In Post Draw `oBattleTrans`
+     grabs the room being left into a surface, asks for the room change, and then draws one frame of the effect
+     over that grab for 20 frames before freeing the surface and destroying itself. It draws into the application
+     surface, ahead of `oScreenFill` (depth 16000), so the effect is in game pixels and the player's scaling still
+     applies, and it covers both of the battle room's views. The effects: spin, zoom, blur, wavy, quake and
+     pixelate take the grab away over the whole transition; blinds, four wipes and three cell patterns go through
+     black, covering the old room in their first half and uncovering the new one in their second; four slides push
+     the grab off an edge. The new room runs underneath from the start rather than being frozen as GM6 froze it,
+     so the battle's own camera intro begins under the effect.
    - `08-argument-count`: `sS`, `sR` and `sCredits` loop over `argument[i]` until a `0`, which GM6 returned past the last argument; the loops now also stop at `argument_count`.
    - `09-destroyed-at-room-start`: `oIntror5`, `oBalthios`, `oHoopz`, `oCyberdwarf` and `oSuitToll` start their Create with `if (!instance_exists(id)) exit;`. At room start LTS runs Create on instances an earlier instance's Create already destroyed; in GM6 they never ran. Without this, skipping the title reveal (a key press) leaves the menu invisible.
    - `10-save-room-start`: `oController`'s Room Start positions the player with `with (oBarkley)` rather than `oBarkley.x=`. Opening the save menu at a pump enters `RomLoad`, which has no `oBarkley`; GM6 skipped assigning to absent instances, LTS throws and ends the game.
@@ -312,5 +325,4 @@ Because the extraction transforms run first, code that used to live inside strin
   - Change the 34 `#` newlines in strings to `\n`.
   - Rewrite room backgrounds against layers.
   - Clean up the minor `self.` and `room_speed` uses.
-- **Lost visual effect**: the random battle-start transition from the `rt_` library is gone.
 - **Verification (phase 6)**: play-testing beyond the title screen, against the original executable.
