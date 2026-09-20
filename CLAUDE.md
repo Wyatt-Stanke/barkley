@@ -118,18 +118,15 @@ Anything not in that tree (a throwaway migration, a test build, scratch output) 
 scratchpad dir, never in the project.
 
 - `game/BarkleyV120.gmx`: the pristine export, and `migrate.mjs`'s first argument. **Read-only; never write to it.**
-  **It is currently NOT pristine** (2026-09-20): a symlinked input made `migrate.mjs` copy the symlink rather than
-  the tree, so the `barkley-1.0.1` migration and its import were written into it, and it now holds that migrated
-  project. `migrate.mjs` now copies with `dereference: true` so this cannot recur, but the export has to be made
-  again from `game/original/BarkleyV120.gm6` (the decompiler's output, still there) through GameMaker Studio
-  1.4.9999 in `tools/`, and the result checked against `build/outputs/barkley-1.0.1.gmx.code`.
+  It is 28 MB (the migrated output is ~185 MB, because the migration brings in the real music). A copy is in
+  `~/Documents/barkley copy/BarkleyV120.gmx.orig`, a backup of the pre-reorganisation layout from 2026-09-19.
 - `game/original/`: the original distribution (exe, `.gm6`, `Music/`, `Voice/`, `BG/`, `bgm.dll`), and `migrate.mjs`'s second argument.
   - `GMDecompilerDecompiled/`: Java source of the GM6 decompiler that produced the export. It's the reference for the exe format `importFonts` reads.
 - `game/recovered-scripts/`: the 8 scripts lost to case collisions (the patch source for `sBeatAdd`). Small, so it's the one tracked part of `game/`.
 - `game/releases/`: zips of other releases (V106–V110, and OS X and RPG Maker 2003 versions).
 - `docs/Barkley Gaiden Port Audit.html`: an earlier audit page.
 - `build/outputs/`: migrations and their imports. **The user wants only the latest kept**: when you make a new one, delete the superseded migration and import (the user OK'd that).
-  - Latest: `barkley-1.0.1.gmx` (plus `.code`; modernized, audit clean) and its import `barkley-1.0.1/BarkleyLTS.yyp` (2026-09-20): importer converted all GML, all five extensions plus the PWA files, `extensions/` identical to the previous import's. It adds the `modernized/03` latch fix (one press no longer skips the next dialog line's typing) and is **not deployed yet** — the live site is still the build before it. `barkley-1.0.0` is kept for now, against the usual keep-only-the-latest rule: with the pristine export damaged it is the only other copy of a migration, so it is worth having until the export is remade.
+  - Latest: `barkley-1.0.1.gmx` (plus `.code`; modernized, audit clean) and its import `barkley-1.0.1/BarkleyLTS.yyp` (2026-09-20): importer converted all GML, all five extensions plus the PWA files, `extensions/` identical to the previous import's. It adds the `modernized/03` latch fix (one press no longer skips the next dialog line's typing) and is **not deployed yet** — the live site is still the build before it.
   - After an Igor build, copy `src/web/index.html` back into the project's `options/html5/` (see the HTML5 options gotcha).
 - `build/deploy/bsuajg-test`: `deploy.mjs`'s kept clone of the deploy repo (shallow; reset to `origin/main` on every deploy, so never keep work in it).
 - `build/fuzz/`: the fuzzer's files.
