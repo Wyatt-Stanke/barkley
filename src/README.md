@@ -56,7 +56,7 @@ The importer skips the HTML5 options, so `import.mjs` writes `options/html5/opti
 - a guard for streamed sounds (all the music): the runtime plays one by downloading and decoding it and then starting the sound object that asked, even if the game stopped it meanwhile, and by then it may have reused that object for the next sound. So a track switched away from in its first seconds (the intro's music when the intro is skipped and a new game started at once) played on under or in place of the next, and nothing could stop it. `barkley_audio_fix` finds the runtime's sound class by its methods (`play`, `stop`, `start`, `pause`; its names change between builds) and counts a generation on each play and stop; the download a play starts carries it, and the `decodeAudioData` wrapper never hands back a buffer whose sound has moved on;
 - the intro's music (`mSpace`, 6 MB) decoded while the Start screen waits (`barkley_early_music`), since a streamed track is otherwise downloaded and decoded only when it first plays and the intro was silent for seconds; the runtime's decode of the same file gets that buffer, and it is dropped if the first decode after Start is another file, or after 60 s;
 - everything the page draws kept inside the safe-area insets (`--touch-*`, from `env(safe-area-inset-*)`), and no `apple-mobile-web-app-status-bar-style`: `black-translucent` put the page under the status bar, and since iOS 26 a home-screen app blurs that band and a little below it (the top of the picture in portrait);
-- links that make the page installable as an app (PWA) that opens full screen: `manifest.webmanifest` (`display: fullscreen`, falling back to `standalone`; black theme and background; no orientation lock, since the touch overlay lays out both ways), an `apple-touch-icon`, `theme-color` and `mobile-web-app-capable`. `import.mjs` adds the manifest and `icon-180/192/512.png` (resized with ffmpeg from `web/icon.png`) to the project as Included Files, which the build copies into `html5game/`; the manifest's `start_url` and `scope` are `../`, the page itself. No service worker: Chrome's install criteria no longer need one. To change the icon, replace `web/icon.png` (square) and import again.
+- links that make the page installable as an app (PWA) that opens full screen: `manifest.webmanifest` (`display: fullscreen`, falling back to `standalone`; black theme and background; no orientation lock, since the touch overlay lays out both ways), an `apple-touch-icon`, `theme-color` and `mobile-web-app-capable`. `import.mjs` adds the manifest and `icon-180/192/512.png` (resized with ffmpeg from `web/icon.png`) to the project as Included Files, which the build copies into `html5game/`; the manifest's `start_url` and `scope` are `../`, the page itself. The service worker that makes it play offline ships from the build root instead, and needs no import ("Offline play" below). To change the icon, replace `web/icon.png` (square) and import again.
 - on the first visit from a phone or tablet in a browser tab (not the installed app), a full-screen sheet suggesting the install, with numbered steps for iOS Safari (Share, Add to Home Screen, and a note that the iOS app keeps its own saves) or for other browsers (menu, Install app), and Chrome's own install dialog behind an Install button when Chrome offers it. It shows once (`localStorage` `barkley.install`), and Start removes it.
 
 Igor finds the index only by absolute path, so the project records where it was imported.
@@ -130,8 +130,11 @@ in `barkley_offline()` in `index.html`, not in the worker.
 
 - **The page** (`index.html`) registers the worker only once the game has loaded, so it never competes
   with the first visit's own download, and never under the fuzz harness or with `?nosw` in the URL. The
-  Start screen carries the one line it has to say: `v1.0.0 · Saving for offline play 42%`, then
-  `v1.0.0 · Ready to play offline`.
+  Start screen carries the one line it has to say, under the Start word in the hint's grey:
+  `v1.0.0 · Saving for offline play 42%`, then `v1.0.0 · Ready to play offline`.
+  The version alone (`v1.0.0`) is shown by `barkley_version()`, which reads the build's own `version.json`
+  and so works with no worker at all — a browser without service workers, or a page opened with `?nosw`.
+  Whatever the worker has said stands: it knows more, and it knows the version offline too.
 
 ## Fuzzing (HTML5)
 

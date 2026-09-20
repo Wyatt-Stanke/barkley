@@ -683,6 +683,7 @@
                     var fresh = document.getElementById("fresh-go");
                     if (fresh) fresh.disabled = false;
                     if (!window.__fuzz) barkley_early_music();
+                    barkley_version();
                     barkley_offline();
                 };
                 // fresh: forget the resume state before Game Start reads it (resume_take), so the game starts at the title
@@ -846,11 +847,14 @@
             // first visit's bandwidth, and it asks for a check then, whenever the tab comes back, and when the machine
             // comes back online. Never under the fuzz harness or with ?nosw in the URL: the tooling's own servers
             // would be handing out a hundred megabytes a run, and the fuzzer needs each build served fresh.
-            var barkley_offline_at = 0; // the last check, so coming back to the tab doesn't ask over and over
+            var barkley_offline_at = 0, // the last check, so coming back to the tab doesn't ask over and over
+                barkley_offline_heard = false; // the worker has spoken, and knows more than version.json does
             function barkley_offline() {
                 if (window.__fuzz || /(^|[?&])nosw\b/.test(location.search) || !navigator.serviceWorker) return;
                 navigator.serviceWorker.addEventListener("message", function (e) {
-                    if (e.data && e.data.type === "offline") barkley_offline_say(e.data);
+                    if (!e.data || e.data.type !== "offline") return;
+                    barkley_offline_heard = true;
+                    barkley_offline_say(e.data);
                 });
                 navigator.serviceWorker.register("sw.js").then(function () {
                     navigator.serviceWorker.ready.then(function (reg) {
@@ -865,10 +869,17 @@
                         check();
                     });
                 }, function () {});
-                // Before the worker has anything to say (a first visit), the version is still worth showing.
+            }
+            // The version, under the Start word, in the same grey as the hint above it: which build of the port this
+            // is, without anyone having to look for it. Every build carries version.json, so this works whether or not
+            // the worker is in — a browser with no service workers, or a page opened with ?nosw, still shows it. The
+            // worker knows more (it can say the copy is saved for offline play, and it knows the version offline,
+            // where this fetch can't reach), so whatever it has said stands.
+            function barkley_version() {
+                if (window.__fuzz) return;
                 fetch("version.json", { cache: "no-store" })
                     .then(function (r) { return r.json(); })
-                    .then(function (v) { barkley_offline_say({ version: v.version }); })
+                    .then(function (v) { if (!barkley_offline_heard) barkley_offline_say({ version: v.version }); })
                     .catch(function () {});
             }
             function barkley_offline_say(s) {
