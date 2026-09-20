@@ -62,6 +62,12 @@ if (fs.readFileSync(path.join(gmx, 'scripts', 'key_doset.gml'), 'utf8').includes
     ['touch_view_h', [], 2],
     ['touch_dpr', [], 2],
   ]);
+// gamepad.js sends the bound keys from a game controller, for patch modernized/11.
+if (fs.readFileSync(path.join(gmx, 'scripts', 'key_doset.gml'), 'utf8').includes('pad_keys'))
+  addExtension('Gamepad', 'gamepad.js', [
+    ['pad_keys', [2, 2, 2, 2, 2, 2, 2], 2],
+    ['pad_context', [2], 2],
+  ]);
 // crash.js records what a crash report needs for patch modernized/07.
 if (
   fs.existsSync(path.join(gmx, 'scripts', 'resume_tick.gml')) &&

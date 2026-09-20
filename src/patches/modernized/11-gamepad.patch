@@ -1,0 +1,21 @@
+diff -ruN a/objects/oController/3_1.gml b/objects/oController/3_1.gml
+--- a/objects/oController/3_1.gml
++++ b/objects/oController/3_1.gml
+@@ -1,6 +1,7 @@
+ resume_tick(); //Modernized: keeps the game state for a reload
+ key_release(); //modernized: see key_clear
+ touch_context(sTouchContext()); //Modernized: the touch overlay dims in dialog and cutscenes (migrate/touch.js)
++pad_context(sTouchContext()); //Modernized: so a controller cannot rebind itself in SET KEYS (migrate/gamepad.js)
+ //Timer
+ global.did_action=0; //tells game if press action since i clear it, sand toss
+ if (global.displayc=1) { room_goto(RomConfig); exit; }
+diff -ruN a/scripts/key_doset.gml b/scripts/key_doset.gml
+--- a/scripts/key_doset.gml
++++ b/scripts/key_doset.gml
+@@ -17,3 +17,6 @@
+ 
+ //Modernized: the touch overlay sends the bound keys, so it follows SET KEYS (migrate/touch.js)
+ touch_keys(global.key_up,global.key_down,global.key_left,global.key_right,global.key_action,global.key_cancel,global.key_start);
++
++//Modernized: a game controller sends the bound keys too, so it follows SET KEYS (migrate/gamepad.js)
++pad_keys(global.key_up,global.key_down,global.key_left,global.key_right,global.key_action,global.key_cancel,global.key_start);
