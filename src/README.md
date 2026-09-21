@@ -263,15 +263,26 @@ Pipeline order:
      the screen with `screen_redraw` and cross-faded two grabs in a loop of `sleep`/`screen_refresh`. LTS has none
      of those functions, and a loop that holds the frame draws nothing on HTML5, so the effect is played a frame at
      a time instead. `sBattleStart` calls the new `sBattleTrans(room)`, which creates the new persistent object
-     `oBattleTrans` and picks one of the 19 effects in the new `sBattleTransDraw`. In Post Draw `oBattleTrans`
-     grabs the room being left into a surface, asks for the room change, and then draws one frame of the effect
-     over that grab for 20 frames before freeing the surface and destroying itself. It draws into the application
-     surface, ahead of `oScreenFill` (depth 16000), so the effect is in game pixels and the player's scaling still
-     applies, and it covers both of the battle room's views. The effects: spin, zoom, blur, wavy, quake and
-     pixelate take the grab away over the whole transition; blinds, four wipes and three cell patterns go through
-     black, covering the old room in their first half and uncovering the new one in their second; four slides push
-     the grab off an edge. The new room runs underneath from the start rather than being frozen as GM6 froze it,
-     so the battle's own camera intro begins under the effect.
+     `oBattleTrans` and picks one of 36 effects, the same pool `rt_init` filled and in its order. In Post Draw
+     `oBattleTrans` grabs the room being left into a surface, asks for the room change, calls `sBattleTransInit`
+     to set the effect up and how many frames it lasts, and then draws one frame of it over that grab through
+     `sBattleTransDraw` until it is done, before freeing the surface and destroying itself. It draws into the
+     application surface, ahead of `oScreenFill` (depth 16000), so the effect is in game pixels and the player's
+     scaling still applies, and it covers both of the battle room's views.
+     - Effects 0 to 9 work on the whole screen at once: spin, wavy, pixelate and blur take the grab away over the
+       new room, 4 to 7 are those four again going through black, and quake and zoom finish the list.
+     - Effects 10 to 27 are the `rt_` particle transitions, half of its pool and the ones the game is remembered
+       for: `sBattleTransInit` breaks the grab into 20×20 tiles and gives each a life, a speed and direction, a
+       gravity and its own scale and alpha on `oBattleTrans`, and `sBattleTransTiles` steps and draws them every
+       frame. That loop is the `rt_` particle template, and each effect is it with the one or two lines the
+       original changed: crumble, explode and implode (thrown or pulled), two tornadoes, drain, two sets of
+       blinds, shrink, grow, two pixel dissolves, and four dissolves sweeping from an edge.
+     - Effects 28 to 35 are the cube and plane transitions, which need the new room as a texture of its own, so
+       `oBattleTrans` copies the application surface into a second surface first. `sBattleTransPanel` draws one
+       wall as a textured quad, so these are the originals' geometry rather than an approximation of it.
+
+     The new room runs underneath from the start rather than being frozen as GM6 froze it, so the battle's own
+     camera intro begins under the effect.
    - `08-argument-count`: `sS`, `sR` and `sCredits` loop over `argument[i]` until a `0`, which GM6 returned past the last argument; the loops now also stop at `argument_count`.
    - `09-destroyed-at-room-start`: `oIntror5`, `oBalthios`, `oHoopz`, `oCyberdwarf` and `oSuitToll` start their Create with `if (!instance_exists(id)) exit;`. At room start LTS runs Create on instances an earlier instance's Create already destroyed; in GM6 they never ran. Without this, skipping the title reveal (a key press) leaves the menu invisible.
    - `10-save-room-start`: `oController`'s Room Start positions the player with `with (oBarkley)` rather than `oBarkley.x=`. Opening the save menu at a pump enters `RomLoad`, which has no `oBarkley`; GM6 skipped assigning to absent instances, LTS throws and ends the game.

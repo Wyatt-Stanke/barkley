@@ -1,16 +1,20 @@
 diff -ruN a/objects/oBattleTrans/0_0.gml b/objects/oBattleTrans/0_0.gml
 --- a/objects/oBattleTrans/0_0.gml
 +++ b/objects/oBattleTrans/0_0.gml
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,14 @@
 +//Plays a battle transition over the room it is created in and follows the game into troom (see sBattleTrans).
 +persistent=1; //it has to live through the room change it asks for
 +depth=16000; //draw events run in depth order, so Post Draw reaches the application surface before oScreenFill presents it
 +cap=-1; //the grab of the room being left
++cap2=-1; //a grab of the room being entered, for the effects that need it as a texture of its own
 +phase=0; //0 grab it, 1 wait for the new room, 2 play the effect
 +t=0;
 +wait=0;
-+dur=20; //frames the effect lasts, two thirds of a second
++dur=20; //frames the effect lasts; sBattleTransInit sets the real length
 +kind=0;
++np=0; //tiles the effect broke the grab into, if it is one of the particle ones
++pw=20; //the rt_ library's tile size
++pn=0; //how far a dissolve's sweep has crossed the screen
 +troom=room;
 diff -ruN a/objects/oBattleTrans/3_1.gml b/objects/oBattleTrans/3_1.gml
 --- a/objects/oBattleTrans/3_1.gml
@@ -21,7 +25,7 @@ diff -ruN a/objects/oBattleTrans/3_1.gml b/objects/oBattleTrans/3_1.gml
 diff -ruN a/objects/oBattleTrans/8_77.gml b/objects/oBattleTrans/8_77.gml
 --- a/objects/oBattleTrans/8_77.gml
 +++ b/objects/oBattleTrans/8_77.gml
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,45 @@
 +//One frame of the battle transition, drawn into the application surface so it is in game pixels and whatever
 +//scaling the player picked still applies (oScreenFill presents the surface after this; see the depth in Create).
 +var cw, ch;
@@ -35,6 +39,7 @@ diff -ruN a/objects/oBattleTrans/8_77.gml b/objects/oBattleTrans/8_77.gml
 +draw_clear_alpha(c_black,1);
 +draw_surface(application_surface,0,0);
 +surface_reset_target();
++dur=sBattleTransInit(kind,cw,ch);
 +phase=1;
 +room_goto(troom); //the room changes at the end of this frame, after the grab
 +exit; //the screen already shows what was just grabbed
@@ -42,17 +47,30 @@ diff -ruN a/objects/oBattleTrans/8_77.gml b/objects/oBattleTrans/8_77.gml
 +if (!surface_exists(cap)) { instance_destroy(); exit; } //nothing left to draw with
 +cw=surface_get_width(cap);
 +ch=surface_get_height(cap);
++if (phase=2 && kind>=28) { //the cube and plane effects need the new room as a texture of its own, so copy it out first
++if (!surface_exists(cap2)) cap2=surface_create(cw,ch);
++surface_set_target(cap2);
++draw_clear_alpha(c_black,1);
++draw_surface(application_surface,0,0);
++surface_reset_target();
++}
 +surface_set_target(application_surface);
 +gpu_set_texfilter(0);
 +if (phase=1) { //the room has not changed yet: hold the picture
 +draw_surface_ext(cap,0,0,1,1,0,c_white,1);
 +if (room=troom) phase=2;
 +} else {
-+sBattleTransDraw(kind,t/dur,cap,cw,ch);
++sBattleTransDraw(kind,t,dur,cap,cw,ch);
 +t+=1;
 +}
 +surface_reset_target();
-+if (phase=2 && (t>dur || room!=troom)) { surface_free(cap); cap=-1; instance_destroy(); } //done, or the game moved on
++if (phase=2 && (t>dur || room!=troom)) { //done, or the game moved on
++surface_free(cap);
++cap=-1;
++if (surface_exists(cap2)) surface_free(cap2);
++cap2=-1;
++instance_destroy();
++}
 diff -ruN a/scripts/sBattleStart.gml b/scripts/sBattleStart.gml
 --- a/scripts/sBattleStart.gml
 +++ b/scripts/sBattleStart.gml
@@ -83,59 +101,190 @@ diff -ruN a/scripts/sBattleTrans.gml b/scripts/sBattleTrans.gml
 +if (instance_exists(oBattleTrans)) exit; //one is already on its way
 +o=instance_create(0,0,oBattleTrans);
 +o.troom=argument0;
-+o.kind=floor(random(19)); //sBattleTransDraw has effects 0 to 18
++o.kind=floor(random(36)); //the same 36 effects rt_init put in the pool, in its order
 diff -ruN a/scripts/sBattleTransDraw.gml b/scripts/sBattleTransDraw.gml
 --- a/scripts/sBattleTransDraw.gml
 +++ b/scripts/sBattleTransDraw.gml
-@@ -0,0 +1,51 @@
-+//One frame of a battle transition: argument0 picks the effect, argument1 is how far through it is (0 to 1),
-+//argument2 holds a grab of the room being left and argument3/argument4 are its size.
-+//The caller draws into the application surface, so this works in game pixels and the player's scaling still applies.
-+//The rt_ originals cross-faded two frozen grabs; here the new room is already running underneath, so these take the
-+//old screen away, and the ones that pass through black uncover the new room in their second half.
-+var k, p, cap, cw, ch, a, q, b, n, s, r, d, u, i, j, ca, cb;
-+k=argument0; p=argument1; cap=argument2; cw=argument3; ch=argument4;
+@@ -0,0 +1,62 @@
++//One frame of a battle transition: argument0 picks the effect, argument1 the frame it is on and argument2 how
++//many frames it lasts, argument3 holds a grab of the room being left and argument4/argument5 are its size.
++//It is called from oBattleTrans with the application surface as the target, so this works in game pixels and the
++//player's scaling still applies. The rt_ originals cross-faded two frozen grabs; here the new room is already
++//running underneath, so these take the old screen away over it.
++var k, t, dur, cap, cw, ch, p, a, i, j, r, s, u, d, n, b, hor, rev, sg, l, m, e0, e1, e2, co, cn;
++k=argument0; t=argument1; dur=argument2; cap=argument3; cw=argument4; ch=argument5;
++p=t/dur; //how far through, 0 to 1
 +a=1-p; //the grab thins out as it goes
 +draw_set_alpha(1);
-+if (k>=6 && k<=14) { //through black: cover the old room in the first half, uncover the new one in the second
-+if (p<0.5) { draw_surface_ext(cap,0,0,1,1,0,c_white,1); q=p*2; } else { q=2-p*2; }
-+draw_set_color(c_black);
-+b=16; //cell size for the ones that break the screen up
-+if (k=6) { n=8; s=ch/n; for (i=0; i<n; i+=1) draw_rectangle(0,i*s,cw,i*s+s*q,0); } //blinds
-+else if (k=7) { n=10; s=cw/n; for (i=0; i<n; i+=1) draw_rectangle(i*s,0,i*s+s*q,ch,0); }
-+else if (k=8) draw_rectangle(0,0,cw*q,ch,0); //wipes
-+else if (k=9) draw_rectangle(cw-cw*q,0,cw,ch,0);
-+else if (k=10) draw_rectangle(0,0,cw,ch*q,0);
-+else if (k=11) draw_rectangle(0,ch-ch*q,cw,ch,0);
-+else if (k=12) { //cells go out in a scattered order, the same one every time so it does not flicker
-+for (i=0; i<cw; i+=b) for (j=0; j<ch; j+=b) {
-+ca=i/b; cb=j/b;
-+u=((ca*ca*13+cb*cb*7+ca*cb*29) mod 97)/97; //a plain multiple of the cell leaves visible diagonals; the squares break them up
-+if (q>u) draw_rectangle(i,j,i+b,j+b,0);
++draw_set_color(c_white);
++if (k>=10 && k<=27) { sBattleTransTiles(k,cap,cw,ch); exit; } //the particle ones keep their tiles on the instance
++if (k>=28) { //cube and plane: the two screens are walls turning past the camera, over black
++hor=(k=28 || k=29 || k=32 || k=33);
++if (hor) { l=cw; m=ch; } else { l=ch; m=cw; }
++draw_clear(c_black);
++if (k<32) { //cube: the old wall slides off one edge as the new one comes in behind it
++rev=(k=29 || k=31);
++n=100; //how far the far edge of a wall leans in
++if (p<0.5) { i=p; u=l*(1-i); e0=n*i; e1=-n*i; e2=n*(1-i); co=1-i; cn=i; }
++else { i=1-p; u=l*i; e0=n*(1-i); e1=-n*i; e2=n*i; co=i; cn=1-i; }
++draw_set_color(make_color_rgb(co*255,co*255,co*255));
++sBattleTransPanel(cap,hor,rev,l,m,0,u,e0,e1);
++draw_set_color(make_color_rgb(cn*255,cn*255,cn*255));
++sBattleTransPanel(cap2,hor,rev,l,m,u,l,e1,e2);
++} else { //plane: the old screen turns away edge on, then the new one turns back
++sg=1;
++if (k=33 || k=35) sg=-1;
++if (p<0.5) { i=1-p*2; sBattleTransPanel(cap,hor,0,l,m,l/2-l/2*i,l/2+l/2*i,sg*50*(1-i),-sg*50*(1-i)); }
++else { i=p*2-1; sBattleTransPanel(cap2,hor,0,l,m,l/2-l/2*i,l/2+l/2*i,-sg*50*(1-i),sg*50*(1-i)); }
 +}
-+}
-+else if (k=13) { s=b*q/2; for (i=0; i<cw; i+=b) for (j=0; j<ch; j+=b) draw_rectangle(i+b/2-s,j+b/2-s,i+b/2+s,j+b/2+s,0); } //cells grow from their middle
-+else { for (i=0; i<cw; i+=b) for (j=0; j<ch; j+=b) draw_rectangle(i,j,i+b*q,j+b*q,0); } //cells grow from their corner
 +draw_set_color(c_white);
 +exit;
 +}
-+if (k=0) { //spin: the grab turns about the middle, as rt_spin did
++if (k=8) { u=p*p*24; draw_surface_ext(cap,floor(random(u*2+1))-u,floor(random(u*2+1))-u,1,1,0,c_white,min(1,2-p*2)); exit; } //quake
++if (k=9) { s=1+3*p*p; draw_surface_ext(cap,cw/2-cw*s/2,ch/2-ch*s/2,s,s,0,c_white,a); exit; } //zoom
++//the first eight pull the whole screen apart; 4 to 7 are the same four again, through black
++if (k>=4 && p>=0.5) { //past halfway a fade is black lifting off the new room
++draw_set_color(c_black);
++draw_set_alpha(2-p*2);
++draw_rectangle(0,0,cw,ch,0);
++draw_set_color(c_white);
++draw_set_alpha(1);
++exit;
++}
++b=k mod 4;
++if (b=0) { //spin: the grab turns about the middle, as rt_spin did
 +n=sqrt(sqr(cw/2)+sqr(ch/2));
 +d=point_direction(cw/2,ch/2,0,0);
 +r=180*p*p;
 +draw_surface_ext(cap,cw/2+lengthdir_x(n,r+d),ch/2+lengthdir_y(n,r+d),1,1,r,c_white,a);
 +}
-+else if (k=1) { s=1+3*p*p; draw_surface_ext(cap,cw/2-cw*s/2,ch/2-ch*s/2,s,s,0,c_white,a); } //zoom
-+else if (k=2) { //blur: copies pulling apart from the middle
-+for (i=0; i<5; i+=1) { s=1+p*0.15*(i+1); draw_surface_ext(cap,cw/2-cw*s/2,ch/2-ch*s/2,s,s,0,c_white,a*(1-i*0.15)); }
++else if (b=1) { n=8; for (i=0; i<ch; i+=n) { u=sin(i/ch*12+p*10)*p*40; draw_surface_part_ext(cap,0,i,cw,n,u,i,1,1,c_white,a); } } //wavy
++else if (b=2) { s=4*(1+floor(p*7)); for (i=0; i<cw; i+=s) for (j=0; j<ch; j+=s) draw_surface_part_ext(cap,i,j,1,1,i,j,s,s,c_white,a); } //pixelate
++else { for (i=0; i<5; i+=1) { s=1+p*0.15*(i+1); draw_surface_ext(cap,cw/2-cw*s/2,ch/2-ch*s/2,s,s,0,c_white,a*(1-i*0.15)); } } //blur: copies pulling apart from the middle
++if (k>=4) { //the first half of a fade darkens what is left of it
++draw_set_color(c_black);
++draw_set_alpha(min(1,p*2));
++draw_rectangle(0,0,cw,ch,0);
++draw_set_color(c_white);
++draw_set_alpha(1);
 +}
-+else if (k=3) { n=8; for (i=0; i<ch; i+=n) { u=sin(i/ch*12+p*10)*p*40; draw_surface_part_ext(cap,0,i,cw,n,u,i,1,1,c_white,a); } } //wavy
-+else if (k=4) { u=p*p*24; draw_surface_ext(cap,floor(random(u*2+1))-u,floor(random(u*2+1))-u,1,1,0,c_white,min(1,2-p*2)); } //quake
-+else if (k=5) { b=4*(1+floor(p*7)); for (i=0; i<cw; i+=b) for (j=0; j<ch; j+=b) draw_surface_part_ext(cap,i,j,1,1,i,j,b,b,c_white,a); } //pixelate
-+else { //slide the old screen off one side, as the cube and plane transitions did
-+u=p*p;
-+if (k=15) draw_surface_ext(cap,-cw*u,0,1,1,0,c_white,1);
-+else if (k=16) draw_surface_ext(cap,cw*u,0,1,1,0,c_white,1);
-+else if (k=17) draw_surface_ext(cap,0,-ch*u,1,1,0,c_white,1);
-+else draw_surface_ext(cap,0,ch*u,1,1,0,c_white,1);
+diff -ruN a/scripts/sBattleTransInit.gml b/scripts/sBattleTransInit.gml
+--- a/scripts/sBattleTransInit.gml
++++ b/scripts/sBattleTransInit.gml
+@@ -0,0 +1,41 @@
++//Sets up one of sBattleTransDraw's transitions and returns how many frames it runs for. It is called from
++//oBattleTrans's Post Draw, so the arrays it fills are that instance's. argument0 is the effect, argument1 and
++//argument2 the size of the grab it will play over.
++//Half of rt_init's pool broke the screen into 20x20 tiles and flew them off as particles, so half of these do too
++//(effects 10 to 27); each is the rt_ particle template with one or two lines changed, as the originals were.
++var k, cw, ch, i, ix, iy, lf, dr, pd;
++k=argument0; cw=argument1; ch=argument2;
++np=0;
++pw=20; //the rt_ library's tile size
++pn=0;
++dr=20;
++if (k<10) { if (k<8) dr=26; return dr; } //the ones that work on the whole screen at once
++if (k>=28) { if (k>=32) dr=24; return dr; } //cube and plane
++lf=20; //a tile's life, in frames
++if (k>=24) lf=999; //a dissolve runs until its sweep has eaten every tile, not off a lifetime
++i=0;
++for (iy=0; iy<ch; iy+=pw) for (ix=0; ix<cw; ix+=pw) {
++pd=point_direction(cw/2,ch/2,ix,iy);
++plife[i]=lf; plife0[i]=lf;
++px[i]=ix; py[i]=iy; psx[i]=ix; psy[i]=iy;
++pxs[i]=1; pys[i]=1; pa[i]=1;
++psp[i]=0; pdr[i]=0; pgr[i]=0; pgd[i]=270;
++pe1[i]=0; pe2[i]=0;
++if (k=10) pgr[i]=0.5+random(3); //crumble: every tile falls at its own rate
++else if (k=11) { psp[i]=random(10)+10; pdr[i]=pd; } //explode, thrown out from the middle
++else if (k=12) { pgr[i]=1.5; pgd[i]=pd; } //explode, pulled out from the middle
++else if (k=13) { psp[i]=random(10)+10; pdr[i]=pd+180; } //implode
++else if (k=14) { pgr[i]=1.5; pgd[i]=pd+180; }
++else if (k=15) { psp[i]=random(10)+10; pdr[i]=pd+90; } //tornado, thrown around the middle
++else if (k=16) { pgr[i]=1; pgd[i]=pd+90; }
++else if (k=17) { pgr[i]=0.5; pgd[i]=point_direction(ix,iy,cw/2,ch/2); } //drain
++else if (k=22) pe1[i]=random(0.1)+1/20; //dissolve into pixels: every tile fades at its own rate
++else if (k=23) { pe1[i]=random(1/2-1/20)+1/20; pe2[i]=1; } //random pixels: every tile waits its own time, then goes
++i+=1;
 +}
++np=i;
++if (k=24) { pn=cw-pw; dr=ceil(cw/pw)+10; } //a dissolve's sweep crosses a tile a frame, then the last tiles fade
++if (k=25) { pn=0; dr=ceil(cw/pw)+10; }
++if (k=26) { pn=ch-pw; dr=ceil(ch/pw)+10; }
++if (k=27) { pn=0; dr=ceil(ch/pw)+10; }
++return dr;
+diff -ruN a/scripts/sBattleTransPanel.gml b/scripts/sBattleTransPanel.gml
+--- a/scripts/sBattleTransPanel.gml
++++ b/scripts/sBattleTransPanel.gml
+@@ -0,0 +1,28 @@
++//Draws surface argument0 as one wall of the cube and plane transitions: a panel spanning argument5 to argument6
++//along one axis (argument1 picks x, else y; argument2 mirrors it, image and all), inset argument7 and argument8
++//on the cross axis at those two edges. argument3 is the length of the axis and argument4 of the cross axis.
++var tx, hor, rev, l, m, ua, ub, ea, eb, tt, tw, th, va, vb;
++tx=argument0; hor=argument1; rev=argument2; l=argument3; m=argument4; ua=argument5; ub=argument6; ea=argument7; eb=argument8;
++if (!surface_exists(tx)) exit;
++tt=surface_get_texture(tx);
++tw=texture_get_width(tt);
++th=texture_get_height(tt);
++va=0; vb=1;
++if (rev) { ua=l-ua; ub=l-ub; va=1; vb=0; }
++draw_primitive_begin_texture(pr_trianglelist,tt);
++if (hor) {
++draw_vertex_texture(ua,ea,va*tw,0);
++draw_vertex_texture(ub,eb,vb*tw,0);
++draw_vertex_texture(ua,m-ea,va*tw,th);
++draw_vertex_texture(ub,eb,vb*tw,0);
++draw_vertex_texture(ua,m-ea,va*tw,th);
++draw_vertex_texture(ub,m-eb,vb*tw,th);
++} else {
++draw_vertex_texture(ea,ua,0,va*th);
++draw_vertex_texture(m-ea,ua,tw,va*th);
++draw_vertex_texture(eb,ub,0,vb*th);
++draw_vertex_texture(m-ea,ua,tw,va*th);
++draw_vertex_texture(eb,ub,0,vb*th);
++draw_vertex_texture(m-eb,ub,tw,vb*th);
++}
++draw_primitive_end();
+diff -ruN a/scripts/sBattleTransTiles.gml b/scripts/sBattleTransTiles.gml
+--- a/scripts/sBattleTransTiles.gml
++++ b/scripts/sBattleTransTiles.gml
+@@ -0,0 +1,39 @@
++//Steps and draws oBattleTrans's tiles for one frame of particle transition argument0. argument1 holds the grab
++//of the room being left and argument2/argument3 are its size.
++//This is the rt_ particle template: every tile carries a life, a speed and direction, a gravity and its own
++//scale and alpha, and each effect is that loop with one or two lines of its own at the end.
++var k, cap, cw, ch, i, r, vx, vy, cen, dx, dy;
++k=argument0; cap=argument1; cw=argument2; ch=argument3;
++cen=(k<11 || k>14); //explode and implode move a tile by its corner; the rest scale it about its middle
++for (i=0; i<np; i+=1) {
++if (plife[i]<=0) continue;
++plife[i]-=1;
++dx=px[i]; dy=py[i];
++if (cen) { dx+=pw/2*(1-pxs[i]); dy+=pw/2*(1-pys[i]); }
++draw_surface_part_ext(cap,psx[i],psy[i],pw,pw,dx,dy,pxs[i],pys[i],c_white,pa[i]);
++vx=lengthdir_x(psp[i],pdr[i])+lengthdir_x(pgr[i],pgd[i]); //the original added gravity with motion_add
++vy=lengthdir_y(psp[i],pdr[i])+lengthdir_y(pgr[i],pgd[i]);
++psp[i]=point_distance(0,0,vx,vy);
++pdr[i]=point_direction(0,0,vx,vy);
++px[i]+=vx; py[i]+=vy;
++r=plife[i]/plife0[i];
++if (k=15) pdr[i]=point_direction(cw/2,ch/2,px[i],py[i])+90; //a tornado keeps turning about the middle
++if (k=16) pgd[i]=point_direction(cw/2,ch/2,px[i],py[i])+90;
++if (k=17) pgd[i]=point_direction(px[i],py[i],cw/2,ch/2); //a drain keeps pulling to the middle
++if (k=18) pxs[i]=r; //blinds close sideways
++if (k=19) pys[i]=r; //and these the other way
++if (k=20) { pxs[i]=r; pys[i]=r; } //tiles shrink away
++if (k=21) { pxs[i]=1+(1-r)*2; pys[i]=pxs[i]; } //or grow out of the screen
++if ((k>=10 && k<=17) || k=21) pa[i]=r; //these fade a tile out over its life
++if (k=22) { pa[i]-=pe1[i]; if (pa[i]<=0) plife[i]=0; }
++if (k=23) { pe2[i]-=pe1[i]; if (pe2[i]<=0) plife[i]=0; }
++if (k=24 && pn<=px[i]) pa[i]-=0.1; //a dissolve fades every tile its sweep has passed
++if (k=25 && pn>=px[i]) pa[i]-=0.1;
++if (k=26 && pn<=py[i]) pa[i]-=0.1;
++if (k=27 && pn>=py[i]) pa[i]-=0.1;
++if (k>=24 && pa[i]<=0) plife[i]=0;
++}
++if (k=24) pn-=pw; //the sweep moves on a tile, as the original did after its own loop
++if (k=25) pn+=pw;
++if (k=26) pn-=pw;
++if (k=27) pn+=pw;
