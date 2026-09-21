@@ -27,6 +27,18 @@ diff -ruN a/objects/oBView/3_1.gml b/objects/oBView/3_1.gml
 +if (surface_exists(surf) && (surface_get_width(surf)!=w || surface_get_height(surf)!=h)) { surface_free(surf); surf=-1; }
 +if (!surface_exists(surf)) surf=surface_create(w,h);
 +view_surface_id[0]=surf;
+diff -ruN a/objects/oBView/3_2.gml b/objects/oBView/3_2.gml
+--- a/objects/oBView/3_2.gml	1969-12-31 19:00:00
++++ b/objects/oBView/3_2.gml	2026-09-20 10:14:54
+@@ -0,0 +1,8 @@
++//GM6 kept view positions whole; LTS takes them as reals. sViewFollow's shake and the opening zoom leave the
++//camera on a fraction, and the view projection uses that fraction while the surface drawn across view 1 lands on
++//a whole pixel, so a fraction over half a pixel left the picture's last column unpainted: a white bar down the
++//right of the battle. Whole positions here, after oBCamera's Step and before anything draws, keep the two in step.
++view_xview[0]=floor(view_xview[0]);
++view_yview[0]=floor(view_yview[0]);
++view_xview[1]=floor(view_xview[1]);
++view_yview[1]=floor(view_yview[1]);
 diff -ruN a/objects/oBView/7_5.gml b/objects/oBView/7_5.gml
 --- a/objects/oBView/7_5.gml	1969-12-31 19:00:00
 +++ b/objects/oBView/7_5.gml	2026-09-20 10:14:54
