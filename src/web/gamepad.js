@@ -14,7 +14,7 @@
 // harmless here: a fuzz run has no pads.
 
 var pad_key = { up: 38, down: 40, left: 37, right: 39, action: 90, cancel: 88, start: 67 };
-var pad_started = false, pad_ctx = 0;
+var pad_started = false, pad_ctx = 0, pad_mute = false;
 var pad_held = {}, pad_downAt = {}, pad_pending = {}, pad_repeatAt = {};
 
 // The stick must travel past PAD_DEAD to turn a direction on and fall back inside PAD_LIVE to turn it off, so
@@ -51,7 +51,19 @@ function pad_context(n) {
 
 // ---- key injection ------------------------------------------------------------------------------
 
+// The Controls panel (controls.js) tests a pad with the game still running behind it, so while it is open the pad
+// keeps being read - the panel shows that state - but sends nothing. Anything held when it opens is released first.
+function pad_quiet(on) {
+  on = !!on;
+  if (on === pad_mute) return;
+  if (on) {
+    pad_release_all();
+    pad_mute = true;
+  } else pad_mute = false;
+}
+
 function pad_send(code, down) {
+  if (pad_mute) return;
   var h = down ? window.onkeydown : window.onkeyup;     // looked up now, never cached
   if (!h) return;
   try {

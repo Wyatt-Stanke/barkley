@@ -1,0 +1,58 @@
+diff -ruN a/objects/oTitle0/3_0.gml b/objects/oTitle0/3_0.gml
+--- a/objects/oTitle0/3_0.gml
++++ b/objects/oTitle0/3_0.gml
+@@ -2,11 +2,12 @@
+ room_speed=30;
+ if (image_alpha!=1) exit;
+ if (sKey(global.key_up,1) || sKey(vk_up,1)) { sP(); pos=max(0,pos-1); }
+-if (sKey(global.key_down,1) || sKey(vk_down,1)) { sP(); pos=min(3,pos+1); }
++if (sKey(global.key_down,1) || sKey(vk_down,1)) { sP(); pos=min(4,pos+1); } //Modernized: 4 is the Controls row
+ if (sKey(vk_space,1) || sKey(vk_enter,1) || sKey(global.key_action,1)) {
+ sP(1);
+ if (pos=0) sFileData(0);
+ if (pos=1) sFileData(6);
+ if (pos=2) room_goto(RomConfig);
+ if (pos=3) game_end();
++if (pos=4) sControls(); //Modernized: the Controls panel (migrate/controls.js)
+ }
+\ No newline at end of file
+diff -ruN a/objects/oTitle0/8_0.gml b/objects/oTitle0/8_0.gml
+--- a/objects/oTitle0/8_0.gml
++++ b/objects/oTitle0/8_0.gml
+@@ -1,6 +1,26 @@
+ image_speed=global.rd/2;
+ x=160;
+-draw_sprite_ext(sTitle0,0,115,135,1,1,0,c_white,image_alpha);
++//Modernized: sTitle0 holds four rows, so it is drawn without its bottom frame (rows 0-57) and a fifth row for
++//Controls is built under it from the sprite's own blank interior and frame. Rows 54-57 are the blank ones: row
++//53 still carries the tail of the Q in Quit Vidcon. The rows are 13 apart and their text starts 18 in.
++draw_sprite_part_ext(sTitle0,0,0,0,89,58,115,135,1,1,c_white,image_alpha);
++draw_sprite_part_ext(sTitle0,0,0,54,89,4,115,135+58,1,1,c_white,image_alpha);
++draw_sprite_part_ext(sTitle0,0,0,54,89,4,115,135+62,1,1,c_white,image_alpha);
++draw_sprite_part_ext(sTitle0,0,0,54,89,4,115,135+66,1,1,c_white,image_alpha);
++draw_sprite_part_ext(sTitle0,0,0,54,89,1,115,135+70,1,1,c_white,image_alpha);
++draw_sprite_part_ext(sTitle0,0,0,58,89,3,115,135+71,1,1,c_white,image_alpha);
++//The sprite's labels are set in a heavier face than any font the game carries, so the word is built from the
++//sprite's own letters: C o n t r come from Configuration (row 2), l from Load Datafile (row 1) and s from New
++//season (row 0). A row's letters live in the 12 px band from 13*row+4, which keeps every baseline together, and
++//each letter is followed by a 1 px gap.
++draw_sprite_part_ext(sTitle0,0,18,30,6,12,115+18,135+56,1,1,c_white,image_alpha); //C
++draw_sprite_part_ext(sTitle0,0,25,30,5,12,115+25,135+56,1,1,c_white,image_alpha); //o
++draw_sprite_part_ext(sTitle0,0,31,30,5,12,115+31,135+56,1,1,c_white,image_alpha); //n
++draw_sprite_part_ext(sTitle0,0,66,30,3,12,115+37,135+56,1,1,c_white,image_alpha); //t
++draw_sprite_part_ext(sTitle0,0,56,30,3,12,115+41,135+56,1,1,c_white,image_alpha); //r
++draw_sprite_part_ext(sTitle0,0,25,30,5,12,115+45,135+56,1,1,c_white,image_alpha); //o
++draw_sprite_part_ext(sTitle0,0,75,17,2,12,115+51,135+56,1,1,c_white,image_alpha); //l
++draw_sprite_part_ext(sTitle0,0,41,4,5,12,115+54,135+56,1,1,c_white,image_alpha); //s
+ draw_sprite_ext(sDialogBlip,image_index,115+5,135+(pos*13)+5,1,1,0,c_white,image_alpha);
+ draw_set_alpha(image_alpha);
+ draw_set_font(Courier8);
+diff -ruN a/scripts/sControls.gml b/scripts/sControls.gml
+--- a/scripts/sControls.gml
++++ b/scripts/sControls.gml
+@@ -0,0 +1,5 @@
++//Modernized: opens the Controls panel on the page (migrate/controls.js) from the title screen: the keys as they
++//are bound now, what a controller does, where to change them, and a test that lights each control as it is
++//pressed. The panel keeps the keys pressed in it to itself and mutes the pad, so a test cannot reach the menu
++//behind it. The keys go with it so the panel shows the player's own bindings rather than the defaults.
++controls_open(global.key_up,global.key_down,global.key_left,global.key_right,global.key_action,global.key_cancel,global.key_start);
