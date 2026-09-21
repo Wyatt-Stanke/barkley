@@ -1,16 +1,22 @@
-// The Controls panel for the modernized HTML5 build (patch modernized/12). import.mjs adds this file to the project
-// as an extension; the title screen's Controls row calls controls_open with the seven bound keys.
+// The Controls panel for the modernized HTML5 build. import.mjs adds this file to the project as an extension, and
+// the Start screen's Controls link opens it (controls_show): before the game runs, which is where a player who
+// cannot work out how to drive it is actually standing. The game itself never opens it.
 //
-// It says what the game listens to - the keys as they are bound right now, the controller mapping, and where to
-// change them - and then lets the player prove it hears them: every control lights up as it is pressed, from the
-// keyboard or from a pad, with the pad's raw buttons and stick beside it for a pad that maps itself oddly.
+// It says what the game listens to - the keys as the player has them, the controller mapping, and where to change
+// them - and then lets them prove it hears them: every control lights up as it is pressed, from the keyboard or
+// from a pad, with the pad's name, raw buttons and sticks beside it for a pad that maps itself oddly.
 //
-// Nothing pressed in the panel reaches the game behind it: key events stop here (as saves.js does), and gamepad.js
-// is asked to go quiet while it is open, so testing a controller cannot start a season or quit the game.
+// The bindings come from the game's own controls.txt in browser storage (key_save writes it: a warning line, then
+// one key code a line), so they are the player's own. With no such file, or an unreadable one, they are the
+// defaults, which is what the game would use anyway.
+//
+// Nothing pressed in the panel reaches the game or the Start screen: key events stop here (as saves.js does), the
+// Start screen's own key handler stands down while the panel is up, and gamepad.js is asked to go quiet.
 //
 // It builds plain DOM; the style sheet is in index.html (.ui-panel and friends, .ctl-*).
 
 var controls_key = { up: 38, down: 40, left: 37, right: 39, action: 90, cancel: 88, start: 67 };
+var controls_saved = false;
 var controls_default = { up: 38, down: 40, left: 37, right: 39, action: 90, cancel: 88, start: 67 };
 // key_doset's aliases: these act as the control they name unless the player has bound them to something else.
 var CONTROLS_ALIAS = { 87: 'up', 65: 'left', 83: 'down', 68: 'right', 74: 'action', 75: 'cancel' };
@@ -37,11 +43,62 @@ function controls_name(code) {
   return 'Key ' + code;
 }
 
-// Called from the title screen's Controls row with the keys as key_doset has them.
-function controls_open(u, d, l, r, a, c, s) {
-  controls_key = { up: u | 0, down: d | 0, left: l | 0, right: r | 0, action: a | 0, cancel: c | 0, start: s | 0 };
+// The Start screen's Controls link. Takes the player's own keys when the game has ever saved them.
+function controls_show() {
+  var saved = controls_stored();
+  controls_key = saved || controls_default;
+  controls_saved = !!saved;
   controls_panel();
   return 0;
+}
+
+// key_save's controls.txt, under whatever prefix the runtime gives the game's files in browser storage.
+function controls_stored() {
+  var text = null, i, k;
+  try {
+    for (i = 0; i < localStorage.length; i++) {
+      k = localStorage.key(i);
+      if (k.length > 12 && k.slice(-12) === 'controls.txt') text = localStorage.getItem(k);
+    }
+  } catch (e) {
+    return null;
+  }
+  if (!text) return null;
+  var lines = text.split(/\r?\n/), keys = {}, n;
+  for (i = 0; i < CONTROLS_ROWS.length; i++) {
+    n = parseInt(lines[i + 1], 10); // line 0 is key_save's "Do not edit or delete this file."
+    if (!(n > 0 && n < 256)) return null;
+    keys[CONTROLS_ROWS[i][0]] = n;
+  }
+  return keys;
+}
+
+// gamepad.js decides what a pad's buttons and sticks mean, so its tables are read here and the test cannot drift
+// from the game. Its own held state is no use on the Start screen: it starts tracking only once the game has run
+// key_doset, which is after Start. These are the same values, for a page that somehow loaded without it.
+var CONTROLS_PAD = {
+  0: 'action', 2: 'action', 1: 'cancel', 3: 'cancel', 4: 'cancel', 5: 'cancel',
+  8: 'start', 9: 'start', 12: 'up', 13: 'down', 14: 'left', 15: 'right',
+};
+
+function controls_pad_state(list, on) {
+  var map = typeof PAD_BUTTON === 'object' && PAD_BUTTON ? PAD_BUTTON : CONTROLS_PAD;
+  var dead = typeof PAD_DEAD === 'number' ? PAD_DEAD : 0.45;
+  for (var i = 0; i < list.length; i++) {
+    var g = list[i], b = g.buttons || [], ax = g.axes || [], j, n;
+    for (j = 0; j < b.length; j++) {
+      n = map[j];
+      if (n && (typeof b[j] === 'object' && b[j] ? b[j].pressed || b[j].value > 0.5 : b[j] > 0.5)) on[n] = true;
+    }
+    if (typeof ax[0] === 'number') {
+      if (ax[0] <= -dead) on.left = true;
+      else if (ax[0] >= dead) on.right = true;
+    }
+    if (typeof ax[1] === 'number') {
+      if (ax[1] <= -dead) on.up = true;
+      else if (ax[1] >= dead) on.down = true;
+    }
+  }
 }
 
 // An alias only stands for its control while no control is bound to that key, exactly as key_alias decides it.
@@ -61,9 +118,11 @@ function controls_aliases(name) {
 function controls_defaults_line() {
   var same = true, k;
   for (k in controls_default) if (controls_key[k] !== controls_default[k]) same = false;
-  return same
-    ? 'These are the keys the game starts with.'
-    : 'The keys the game starts with are ↑ ↓ ← →, Z, X and C.';
+  if (same)
+    return controls_saved
+      ? 'These are the keys the game starts with, and yours are still those.'
+      : 'These are the keys the game starts with.';
+  return 'You have changed these; the keys the game starts with are ↑ ↓ ← →, Z, X and C.';
 }
 
 function controls_panel() {
@@ -101,7 +160,7 @@ function controls_panel() {
   closeBtn.type = 'button';
 
   el(box, 'p', 'ui-mute',
-    'What the game listens to, and a test below to see that it hears you. Nothing here changes the game itself.');
+    'What the game listens to, and a test below to see that it hears you. Close this and press Start to play.');
 
   var cols = el(box, 'div', 'ui-cols');
 
@@ -116,8 +175,8 @@ function controls_panel() {
     controls_defaults_line() + ' Enter also confirms in menus, and Esc leaves full screen.');
   el(kb, 'h3', '', 'Changing them');
   el(kb, 'p', '',
-    'Configuration → SET KEYS, then press the key you want for each control as it is named. ' +
-      'Configuration → SETTINGS → Default puts them all back.');
+    'Start the game, and on the title menu choose Configuration → SET KEYS: it then asks for the key you want ' +
+      'for each control in turn. Configuration → SETTINGS → Default puts them all back.');
   el(kb, 'p', 'ui-mute', 'Full screen, picture size and volume are in Configuration too.');
 
   var pad = el(cols, 'section', 'ui-col');
@@ -151,10 +210,10 @@ function controls_panel() {
   last.id = 'ctl-last';
   var raw = el(test, 'p', 'ctl-raw', '');
   raw.id = 'ctl-raw';
-  el(test, 'p', 'ui-mute', 'Presses stay in this panel: the game behind it does not see them.');
+  el(test, 'p', 'ui-mute', 'Presses stay in this panel: none of them starts the game.');
 
   // ---- the test ---------------------------------------------------------------------------------
-  var keyHeld = {}, alive = true;
+  var keyHeld = {}, alive = true, timer = 0;
 
   var quiet = function (on) {
     if (typeof pad_quiet === 'function') pad_quiet(on);
@@ -162,6 +221,7 @@ function controls_panel() {
 
   var close = function () {
     alive = false;
+    clearInterval(timer);
     quiet(false);
     box.remove();
   };
@@ -212,17 +272,17 @@ function controls_panel() {
     return list;
   };
 
+  // A timer, not requestAnimationFrame: the Start screen holds every frame callback back until the game starts
+  // (index.html's rAF wrapper), which would leave this test frozen exactly where it is most used. 20 a second is
+  // plenty to see a button go down.
   var tick = function () {
     if (!alive) return;
-    requestAnimationFrame(tick);
-
     var live = pads(), g = live[0], on = {}, k, code, i;
     for (code in keyHeld) {
       k = describe(code | 0);
       if (k) on[k] = true;
     }
-    // gamepad.js works out the pad's controls; read its state rather than deciding twice.
-    if (typeof pad_held === 'object' && pad_held) for (k in pad_held) if (pad_held[k]) on[k] = true;
+    controls_pad_state(live, on);
 
     for (k in lamp) {
       if (lamp[k].classList.contains('on') !== !!on[k]) lamp[k].classList.toggle('on', !!on[k]);
@@ -248,6 +308,7 @@ function controls_panel() {
   document.body.appendChild(box);
   box.focus();
   quiet(true);
-  requestAnimationFrame(tick);
+  timer = setInterval(tick, 50);
+  tick();
   return box;
 }

@@ -68,9 +68,10 @@ if (fs.readFileSync(path.join(gmx, 'scripts', 'key_doset.gml'), 'utf8').includes
     ['pad_keys', [2, 2, 2, 2, 2, 2, 2], 2],
     ['pad_context', [2], 2],
   ]);
-// controls.js shows the Controls panel the title screen opens, for patch modernized/12.
-if (fs.existsSync(path.join(gmx, 'scripts', 'sControls.gml')))
-  addExtension('Controls', 'controls.js', [['controls_open', [2, 2, 2, 2, 2, 2, 2], 2]]);
+// controls.js shows the Controls panel, which index.html's Start screen opens before the game runs. It is a page
+// feature, so nothing in the GML calls it; it ships with a modernized migration, beside gamepad.js.
+if (fs.readFileSync(path.join(gmx, 'scripts', 'key_doset.gml'), 'utf8').includes('pad_keys'))
+  addExtension('Controls', 'controls.js', [['controls_show', [], 2]]);
 // crash.js records what a crash report needs for patch modernized/07.
 if (
   fs.existsSync(path.join(gmx, 'scripts', 'resume_tick.gml')) &&
