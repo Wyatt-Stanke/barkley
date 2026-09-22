@@ -1,0 +1,159 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+#
+# A Windows 10 VM that turns the original BarkleyV120.exe into a GameMaker:
+# Studio 1.4.9999 GMX export, reproducibly and without anyone touching a mouse.
+#
+# Provider: QEMU (vagrant-qemu) with the host's hardware accelerator. The
+# gusztavvargadr/windows-10 box is published in libvirt format, which
+# vagrant-qemu consumes directly (its `box_format` is "libvirt").
+#
+# Everything the guest needs is fetched over HTTP from `virt/host/serve.mjs`,
+# which the guest reaches at the SLIRP gateway 10.0.2.2. That same server takes
+# the finished GMX back (PUT /upload/<name>), so no synced folder is needed --
+# vagrant-qemu has none, and Windows would not mount a 9p share anyway.
+
+require 'fileutils'
+require 'socket'
+require 'timeout'
+
+VIRT_DIR = File.dirname(File.expand_path(__FILE__))
+
+# Vagrant decides whether a host port is free by connecting to it with
+# `Socket.tcp(host, port, connect_timeout: 0.1)`. On macOS that call hands back
+# a socket even when the connection was refused -- it waits for the descriptor
+# to become writable, which a refusal also does, and never re-checks the error.
+# So every port looks taken, every forwarded port "collides", and `vagrant up`
+# stops before it starts the VM. A plain blocking connect reports refusals
+# properly; against loopback it is just as quick.
+module Vagrant
+  module Util
+    module IsPortOpen
+      def is_port_open?(host, port)
+        Timeout.timeout(1) { TCPSocket.new(host, port).close }
+        true
+      rescue Timeout::Error, SystemCallError, SocketError
+        false
+      end
+
+      extend IsPortOpen
+    end
+  end
+end
+
+# The QEMU binary and its data dir (firmware blobs). MacPorts first: on an Intel
+# Mac running a recent macOS, Homebrew has no bottle for qemu and builds it from
+# source, which takes the better part of an hour.
+QEMU_PREFIXES = %w[/opt/local /usr/local /opt/homebrew].freeze
+qemu_prefix = ENV['QEMU_PREFIX'] ||
+              QEMU_PREFIXES.find { |p| File.executable?("#{p}/bin/qemu-system-x86_64") }
+if qemu_prefix.nil?
+  raise 'qemu-system-x86_64 not found. Install it with `sudo port install qemu` ' \
+        '(MacPorts) or `brew install qemu`, or set QEMU_PREFIX.'
+end
+
+# The box boots UEFI (its packer template hands libvirt an OVMF pflash pair), so
+# the x86_64 firmware has to be passed by hand: vagrant-qemu only wires pflash up
+# for aarch64. Unit 0 is the read-only code blob; unit 1 is this machine's own
+# writable copy of the variable store, which is where Windows keeps its boot
+# entry.
+OVMF_CODE = "#{qemu_prefix}/share/qemu/edk2-x86_64-code.fd".freeze
+OVMF_VARS_TEMPLATE = "#{qemu_prefix}/share/qemu/edk2-i386-vars.fd".freeze
+OVMF_VARS = File.join(VIRT_DIR, '.vagrant', 'edk2-x86_64-vars.fd').freeze
+
+# The box ships its own Vagrantfile, whose libvirt block *raises* unless it can
+# find an OVMF blob in one of two Linux paths. Vagrant evaluates that block even
+# though vagrant-libvirt is not installed here, so point its escape hatch at the
+# firmware we already found.
+ENV['VAGRANT_LIBVIRT_OVMF_CODE'] ||= OVMF_CODE
+
+unless File.exist?(OVMF_VARS)
+  FileUtils.mkdir_p(File.dirname(OVMF_VARS))
+  FileUtils.cp(OVMF_VARS_TEMPLATE, OVMF_VARS)
+  FileUtils.chmod(0o644, OVMF_VARS)
+end
+
+# Host ports. The QEMU monitor is a plain TCP readline socket, which is how
+# `virt/screenshot.sh` photographs the guest's framebuffer without involving
+# Windows at all.
+MONITOR_PORT = Integer(ENV.fetch('BARKLEY_MONITOR_PORT', 45_555))
+FILES_PORT   = Integer(ENV.fetch('BARKLEY_FILES_PORT', 8899))
+
+Vagrant.configure('2') do |config|
+  config.vm.box = 'gusztavvargadr/windows-10'
+  config.vm.box_version = ENV.fetch('BARKLEY_BOX_VERSION', '2511.0.0')
+
+  config.vm.guest = :windows
+  config.vm.communicator = 'winrm'
+  config.winrm.username = 'vagrant'
+  config.winrm.password = 'vagrant'
+  # A cold Windows boot, plus the box's own first-run work, is slow; and the GMX
+  # export itself runs for several minutes under WinRM.
+  config.vm.boot_timeout = 3600
+  config.winrm.timeout = 7200
+  config.winrm.retry_limit = 200
+  config.winrm.max_tries = 200
+
+  # vagrant-qemu has no synced folders (and the guest is Windows).
+  config.vm.synced_folder '.', '/vagrant', disabled: true
+
+  # No forwarded_port declarations here: Vagrant already defines the WinRM
+  # forward for a Windows guest (5985 -> 55985), and the box defines RDP
+  # (3389 -> 53389). Declaring them again produces a second entry for the same
+  # host port, which Vagrant then reports as a collision with itself.
+
+  config.vm.provider 'qemu' do |qe|
+    qe.arch = 'x86_64'
+    qe.qemu_bin = "#{qemu_prefix}/bin/qemu-system-x86_64"
+    qe.qemu_dir = "#{qemu_prefix}/share/qemu"
+
+    qe.machine = 'q35,accel=hvf'
+    # `host` minus TSX. Masking the transactional-memory instructions off is
+    # cheap and nothing here wants them; it is NOT what fixed the bugchecks,
+    # though it was the first guess.
+    qe.cpu = ENV.fetch('BARKLEY_VM_CPU', 'host,-hle,-rtm')
+    # One vCPU, and this one matters. Under HVF this guest corrupted its own
+    # kernel state under load -- fifteen bugchecks in an hour, mostly 0xA reads
+    # of wild addresses at DISPATCH_LEVEL, and one 0x1E carrying
+    # STATUS_ILLEGAL_INSTRUCTION, which is the kernel meeting an instruction the
+    # CPU rejected. Most of QEMU's HVF state-corruption bugs on Intel are
+    # SMP-only. See virt/README.md, "The guest bugchecks under load".
+    qe.smp = ENV.fetch('BARKLEY_VM_CPUS', '1')
+    qe.memory = ENV.fetch('BARKLEY_VM_MEMORY', '6G')
+
+    # The image carries no virtio drivers (the box's own libvirt config asks for
+    # a SATA disk and an e1000e NIC), so use devices Windows ships drivers for.
+    # On q35 an `if=ide` drive lands on the chipset's AHCI controller.
+    qe.drive_interface = 'ide'
+    qe.net_device = 'e1000e'
+
+    qe.control_port = MONITOR_PORT
+
+    # The plugin's default, minus `-vga none`: the GameMaker IDE has to be driven
+    # through a real desktop, so the guest needs a display adapter even though
+    # nothing here ever opens a QEMU window.
+    qe.other_default = %w[-parallel none -monitor none -display none]
+
+    qe.extra_qemu_args = %W[
+      -drive if=pflash,format=raw,unit=0,readonly=on,file=#{OVMF_CODE}
+      -drive if=pflash,format=raw,unit=1,file=#{OVMF_VARS}
+      -device VGA,xres=1440,yres=900
+      -device qemu-xhci -device usb-tablet
+      -rtc base=localtime
+    ]
+  end
+
+  # Stage 1: everything that needs no desktop -- the file host's address, the
+  # tools, and an autologon session for the GUI stage to run inside.
+  config.vm.provision 'bootstrap',
+                      type: 'shell',
+                      path: 'provision/01-bootstrap.ps1',
+                      args: ['-FilesUrl', "http://10.0.2.2:#{FILES_PORT}"]
+
+  # Autologon and the UAC setting only take effect at the next logon, and every
+  # later stage needs the desktop they produce.
+  config.vm.provision 'reboot',
+                      type: 'shell',
+                      inline: 'Write-Host "Rebooting into the autologon desktop"',
+                      reboot: true
+end
