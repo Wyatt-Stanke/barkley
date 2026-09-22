@@ -120,13 +120,19 @@ Vagrant.configure('2') do |config|
     accel = ENV.fetch('BARKLEY_VM_ACCEL', 'hvf')
     qe.machine = "q35,accel=#{accel}"
 
-    # `host` minus TSX. Masking the transactional-memory instructions off is
-    # cheap and nothing here wants them; it is NOT what fixed the bugchecks,
-    # though it was the first guess. A named model (Penryn, Nehalem, …) asks
-    # HVF to present a much smaller, older feature set than the host's.
-    qe.cpu = ENV.fetch('BARKLEY_VM_CPU', 'host,-hle,-rtm')
-    # One vCPU. This did not fix the bugchecks either -- four more arrived
-    # inside ten minutes with it -- but SMP buys little here, so it stays.
+    # Penryn, and this is the one that matters. With `-cpu host` this guest
+    # corrupted its own kernel memory under load: nineteen bugchecks over two
+    # runs, 0xA and 0xD1 reads of wild addresses at DISPATCH_LEVEL and a 0x1E
+    # carrying STATUS_ILLEGAL_INSTRUCTION -- the kernel being sent to an
+    # instruction the CPU rejected. Neither masking TSX off nor dropping to one
+    # vCPU made any difference. Asking HVF for a small, old, well-trodden
+    # feature set instead of the host's did: the run that had been crashing
+    # within two minutes got all the way through, and the machine has been up
+    # since. Penryn is also what UTM picks by default for x86_64, which is
+    # presumably the same lesson learned elsewhere.
+    qe.cpu = ENV.fetch('BARKLEY_VM_CPU', 'Penryn')
+    # One vCPU. This did not fix the bugchecks -- four more arrived inside ten
+    # minutes with it -- but SMP buys little here, so it stays.
     qe.smp = ENV.fetch('BARKLEY_VM_CPUS', '1')
     qe.memory = ENV.fetch('BARKLEY_VM_MEMORY', '6G')
 
@@ -145,12 +151,23 @@ Vagrant.configure('2') do |config|
     # nothing here ever opens a QEMU window.
     qe.other_default = %w[-parallel none -monitor none -display none]
 
+    # NB: `#` inside a %W[] literal is not a comment, it is an array element --
+    # so every note about these arguments has to live out here.
+    #
+    # The sound card plays into nothing, and exists only so that a sound card
+    # exists: the patcher is a GameMaker 8.1 game, and on a machine without one
+    # it opens a modal "No sound device detected" dialog that then sits in front
+    # of its own UI forever. Windows 10 has an inbox driver for intel-hda, and
+    # the `none` backend means QEMU never touches the host's audio.
     qe.extra_qemu_args = %W[
       -drive if=pflash,format=raw,unit=0,readonly=on,file=#{OVMF_CODE}
       -drive if=pflash,format=raw,unit=1,file=#{OVMF_VARS}
       -device VGA,xres=1440,yres=900
       -device qemu-xhci -device usb-tablet
       -rtc base=localtime
+      -audiodev none,id=snd0
+      -device intel-hda
+      -device hda-duplex,audiodev=snd0
     ]
   end
 

@@ -1,0 +1,58 @@
+diff --git a/org/lateralgm/file/GMXFileWriter.java b/org/lateralgm/file/GMXFileWriter.java
+index b673bc8..2acd5df 100644
+--- a/org/lateralgm/file/GMXFileWriter.java
++++ b/org/lateralgm/file/GMXFileWriter.java
+@@ -637,9 +637,8 @@ public final class GMXFileWriter
+ 			BufferedImage sub = spr.subImages.get(j);
+ 			// GMX does have a backwards compatibility property for transparency pixel so we write
+ 			// the image with the transparency removed when that setting is checked
+-			ImageIO.write(
+-					(Boolean) spr.get(PSprite.TRANSPARENT) ? Util.getTransparentImage(sub) : sub,
+-					"png",outputfile); //$NON-NLS-1$
++			if ((Boolean) spr.get(PSprite.TRANSPARENT)) sub = keyToAlpha(sub);
++			ImageIO.write(sub,"png",outputfile); //$NON-NLS-1$
+ 			}
+ 		sprroot.appendChild(frameroot);
+ 
+@@ -721,6 +720,30 @@ public final class GMXFileWriter
+ 		domRoot.appendChild(res);
+ 		}
+ 
++	/**
++	 * Apply a GM6/GM7 transparency key: the colour of the bottom-left pixel
++	 * becomes fully transparent everywhere it occurs.
++	 *
++	 * This exists rather than calling Util.getTransparentImage because that one
++	 * runs the pixels through java.awt's RGBImageFilter pipeline, which loses the
++	 * colour underneath the pixels it clears -- they come out transparent black.
++	 * GameMaker leaves the key colour sitting in the RGB channels, and matching it
++	 * is what makes the export pixel-for-pixel identical to GameMaker's own.
++	 */
++	private static BufferedImage keyToAlpha(BufferedImage in)
++		{
++		if (in == null) return null;
++		final int w = in.getWidth(), h = in.getHeight();
++		if (w <= 0 || h <= 0) return in;
++		final int[] argb = in.getRGB(0,0,w,h,null,0,w);
++		final int key = argb[(h - 1) * w] & 0x00FFFFFF;
++		for (int i = 0; i < argb.length; i++)
++			if ((argb[i] & 0x00FFFFFF) == key) argb[i] = key;
++		BufferedImage out = new BufferedImage(w,h,BufferedImage.TYPE_INT_ARGB);
++		out.setRGB(0,0,w,h,argb,0,w);
++		return out;
++		}
++
+ 	private static void writeBackground(ProjectFileContext c, ResNode resNode, Element domRoot)
+ 			throws IOException
+ 		{
+@@ -769,7 +792,9 @@ public final class GMXFileWriter
+ 		if (width > 0 && height > 0)
+ 			{
+ 			File outputfile = new File(Util.getPOSIXPath(fname + "images\\" + bkg.getName() + ".png")); //$NON-NLS-1$ //$NON-NLS-2$
+-			ImageIO.write(bkg.getBackgroundImage(),"png",outputfile); //$NON-NLS-1$
++			BufferedImage bkgImage = bkg.getBackgroundImage();
++			if ((Boolean) bkg.get(PBackground.TRANSPARENT)) bkgImage = keyToAlpha(bkgImage);
++			ImageIO.write(bkgImage,"png",outputfile); //$NON-NLS-1$
+ 			}
+ 
+ 		File file = new File(Util.getPOSIXPath(fname + resNode.getUserObject().toString() + ".background.gmx")); //$NON-NLS-1$

@@ -43,6 +43,9 @@ if (-not $SkipCrack) {
   # DirectPlay first: the patcher is a GameMaker 8.1 game and Windows stops it
   # with a modal "needs the following Windows feature" dialog without it.
   Invoke-InSession -ScriptPath "$PSScriptRoot\features.ps1" -Name 'barkley-features' -TimeoutSeconds 1800
+  # Then black out the desktop, because the patcher's buttons are found by
+  # colour and the default wallpaper is full of the cyan they are looking for.
+  Invoke-InSession -ScriptPath "$PSScriptRoot\desktop.ps1" -Name 'barkley-desktop' -TimeoutSeconds 600
   Invoke-InSession -ScriptPath "$PSScriptRoot\crack.ps1" -Name 'barkley-crack' -TimeoutSeconds 1800
 }
 

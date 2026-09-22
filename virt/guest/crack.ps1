@@ -15,8 +15,12 @@
 
 param(
   [switch]$Force,
-  # The tiles' cyan border and the Go button's green, as measured on screen.
-  [int[]]$TileColor = @(0, 180, 200),
+  # Measured off a screenshot, not guessed: the tiles are drawn as a two-pixel
+  # rectangle outline in pure cyan. An earlier guess of 0,180,200 is about 93
+  # away in RGB and never matched anything, which is why this is worth stating
+  # exactly. The outline is thin but it is one connected component, so its
+  # bounding box is the whole tile and the size floors below still hold.
+  [int[]]$TileColor = @(0, 255, 255),
   [int[]]$GoColor = @(34, 177, 76),
   [int]$Tolerance = 45
 )
