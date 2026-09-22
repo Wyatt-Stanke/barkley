@@ -1,0 +1,16 @@
+diff --git a/org/lateralgm/file/GmFileReader.java b/org/lateralgm/file/GmFileReader.java
+index 012d6e3..9680ac1 100644
+--- a/org/lateralgm/file/GmFileReader.java
++++ b/org/lateralgm/file/GmFileReader.java
+@@ -639,6 +639,11 @@ public final class GmFileReader
+ 				actualBBMode = ProjectFile.SPRITE_BB_MODE[in.read4()]; // delay setting BBMode to avoid expensive recalculations
+ 				boolean precise = in.readBool();
+ 				spr.put(PSprite.SHAPE,precise ? Sprite.MaskShape.PRECISE : Sprite.MaskShape.RECTANGLE);
++				// A pre-8 file has no per-subimage mask flag, so this property would otherwise keep
++				// its default of false and every frame of an animation would share one merged mask.
++				// GM6 gave each subimage its own, and GameMaker Studio 1.4's GM6 import says so too:
++				// in its export of this game all 458 sprites come out with <sepmasks>-1</sepmasks>.
++				spr.put(PSprite.SEPARATE_MASK,true);
+ 				if (ver == 400)
+ 					{
+ 					in.skip(4); //use video memory

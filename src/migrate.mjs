@@ -92,7 +92,8 @@ step('generate sRoomCaption from room captions', () => {
     .filter((f) => f.endsWith('.room.gmx'))
     .sort()
     .flatMap((f) => {
-      const caption = /<caption>([^<]*)<\/caption>/.exec(read(path.join(dir, f)))[1];
+      // <caption/> when it is empty, which is how an XML writer other than GameMaker's spells it.
+      const caption = /<caption>([^<]*)<\/caption>/.exec(read(path.join(dir, f)))?.[1] ?? '';
       return caption ? [`if (argument0=${f.slice(0, -'.room.gmx'.length)}) return "${caption}";`] : [];
     });
   write('scripts/sRoomCaption.gml', `//Caption of room argument0\n${lines.join('\n')}\nreturn '';\n`);
@@ -106,11 +107,14 @@ const objects = new Set(
 );
 // Room instances: object -> [room, instance name, has creation code]
 const placed = new Map();
+// Attributes by name, not by position: another XML writer may order them differently.
+const attrOf = (tag, name) => new RegExp(`\\b${name}="([^"]*)"`).exec(tag)?.[1];
 for (const f of fs.readdirSync(path.join(out, 'rooms')).filter((f) => f.endsWith('.room.gmx')))
-  for (const m of read(path.join(out, 'rooms', f)).matchAll(
-    /<instance objName="(\w+)"[^>]*name="(\w+)"[^>]*code="([^"]*)"/g,
-  ))
-    placed.set(m[1], [...(placed.get(m[1]) ?? []), [f.slice(0, -'.room.gmx'.length), m[2], m[3] !== '']]);
+  for (const [tag] of read(path.join(out, 'rooms', f)).matchAll(/<instance\s[^>]*>/g)) {
+    const [obj, name, cc] = ['objName', 'name', 'code'].map((a) => attrOf(tag, a));
+    if (obj === undefined || name === undefined) continue;
+    placed.set(obj, [...(placed.get(obj) ?? []), [f.slice(0, -'.room.gmx'.length), name, !!cc]]);
+  }
 const hasCreate = (o) => fs.existsSync(path.join(code, 'objects', o, '0_0.gml'));
 for (const [name, fn] of Object.entries(
   transforms({ addFile: (p, c) => write(p, c), warn, mode, objects, placed, hasCreate }),

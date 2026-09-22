@@ -8,16 +8,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+// Numeric references too: GameMaker writes &#xA; for a newline inside an attribute, but any
+// other XML writer is free to spell the same characters its own way (&#13; for the CR of a
+// CRLF, say), and this has to read whatever wrote the file.
 const unesc = (s) =>
-  s.replace(/&(lt|gt|quot|amp|#xA);/g, (_, e) => ({ lt: '<', gt: '>', quot: '"', amp: '&', '#xA': '\n' })[e]);
+  s.replace(/&(lt|gt|quot|amp|#\d+|#x[0-9a-fA-F]+);/g, (_, e) =>
+    e[0] === '#'
+      ? String.fromCharCode(e[1] === 'x' ? parseInt(e.slice(2), 16) : Number(e.slice(1)))
+      : { lt: '<', gt: '>', quot: '"', amp: '&' }[e],
+  );
 const esc = (s, attr) =>
   s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]).replace(/"/g, attr ? '&quot;' : '"');
 const toLF = (s) => s.replace(/\r\n/g, '\n');
 const toCRLF = (s) => s.replace(/\r?\n/g, '\r\n');
-const EVENT = /(<event eventtype="(\d+)" (?:enumb|ename)="([^"]*)">)([\s\S]*?)(<\/event>)/g;
+// Attributes are matched by name, not by position: the order they are written in is not
+// part of what an XML document says, and GameMaker's order is not the only one in use.
+const EVENT = /(<event\s([^>]*)>)([\s\S]*?)(<\/event>)/g;
+const attr = (tag, name) => new RegExp(`\\b${name}="([^"]*)"`).exec(tag)?.[1];
 const ACTION = /<action>[\s\S]*?<\/action>/g;
 const CODE_STRING = /(<string>)([\s\S]*?)(<\/string>)/;
-const INSTANCE_CODE = /(<instance [^>]*name="([^"]*)"[^>]*code=")([^"]*)(")/g;
+const INSTANCE = /<instance\s[^>]*>/g;
+const INSTANCE_CODE = /(\scode=")([^"]*)(")/;
 const ROOM_CODE = /(<code>)([\s\S]*?)(<\/code>)/;
 
 const projectFile = (dir) =>
@@ -40,7 +51,9 @@ const swap = (raw, key, fn, attr) => {
 };
 
 function mapObject(xml, fn) {
-  return xml.replace(EVENT, (all, open, type, num, body, close) => {
+  return xml.replace(EVENT, (all, open, attrs, body, close) => {
+    const type = attr(attrs, 'eventtype'),
+      num = attr(attrs, 'enumb') ?? attr(attrs, 'ename');
     let j = 0;
     body = body.replace(ACTION, (action) => {
       if (!action.includes('<id>603</id>')) return action;
@@ -55,7 +68,11 @@ function mapObject(xml, fn) {
 function mapRoom(xml, fn) {
   xml = xml.replace(ROOM_CODE, (m, a, code, b) => a + swap(code, 'creation', fn) + b);
   // (an instance with no code has no file when unpacked; packing gives it the code of a file a transform added)
-  return xml.replace(INSTANCE_CODE, (m, a, name, code, b) => a + swap(code, name, fn, true) + b);
+  return xml.replace(INSTANCE, (tag) => {
+    const name = attr(tag, 'name');
+    if (name === undefined) return tag;
+    return tag.replace(INSTANCE_CODE, (m, a, code, b) => a + swap(code, name, fn, true) + b);
+  });
 }
 
 const listResources = (proj, tag) =>
