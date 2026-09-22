@@ -137,20 +137,47 @@ command line for it.
 
 ## Gotchas
 
-- **The guest bugchecks under load, and it is the hypervisor.** Fifteen
-  bugchecks in an hour on the first serious run: `0xA` mostly, always a read of
-  a wild address at DISPATCH_LEVEL, plus a `0xD1` and a `0x1E` whose first
-  argument was `0xc000001d`, STATUS_ILLEGAL_INSTRUCTION *in kernel mode*. Kernel
-  code meeting an instruction the CPU rejects is guest state being corrupted
-  underneath Windows, not a driver fault. Masking TSX off (`-hle,-rtm`) made no
-  difference — ten of the fifteen came after that went in. What the machine runs
-  on now is `-smp 1`; most of QEMU's HVF state-corruption bugs on Intel are
-  SMP-only. `BARKLEY_VM_CPUS` and `BARKLEY_VM_CPU` override both.
-  Moving the decompile out of the VM helped for the same reason: it was the
-  heaviest load in the pipeline and the one that reliably triggered this.
-  `Get-WinEvent -FilterHashtable @{LogName='System';Id=1001}` in the guest
-  prints the bugcheck history, which is the only way to tell one of these from a
-  hang.
+- **The guest bugchecks under load, it is the hypervisor, and this is not
+  solved.** Fifteen bugchecks in an hour on the first serious run, four more in
+  ten minutes on the second: `0xA` mostly, always a read of a wild address at
+  DISPATCH_LEVEL; `0xD1` whose faulting address is in pool rather than in any
+  loaded module; and a `0x1E` whose first argument was `0xc000001d`,
+  STATUS_ILLEGAL_INSTRUCTION *in kernel mode*. Kernel code being sent to an
+  instruction the CPU rejects is guest state being corrupted underneath Windows,
+  not a driver fault.
+
+  Two theories are already dead, and it is worth not repeating them:
+
+  - **Not TSX.** Ten of the first fifteen arrived after `-hle,-rtm` went in.
+  - **Not SMP.** Four more arrived inside ten minutes on `-smp 1`.
+
+  So every knob is an environment variable now, and the next hypothesis is one
+  `virt/vagrant.sh reload` away (the command line is built when the machine
+  starts, so nothing less than a reload counts):
+
+  | | |
+  |---|---|
+  | `BARKLEY_VM_CPU` | a named model (`Penryn`, `Nehalem`, …) asks HVF for a far smaller feature set than `host`. UTM's own default for x86\_64 is `Penryn`. |
+  | `BARKLEY_VM_ACCEL` | `tcg` emulates instead of accelerating: slow, but it is the test that says whether HVF is at fault at all |
+  | `BARKLEY_VM_NET` | `e1000` is the older and much more exercised of the two NIC emulations |
+  | `BARKLEY_VM_CPUS`, `BARKLEY_VM_MEMORY` | as they sound |
+
+  Moving the decompile out of the VM helped for the same reason it helped
+  everywhere else: it was the heaviest load in the pipeline and the one that
+  triggered this most reliably.
+
+  **Read the history rather than guessing.** A bugcheck here looks exactly like
+  a hang from the host — the VM sits at ~100% CPU writing its dump, and
+  `vagrant` eventually reports a WinRM timeout. The guest knows better:
+
+  ```sh
+  virt/winrm.sh "Get-WinEvent -FilterHashtable @{LogName='System';Id=1001} -MaxEvents 5 | Format-List TimeCreated,Message"
+  virt/winrm.sh '(Get-CimInstance Win32_OperatingSystem).LastBootUpTime'
+  ```
+
+  A `LastBootUpTime` more recent than the run began means it crashed and came
+  back, which is easy to miss: the machine reboots itself and WinRM answers
+  again as though nothing happened.
 - **`screenshot.sh` can kill the VM.** Forcing a VGA refresh under HVF trips a
   QEMU assertion (`do_hv_vm_protect`) and aborts the process, about one call in
   five. Nothing is lost -- `virt/vagrant.sh up` boots it again -- but prefer

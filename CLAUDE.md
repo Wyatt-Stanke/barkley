@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a port of _Barkley, Shut Up and Jam: Gaiden_ v1.20 to **GameMaker LTS 2026**. The starting point is a **GameMaker: Studio 1.4 GMX export** decompiled from a Game Maker 6 executable, kept pristine at `game/BarkleyV120.gmx`. The work lives in `src/`: Node.js tooling that migrates that export reproducibly. It has no npm dependencies. `src/README.md` has the full pipeline description (every patch and transform, and the fuzzer's design).
 
+That export was originally made by hand. `virt/` reproduces it from the original executable without a person at the keyboard; see "Rebuilding the pristine export" below. It is a separate concern from `src/` and nothing in the port depends on it.
+
 **The final export target is HTML5 (a web port).** The HTML5 target is installed; build and test against it.
 
 **The port is versioned with semver, in `src/version.json` — not with build numbers.** One file, read by
@@ -111,7 +113,7 @@ There's no test suite. Verify in these ways:
 
 Everything lives in `~/Documents/barkley/`, which is both the working directory and a **git repo**
 (initialised 2026-09-20; no remote — the deploy repo below is separate). `.gitignore` keeps the
-generated and bulk-binary folders out, so only `src/`, `docs/`, `game/recovered-scripts/`,
+generated and bulk-binary folders out, so only `src/`, `virt/`, `docs/`, `game/recovered-scripts/`,
 `.gitignore` and this file are tracked.
 
 ```
@@ -124,6 +126,7 @@ barkley/
     patches/     hand-written GML rewrites; modernized/ holds the web adaptations
     web/         what ships into the page: index.html, the 7 extension shims, sw.js, the PWA assets
     README.md    the full pipeline description
+  virt/          makes game/BarkleyV120.gmx from the original exe (see its README)
   game/          inputs: large, immutable, untracked (except recovered-scripts/)
   docs/          an earlier audit page
   tools/         the GameMaker Studio 1.4.9999 installer and a how-to video (untracked)
@@ -168,6 +171,48 @@ node src/deploy.mjs build/outputs/<import>/BarkleyLTS.yyp --message-file=<file> 
 ```
 
 It builds with `fuzz.mjs build --minify`, writes the offline layer over whatever built the tree (`sw.js` and a fresh `version.json`, and warns if the live site already has this version with different files), play-tests the build (boots, Start clicked, no exception), clones or reuses `build/deploy/bsuajg-test`, resets it to `origin/main` (deploys are pushed from several sessions, and committing on a stale tree drops the ones in between), rsyncs the whole build over it (shims have a per-build prefix, `tph_`, `uph_`, …, so they must ship with their bundle), commits as the previous deploy's author, pushes, watches the Pages workflow, and checks the live `index.html`, `version.json`, `sw.js` and game script md5s (cache-busted, retried while the CDN catches up) and that every shim answers 200. It exits non-zero at the first failed step and stops with a note if the site already has the build. `--dry-run` stops after the local commit. Write the commit message in the style of the earlier deploys ("Update HTML5 build: …", a paragraph for players, then the attribution trailers).
+
+## Rebuilding the pristine export (`virt/`)
+
+`game/BarkleyV120.gmx` came from running a Java GUI decompiler over
+`game/original/BarkleyV120.exe` and importing the resulting `.gm6` into GameMaker: Studio 1.4.9999
+by hand. `virt/` automates that. **It is not part of a normal day's work** — the export is pristine
+and immutable, so this only matters if it ever has to be regenerated or audited.
+`virt/README.md` has the detail; what follows is what you need before opening it.
+
+```sh
+virt/decompile.sh                 # step 1 alone: the exe -> build/virt/BarkleyV120.gm6 (~75 s)
+virt/run.sh                       # all of it; export lands as build/virt/BarkleyV120.gmx.zip
+virt/run.sh -SkipFetch -SkipCrack # resume a part-finished run (flags go to the guest's run.ps1)
+virt/vagrant.sh halt              # or `destroy -f` to throw the machine away
+```
+
+**The split matters: only the GameMaker half needs Windows.**
+
+- **Step 1, the exe to a `.gm6`, runs on the host in a container** (podman, or docker; override with
+  `BARKLEY_CONTAINER`). It is plain Java — Temurin 8 exactly, because `ProgressDialogListener` calls
+  `Thread.stop()`, removed in Java 20. Output is byte-identical to the GUI's: **10,720,322 bytes,
+  sha256 `4b76af44edbf8c6bd980a7693e78520646059ec6edbacf4051b336dfb30f9b32`**, checked by the script.
+  `virt/java/Decompile.java` is what makes it headless: the decompiler reads its input path out of a
+  Swing text field (`GmDecompiler.sourceField`), so that field is filled in rather than a window built.
+- **Steps 2 and 3 run in a throwaway `gusztavvargadr/windows-10` VM** on QEMU (MacPorts; Homebrew has
+  no bottle on Intel macOS): the Universal GameMaker Patcher, then the IDE's File → Import Project,
+  driven through its own windows because 1.4 has no command line for it.
+
+Two things about the VM are worth knowing before touching it:
+
+- **It bugchecks under load, and it is the hypervisor, not a driver.** Fifteen in an hour on the first
+  serious run: mostly `0xA` reads of wild addresses at DISPATCH_LEVEL, plus a `0x1E` carrying
+  `0xc000001d` (STATUS_ILLEGAL_INSTRUCTION) — the kernel meeting an instruction the CPU rejected.
+  Masking TSX off did **not** help (ten of the fifteen came after that went in). It runs on `-smp 1`
+  now, since most of QEMU's HVF state-corruption bugs on Intel are SMP-only. Moving the decompile out
+  of the guest removed the load that triggered it most reliably. Read the history with
+  `Get-WinEvent -FilterHashtable @{LogName='System';Id=1001}` in the guest — it is the only way to
+  tell one of these from a hang.
+- **WinRM lands in session 0, which has no desktop.** Anything that opens a window goes through
+  `Invoke-InSession` (`virt/guest/lib.ps1`), which runs it as a scheduled task on the autologon
+  desktop. There are no synced folders under vagrant-qemu either, so `virt/host/serve.mjs` on
+  `10.0.2.2` is the only road in and out.
 
 ## Architecture of `src/`
 
@@ -341,6 +386,35 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   - Saves panel's Copy/Download/file-picker buttons in a real browser; that the volume change is audible (playtests are muted).
   - Fullscreen appearance and a real Esc in Chrome and Safari; the room-name banner and save-slot location names (`sRoomCaption`) on screen; saving outside a pump room. A pump save records the player position as -1, as in GM6.
   - Anything against the original executable. Safari can't be automated (`safaridriver` sessions time out); don't run `Safari --version`, it hangs.
+- **`virt/` (the GMX export, automated) is half done, and the half that is done is the useful half.**
+  Step 1 works and is out of the VM: `virt/decompile.sh` makes the `.gm6` from the original exe in a
+  container on the host in about 75 seconds, byte-identical to the hand-run GUI's (sha256
+  `4b76af44…`, 10,720,322 bytes), verified twice. The guest no longer needs a JDK or a copy of the
+  exe; it fetches the finished `.gm6` over the file service and hash-checks it (`guest/run.ps1`
+  STEP 1, checked working host→guest).
+  **Steps 2 and 3 have never completed**, because the VM bugchecks under GUI load — see below.
+  `guest/crack.ps1` (the patcher) and `guest/export.ps1` (File → Import Project) are written but
+  unproven; the patcher's real button colours still need measuring from a clean screenshot.
+- **The `virt/` VM corrupts its own kernel memory under load, and two theories are already dead.**
+  Signature: `0xA` reads of wild addresses at DISPATCH_LEVEL, `0xD1` whose faulting address is in
+  pool rather than in any module, and a `0x1E` carrying `0xc000001d` (STATUS_ILLEGAL_INSTRUCTION) —
+  the kernel being sent to an instruction the CPU rejects. That is the hypervisor mangling guest
+  state, not a driver.
+  - **Not TSX.** Ten of the first fifteen bugchecks came after `-hle,-rtm` went in.
+  - **Not SMP.** Four more inside ten minutes on `-smp 1`.
+  - Everything is an environment variable now so the next hypothesis is one `reload` away:
+    `BARKLEY_VM_CPU` (a named model such as `Penryn` asks HVF for a much smaller feature set than
+    `host`), `BARKLEY_VM_ACCEL=tcg` (emulation — slow, but it is the test that says whether HVF is
+    at fault at all), `BARKLEY_VM_NET=e1000`, `BARKLEY_VM_CPUS`, `BARKLEY_VM_MEMORY`. A change only
+    takes effect on `virt/vagrant.sh reload`.
+  - **Read the history, don't guess:** `Get-WinEvent -FilterHashtable @{LogName='System';Id=1001}`
+    in the guest. A bugcheck under this hypervisor looks exactly like a hang from the host — the VM
+    sits at ~100% CPU writing a dump — so `vagrant` just reports a WinRM timeout.
+  - If HVF turns out to be unfixable, the fallback ladder is TCG (correct, much slower, and probably
+    still fine for an unattended run), then VMware Fusion, which is installed and is the solid
+    option on an Intel Mac — but its Vagrant provider needs the Vagrant VMware Utility, a separate
+    `sudo` installer, so that one needs the user. UTM is installed too but ships QEMU as a framework
+    inside its XPC helper rather than as a binary, so Vagrant cannot be pointed at it.
 - **Not automated yet:** see `src/README.md` ("Not automated yet": the LTS post-import stage).
 - **Play-test recipes:**
   - Skip to a new game: `'wait:44000,key:Z,wait:3000,key:Z,wait:3000,shot:game'` (the first Z at the title menu doesn't register, on v29 as well). Menu with no input: `'wait:62000,shot:menu'`. The apartment cutscene: then `key:Z,wait:5000` and about 14 × `key:Z,wait:2500`.

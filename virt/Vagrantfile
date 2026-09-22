@@ -107,17 +107,26 @@ Vagrant.configure('2') do |config|
     qe.qemu_bin = "#{qemu_prefix}/bin/qemu-system-x86_64"
     qe.qemu_dir = "#{qemu_prefix}/share/qemu"
 
-    qe.machine = 'q35,accel=hvf'
+    # Everything about how the machine is virtualised is an environment
+    # variable, because this guest corrupts its own kernel memory under load and
+    # finding out what stops it means changing one of these at a time. See
+    # virt/README.md, "The guest bugchecks under load", for what has been ruled
+    # out so far -- and note that a change here only takes effect on a `reload`,
+    # since vagrant-qemu builds the command line when the machine starts.
+    #
+    #   BARKLEY_VM_ACCEL=tcg   emulate instead of using the host's accelerator:
+    #                          much slower, but it is not HVF, so it is the test
+    #                          that says whether HVF is at fault at all
+    accel = ENV.fetch('BARKLEY_VM_ACCEL', 'hvf')
+    qe.machine = "q35,accel=#{accel}"
+
     # `host` minus TSX. Masking the transactional-memory instructions off is
     # cheap and nothing here wants them; it is NOT what fixed the bugchecks,
-    # though it was the first guess.
+    # though it was the first guess. A named model (Penryn, Nehalem, …) asks
+    # HVF to present a much smaller, older feature set than the host's.
     qe.cpu = ENV.fetch('BARKLEY_VM_CPU', 'host,-hle,-rtm')
-    # One vCPU, and this one matters. Under HVF this guest corrupted its own
-    # kernel state under load -- fifteen bugchecks in an hour, mostly 0xA reads
-    # of wild addresses at DISPATCH_LEVEL, and one 0x1E carrying
-    # STATUS_ILLEGAL_INSTRUCTION, which is the kernel meeting an instruction the
-    # CPU rejected. Most of QEMU's HVF state-corruption bugs on Intel are
-    # SMP-only. See virt/README.md, "The guest bugchecks under load".
+    # One vCPU. This did not fix the bugchecks either -- four more arrived
+    # inside ten minutes with it -- but SMP buys little here, so it stays.
     qe.smp = ENV.fetch('BARKLEY_VM_CPUS', '1')
     qe.memory = ENV.fetch('BARKLEY_VM_MEMORY', '6G')
 
@@ -125,7 +134,9 @@ Vagrant.configure('2') do |config|
     # a SATA disk and an e1000e NIC), so use devices Windows ships drivers for.
     # On q35 an `if=ide` drive lands on the chipset's AHCI controller.
     qe.drive_interface = 'ide'
-    qe.net_device = 'e1000e'
+    # e1000 (the 82540EM) is the older, duller, far more exercised of the two
+    # emulations, and the one to fall back to if e1000e is ever suspected.
+    qe.net_device = ENV.fetch('BARKLEY_VM_NET', 'e1000e')
 
     qe.control_port = MONITOR_PORT
 
