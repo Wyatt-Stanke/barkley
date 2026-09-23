@@ -150,7 +150,7 @@ scratchpad dir, never in the project.
 - `build/deploy/bsuajg-test`: `deploy.mjs`'s kept clone of the deploy repo (shallow; reset to `origin/main` on every deploy, so never keep work in it).
 - `build/fuzz/`: the fuzzer's files.
   - `corpus/`: the persistent archive (`--corpus`: `state.json`, `nodes.json`, `nodes/<id>.json.gz`), tied to a build by the md5 of `BarkleyLTS.js` and rebased automatically when that changes.
-  - `build/`: an unobfuscated build of `barkley-1.3.1` (2026-09-22). The corpus belongs to it, but it holds only what one hour found: a run with the broken harness (below) rebased 0 of 60 paths and still saved the corpus as this build's, so every older snapshot was dropped. **A rebase that makes no snapshots should not be saved; `rebase()` doesn't check that yet.**
+  - `build/`: an unobfuscated build of `barkley-1.3.1` (2026-09-22). The corpus belongs to it, but it holds only what one hour found: a run with the broken harness (below) rebased 0 of 60 paths and still saved the corpus as this build's, so every older snapshot was dropped. A rebase that makes no snapshots now stops the run with the corpus untouched (it also deleted the old snapshot files before replaying; now only after).
   - `<date-time>/`: `run --save` findings. Kept: `2026-09-18-122255` (the 2-hour run on the v25 build) and `2026-09-23-run` (1 hour on v1.3.1), both cited under Current state.
 - GameMaker LTS 2026 (this Mac is **x86_64**; the arm64 binaries don't run):
   - ProjectTool: `/Applications/GameMaker LTS 2026.app/Contents/MacOS/x86_64/packages/project-tool-osx-x64/ProjectTool`. It must run with that directory as cwd. Import = `SCRIPT PATH=<file>` containing `PROJECT OPEN SOURCE="<.project.gmx>"` then `PROJECT SAVE DESTINATION="<.yyp>"`.

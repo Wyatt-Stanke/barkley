@@ -564,13 +564,12 @@ class Fuzzer {
       if (!best.has(k) || best.get(k).progress < n.progress) best.set(k, n);
     }
     const jobs = [...new Set([...best.values(), ...olds.sort((a, b) => b.progress - a.progress).slice(0, 20)])];
-    this.say(`corpus from another build: replaying ${jobs.length} paths to make their snapshots again`);
-    for (const n of olds) {
-      delete n.progress;
-      rmSync(path.join(this.opts.corpus, 'nodes', `${n.id}.json.gz`), { force: true });
-    }
+    const tried = jobs.length;
+    this.say(`corpus from another build: replaying ${tried} paths to make their snapshots again`);
+    for (const n of olds) delete n.progress;
     const done = new Set([0]);
-    let drifted = 0;
+    let drifted = 0,
+      made = 0;
     await Promise.all(
       this.workers.map(async (w) => {
         for (let n; (n = jobs.shift());) {
@@ -586,6 +585,7 @@ class Fuzzer {
             const m = { ...n, probe, snap: undefined, progress: undefined, inCorpus: false };
             this.nodes.set(n.id, m);
             this.addSnap(m, snap);
+            made++;
             // A replay from a fresh page can end somewhere else than the node recorded, since the path was recorded
             // on another build or harness. The snapshot is still a real state, so it stays a candidate under the probe
             // it actually reached - but it must not inherit features of a place it no longer stands in, or those features are
@@ -602,6 +602,11 @@ class Fuzzer {
         }
       }),
     );
+    // Not one path replayed: the harness or the build is broken, not the corpus. Saving now would mark the corpus as
+    // this build's with none of its snapshots, so stop and leave it as it was.
+    if (tried && !made)
+      throw new Error(`rebase made no snapshots from ${tried} paths; the corpus in ${this.opts.corpus} is unchanged`);
+    for (const n of olds) rmSync(path.join(this.opts.corpus, 'nodes', `${n.id}.json.gz`), { force: true });
     const fnId = new Map(this.fnNames.map((n, i) => [n, i]));
     for (const [k, nodeId, chosen] of st.features) {
       if (!done.has(nodeId)) continue;

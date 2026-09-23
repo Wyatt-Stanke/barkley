@@ -159,7 +159,8 @@ plot), each with a `report.md`, the inputs from the new game, a snapshot of the 
 prints a line per episode: where it started, how long it played, and what was new (◆ cells, ƒ GML functions, ⚑ values
 of globals). `--corpus` keeps the archive in `~/Documents/barkley/fuzz/corpus/` (or `--corpus=<dir>`) and starts
 the next run from it (saved every 5 minutes and at the end; from another build, the most advanced paths are replayed to
-make their snapshots again). `--through` patches known crash classes in the page (numbers drawn as text, `real()` of a
+make their snapshots again; if not one of them replays, the run stops and leaves the corpus as it was, since that means the
+harness or the build is broken). `--through` patches known crash classes in the page (numbers drawn as text, `real()` of a
 non-number, `script_execute` of a number that is no script) so the search gets past them; each patched spot is still reported, as a `patched` crash, and replayed
 without the patches. `--workers` (default: physical cores − 2) sets the number of browsers, `--port` the ports.
 
