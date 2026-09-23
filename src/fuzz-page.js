@@ -42,9 +42,11 @@
     frameCb = null;
   performance.now = () => vnow;
   Date.now = () => 1.7e12 + vnow;
-  // Only ever the runtime's frame: touch.js's loop that pins the canvas's CSS size is dropped (had it re-registered
-  // after the runtime, it became frameCb, and a restart scheduled only it, so the game never ran another frame)
-  window.requestAnimationFrame = (cb) => (cb.name === 'touch_pin' ? 0 : (raf.push((frameCb = cb)), raf.length));
+  // Only ever the runtime's frame: touch.js's loop that pins the canvas's CSS size and gamepad.js's pad poll are
+  // dropped (had one re-registered after the runtime, it became frameCb, and a restart scheduled only it, so the game
+  // never ran another frame)
+  const OWN_LOOPS = new Set(['touch_pin', 'pad_poll']);
+  window.requestAnimationFrame = (cb) => (OWN_LOOPS.has(cb.name) ? 0 : (raf.push((frameCb = cb)), raf.length));
   window.webkitRequestAnimationFrame = undefined;
   window.setTimeout = function (fn, ms, ...args) {
     if (!inFrame) return nativeSetTimeout(fn, ms, ...args); // asset loading
