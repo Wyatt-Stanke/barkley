@@ -166,7 +166,11 @@ export function importFonts(projectDir, gameDir, log) {
       for (let x = 0; x < w; x++) rgba[y * (w * 4 + 1) + 4 + x * 4] = alpha[y * w + x];
     }
     fs.writeFileSync(path.join(dir, /<image>([^<]*)<\/image>/.exec(xml)[1]), png(w, h, rgba));
-    xml = setTags(xml, { aa: 0 }).replace(/<glyphs>[\s\S]*<\/glyphs>/, `<glyphs>${glyphs.join('')}\r\n  </glyphs>`);
+    // <glyphs/> when there are none, which is how an XML writer other than GameMaker's spells it.
+    xml = setTags(xml, { aa: 0 }).replace(
+      /<glyphs\/>|<glyphs>[\s\S]*<\/glyphs>/,
+      `<glyphs>${glyphs.join('')}\r\n  </glyphs>`,
+    );
     fs.writeFileSync(path.join(dir, f), xml);
   }
 }

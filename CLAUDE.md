@@ -129,7 +129,7 @@ barkley/
   virt/          makes game/BarkleyV120.gmx from the original exe (see its README)
   game/          inputs: large, immutable, untracked (except recovered-scripts/)
   docs/          an earlier audit page
-  tools/         the GameMaker Studio 1.4.9999 installer and a how-to video (untracked)
+  tools/         the GameMaker Studio 1.4.9999 installer and a how-to video, for virt/'s unused VM (untracked)
   build/         everything generated; all of it reproducible from src/ (untracked)
 ```
 
@@ -181,38 +181,49 @@ and immutable, so this only matters if it ever has to be regenerated or audited.
 `virt/README.md` has the detail; what follows is what you need before opening it.
 
 ```sh
-virt/decompile.sh                 # step 1 alone: the exe -> build/virt/BarkleyV120.gm6 (~75 s)
-virt/run.sh                       # all of it; export lands as build/virt/BarkleyV120.gmx.zip
-virt/run.sh -SkipFetch -SkipCrack # resume a part-finished run (flags go to the guest's run.ps1)
-virt/vagrant.sh halt              # or `destroy -f` to throw the machine away
+virt/run.sh                  # both steps: the exe -> build/virt/BarkleyV120.gmx (~3 min)
+virt/decompile.sh [out.gm6]  # step 1 alone: the exe -> build/virt/BarkleyV120.gm6 (~75 s)
+virt/convert.sh [in] [out]   # step 2 alone: the .gm6 -> the .gmx (~1 min)
 ```
 
-**The split matters: only the GameMaker half needs Windows.**
+**Neither step needs Windows: both are Java in a container** (podman, or docker; override with
+`BARKLEY_CONTAINER`). Temurin 8 exactly for both — the decompiler's `ProgressDialogListener` calls
+`Thread.stop()`, removed in Java 20, and LateralGM's own Makefile targets 1.7 under 8.
 
-- **Step 1, the exe to a `.gm6`, runs on the host in a container** (podman, or docker; override with
-  `BARKLEY_CONTAINER`). It is plain Java — Temurin 8 exactly, because `ProgressDialogListener` calls
-  `Thread.stop()`, removed in Java 20. Output is byte-identical to the GUI's: **10,720,322 bytes,
+- **Step 1, the exe to a `.gm6`.** Output is byte-identical to the GUI's: **10,720,322 bytes,
   sha256 `4b76af44edbf8c6bd980a7693e78520646059ec6edbacf4051b336dfb30f9b32`**, checked by the script.
   `virt/java/Decompile.java` is what makes it headless: the decompiler reads its input path out of a
   Swing text field (`GmDecompiler.sourceField`), so that field is filled in rather than a window built.
-- **Steps 2 and 3 run in a throwaway `gusztavvargadr/windows-10` VM** on QEMU (MacPorts; Homebrew has
-  no bottle on Intel macOS): the Universal GameMaker Patcher, then the IDE's File → Import Project,
-  driven through its own windows because 1.4 has no command line for it.
+- **Step 2, the `.gm6` to a `.gmx`, uses [LateralGM](https://github.com/IsmAvatar/LateralGM)**, which
+  reads GM6 and writes GMX directly — no IDE, no licence, no GUI automation. It is cloned at a pinned
+  commit, `virt/lateralgm/patches/*.patch` are applied at build time (nothing is vendored), and
+  `virt/lateralgm/Gm6ToGmx.java` drives it headless. The four patches fix what its GMX writer loses:
+  the transparency key (java.awt's `RGBImageFilter` clears the colour under the pixels it makes
+  transparent, and backgrounds never got the key at all), smooth edges (`alpha = 255 - 32 *
+  transparent neighbours`, which GMX has no field for so GameMaker bakes it into the PNG),
+  separate collision masks (no GM6 field, so the property defaulted false and every frame of an
+  animation would have shared one mask; GameMaker's import gives all 458 sprites
+  `<sepmasks>-1</sepmasks>`), and the size of a frameless sprite (`0` rather than GameMaker's `32`;
+  importing a 0x0 sprite leaves `frames`, `layers` and `sequence` null in the `.yy` and the asset
+  compiler dereferences them, so the build dies in `GMSprite.SetFromResource`).
+- **The output is `build/virt/BarkleyV120.gmx` and `BarkleyV120.gmx.tar` beside it.** The tar keeps
+  `sA.gml` beside `sa.gml` and `bgm_Init.gml` beside `bgm_init.gml`; a case-insensitive filesystem
+  collapses each pair, which is exactly what happened to the pristine export and why
+  `game/recovered-scripts/` exists.
 
-Two things about the VM are worth knowing before touching it:
+**Reading a GMX that GameMaker did not write.** `src/lib/gmx.mjs` and `src/migrate.mjs` used to
+assume GameMaker's own serialisation — attributes in a fixed order, CRLF, `&#xA;` and nothing else,
+`<caption>` and `<glyphs>` never self-closed. None of that is what the XML says, and a GMX from
+another writer parsed as an empty project. They now match attributes by name, decode numeric
+character references generally, follow the file's own line ending, and accept self-closing empty
+elements. Keep it that way; it costs nothing and the pristine path is unchanged by it.
 
-- **It bugchecks under load, and it is the hypervisor, not a driver.** Fifteen in an hour on the first
-  serious run: mostly `0xA` reads of wild addresses at DISPATCH_LEVEL, plus a `0x1E` carrying
-  `0xc000001d` (STATUS_ILLEGAL_INSTRUCTION) — the kernel meeting an instruction the CPU rejected.
-  Masking TSX off did **not** help (ten of the fifteen came after that went in). It runs on `-smp 1`
-  now, since most of QEMU's HVF state-corruption bugs on Intel are SMP-only. Moving the decompile out
-  of the guest removed the load that triggered it most reliably. Read the history with
-  `Get-WinEvent -FilterHashtable @{LogName='System';Id=1001}` in the guest — it is the only way to
-  tell one of these from a hang.
-- **WinRM lands in session 0, which has no desktop.** Anything that opens a window goes through
-  `Invoke-InSession` (`virt/guest/lib.ps1`), which runs it as a scheduled task on the autologon
-  desktop. There are no synced folders under vagrant-qemu either, so `virt/host/serve.mjs` on
-  `10.0.2.2` is the only road in and out.
+**The Windows VM is still in `virt/` and nothing uses it.** It was the plan for step 2 and never
+finished: the crack runs, the export step does not. Two things about it are worth knowing if it is
+ever picked back up — it bugchecks under `-cpu host` on HVF (fixed by `Penryn`, the default now;
+masking TSX and dropping to `-smp 1` were both dead ends), and WinRM lands in session 0, which has
+no desktop, so anything with a window goes through `Invoke-InSession` in `virt/guest/lib.ps1`.
+`virt/README.md` has the rest.
 
 ## Architecture of `src/`
 
@@ -226,7 +237,7 @@ The pipeline lives in `migrate.mjs`. It copies the project, unpacks the code, ap
   - Whitespace and comments are skipped only _before_ tokens, so a node's `end` is its last token.
   - The 1.4 rules it follows: `'…'` and `"…"` strings have no escape sequences; semicolons are optional; `=` is comparison inside expressions; only identifiers can be called (that's how `if (a) (b).c=d` parses as an `if` whose body is `(b).c=d`).
   - Nodes carry `start`/`end` source offsets. Transforms collect `{start,end,text}` edits and `applyEdits` splices them, so original formatting survives. Edits must not overlap: a rewrite that wraps a node emits separate edits around its children rather than replacing the whole node.
-- **`lib/gmx.mjs`**: `unpack` turns GMX XML code into a plain LF tree: `scripts/<name>.gml`, `objects/<obj>/<eventtype>_<enumb|ename>[_<action>].gml` (only code actions, id 603), `rooms/<room>/creation.gml` and `rooms/<room>/<instance>.gml`. `pack` writes it back; unchanged code keeps its original bytes (CRLF, `&#xA;`). Adding or removing a `.gml` registers or unregisters the script in `project.gmx`; a new `objects/<name>/` folder becomes a new object; `pack` also writes code for a room instance that had none. **`pack()` can't add an event to an existing object**, so a change that needs a new event goes in a new object.
+- **`lib/gmx.mjs`**: `unpack` turns GMX XML code into a plain LF tree: `scripts/<name>.gml`, `objects/<obj>/<eventtype>_<enumb|ename>[_<action>].gml` (only code actions, id 603), `rooms/<room>/creation.gml` and `rooms/<room>/<instance>.gml`. `pack` writes it back; unchanged code keeps its original bytes (CRLF, `&#xA;`). Both read XML by attribute name and follow the file's own line ending, so a GMX from a writer other than GameMaker's (LateralGM, in `virt/`) works too. Adding or removing a `.gml` registers or unregisters the script in `project.gmx`; a new `objects/<name>/` folder becomes a new object; `pack` also writes code for a room instance that had none. **`pack()` can't add an event to an existing object**, so a change that needs a new event goes in a new object.
 - **`patches/NN-*.patch`**: unified diffs (`patch -p1`) for hand-written logic rewrites, applied after the `bgm_*`/`rt_*` deletion and the `sa.gml`→`sA.gml` rename, and **before the transforms** (so they see pre-transform text: `sound_play`, not `audio_play_sound`). There's no script for generating patches. To add one:
   1. Copy the pristine export to a temp dir and `unpack()` it.
   2. Replay that deletion and rename, then apply the existing patches.
@@ -386,35 +397,36 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   - Saves panel's Copy/Download/file-picker buttons in a real browser; that the volume change is audible (playtests are muted).
   - Fullscreen appearance and a real Esc in Chrome and Safari; the room-name banner and save-slot location names (`sRoomCaption`) on screen; saving outside a pump room. A pump save records the player position as -1, as in GM6.
   - Anything against the original executable. Safari can't be automated (`safaridriver` sessions time out); don't run `Safari --version`, it hangs.
-- **`virt/` (the GMX export, automated) is half done, and the half that is done is the useful half.**
-  Step 1 works and is out of the VM: `virt/decompile.sh` makes the `.gm6` from the original exe in a
-  container on the host in about 75 seconds, byte-identical to the hand-run GUI's (sha256
-  `4b76af44…`, 10,720,322 bytes), verified twice. The guest no longer needs a JDK or a copy of the
-  exe; it fetches the finished `.gm6` over the file service and hash-checks it (`guest/run.ps1`
-  STEP 1, checked working host→guest).
-  **Steps 2 and 3 have never completed**, because the VM bugchecks under GUI load — see below.
-  `guest/crack.ps1` (the patcher) and `guest/export.ps1` (File → Import Project) are written but
-  unproven; the patcher's real button colours still need measuring from a clean screenshot.
-- **The `virt/` VM corrupts its own kernel memory under load, and two theories are already dead.**
-  Signature: `0xA` reads of wild addresses at DISPATCH_LEVEL, `0xD1` whose faulting address is in
-  pool rather than in any module, and a `0x1E` carrying `0xc000001d` (STATUS_ILLEGAL_INSTRUCTION) —
-  the kernel being sent to an instruction the CPU rejects. That is the hypervisor mangling guest
-  state, not a driver.
-  - **Not TSX.** Ten of the first fifteen bugchecks came after `-hle,-rtm` went in.
-  - **Not SMP.** Four more inside ten minutes on `-smp 1`.
-  - Everything is an environment variable now so the next hypothesis is one `reload` away:
-    `BARKLEY_VM_CPU` (a named model such as `Penryn` asks HVF for a much smaller feature set than
-    `host`), `BARKLEY_VM_ACCEL=tcg` (emulation — slow, but it is the test that says whether HVF is
-    at fault at all), `BARKLEY_VM_NET=e1000`, `BARKLEY_VM_CPUS`, `BARKLEY_VM_MEMORY`. A change only
-    takes effect on `virt/vagrant.sh reload`.
-  - **Read the history, don't guess:** `Get-WinEvent -FilterHashtable @{LogName='System';Id=1001}`
-    in the guest. A bugcheck under this hypervisor looks exactly like a hang from the host — the VM
-    sits at ~100% CPU writing a dump — so `vagrant` just reports a WinRM timeout.
-  - If HVF turns out to be unfixable, the fallback ladder is TCG (correct, much slower, and probably
-    still fine for an unattended run), then VMware Fusion, which is installed and is the solid
-    option on an Intel Mac — but its Vagrant provider needs the Vagrant VMware Utility, a separate
-    `sudo` installer, so that one needs the user. UTM is installed too but ships QEMU as a framework
-    inside its XPC helper rather than as a binary, so Vagrant cannot be pointed at it.
+- **`virt/` (the GMX export, automated) is done and needs no VM.** `virt/run.sh` goes from
+  `game/original/BarkleyV120.exe` to a GMX in about three minutes, in two containers: the GM6
+  decompiler, then LateralGM with the four patches in `virt/lateralgm/patches`. See "Rebuilding
+  the pristine export" above.
+  What was checked, on 2026-09-22, against `game/BarkleyV120.gmx`:
+  - all **1452 PNGs pixel-identical**, including the RGB under fully transparent pixels;
+  - `migrate.mjs` audits clean, and its code tree differs from the pristine one **only in the 165
+    `inst_XXXXXXXX` filenames**, which are arbitrary hashes on both sides — not one line of GML;
+  - a fresh migration of the pristine export is still **byte-identical to
+    `build/outputs/barkley-1.3.0.gmx`**, so the reading changes in `src/` cost nothing;
+  - **the whole pipeline runs off it**: the LTS importer converted all GML, Igor built HTML5
+    (`v1.3.0`, 262 files to cache) and a play-test booted to the title screen and through the
+    first dialog box with no uncaught exception — the art, the menus and the bitmap fonts all
+    drawing correctly.
+  What is left over is serialisation, not content: attribute order, `1.0` for `1`, LF for CRLF,
+  `&#13;`, self-closing empties, Studio-only fields (`TextureGroups`, `audioGroup`,
+  `clearDisplayBuffer`, the Android and iOS option lists) that LTS regenerates or ignores, and the
+  `Configs/` platform templates. LateralGM also writes no font glyph PNGs or `<glyph>` entries,
+  which is moot: `importFonts` writes both from the exe for every export.
+- **The Windows VM in `virt/` is unused and unfinished**, kept only in case step 2 ever has to go
+  back to the real IDE. `guest/crack.ps1` runs; `guest/export.ps1` has never completed. Its one
+  hard-won fact: **it bugchecked under `-cpu host` on HVF** — `0xA` reads of wild addresses at
+  DISPATCH_LEVEL, a `0x1E` carrying `0xc000001d` (STATUS_ILLEGAL_INSTRUCTION), i.e. the hypervisor
+  mangling guest state — and `-cpu Penryn` (UTM's own x86_64 default, and the default here now)
+  fixed it. Masking TSX and dropping to `-smp 1` were both dead ends, ten and four more bugchecks
+  respectively. Every knob is an environment variable (`BARKLEY_VM_CPU`, `BARKLEY_VM_ACCEL`,
+  `BARKLEY_VM_NET`, `BARKLEY_VM_CPUS`, `BARKLEY_VM_MEMORY`), effective on `virt/vagrant.sh reload`.
+  **Read the history, don't guess:** `Get-WinEvent -FilterHashtable @{LogName='System';Id=1001}` in
+  the guest. A bugcheck here looks exactly like a hang from the host — the VM sits at ~100% CPU
+  writing a dump — so `vagrant` just reports a WinRM timeout.
 - **Not automated yet:** see `src/README.md` ("Not automated yet": the LTS post-import stage).
 - **Play-test recipes:**
   - Skip to a new game: `'wait:44000,key:Z,wait:3000,key:Z,wait:3000,shot:game'` (the first Z at the title menu doesn't register, on v29 as well). Menu with no input: `'wait:62000,shot:menu'`. The apartment cutscene: then `key:Z,wait:5000` and about 14 × `key:Z,wait:2500`.

@@ -1,0 +1,20 @@
+diff --git a/org/lateralgm/file/GMXFileWriter.java b/org/lateralgm/file/GMXFileWriter.java
+index dd3abd3..c161f23 100644
+--- a/org/lateralgm/file/GMXFileWriter.java
++++ b/org/lateralgm/file/GMXFileWriter.java
+@@ -620,8 +620,13 @@ public final class GMXFileWriter
+ 		sprroot.appendChild(createElement(doc,"For3D", //$NON-NLS-1$
+ 				boolToString((Boolean) spr.get(PSprite.FOR3D))));
+ 
+-		int width = spr.getWidth(),
+-		height = spr.getHeight();
++		// A sprite with no subimages has no size to measure, and 0 is not a size GameMaker will
++		// take: its own GM6 export gives such a sprite 32x32 (this game has four, sBG0-2 and
++		// sNull), and importing a 0x0 one leaves the .yy with frames, layers and sequence all
++		// null, which the asset compiler then dereferences. 32 is LateralGM's own default too --
++		// see the bounding box in Sprite.DEFS, 0..31.
++		int width = spr.subImages.isEmpty() ? 32 : spr.getWidth(),
++		height = spr.subImages.isEmpty() ? 32 : spr.getHeight();
+ 
+ 		sprroot.appendChild(createElement(doc,"width",Integer.toString(width))); //$NON-NLS-1$
+ 		sprroot.appendChild(createElement(doc,"height",Integer.toString(height))); //$NON-NLS-1$

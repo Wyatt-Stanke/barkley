@@ -106,7 +106,7 @@ export function pack(codeDir, projectDir) {
     .filter((f) => f.endsWith('.gml'))
     .map((f) => f.slice(0, -4));
   const keep = new Set(scripts);
-  proj = proj.replace(/^\s*<script>scripts\\([^<]+)\.gml<\/script>\r\n/gm, (m, n) => (keep.delete(n) ? m : ''));
+  proj = proj.replace(/^\s*<script>scripts\\([^<]+)\.gml<\/script>\r?\n/gm, (m, n) => (keep.delete(n) ? m : ''));
   proj = insertResources(
     proj,
     'script',
@@ -152,8 +152,13 @@ export function pack(codeDir, projectDir) {
 
 function insertResources(proj, tag, entries) {
   if (!entries.length) return proj;
-  const close = proj.indexOf(`\r\n  </${tag}s>`);
-  return proj.slice(0, close) + entries.map((e) => `\r\n    <${tag}>${e}</${tag}>`).join('') + proj.slice(close);
+  // Follow the file's own line ending and indentation. GameMaker writes CRLF and two spaces a
+  // level; another writer may not, and an indexOf for CRLF that misses returns -1, which splices
+  // the new entries in one character from the end of the document.
+  const m = new RegExp(`(\\r?\\n)([ \\t]*)</${tag}s>`).exec(proj);
+  if (!m) throw new Error(`no </${tag}s> in the project file`);
+  const open = `${m[1]}${m[2]}  <${tag}>`;
+  return proj.slice(0, m.index) + entries.map((e) => `${open}${e}</${tag}>`).join('') + proj.slice(m.index);
 }
 
 // A bare object whose events each run one code action. Event files are named <eventtype>_<enumb>.gml.

@@ -5,54 +5,57 @@ original executable, then open the `.gm6` it produces in GameMaker: Studio
 1.4.9999 and save it out as a GMX. This directory does the same thing without a
 person at the keyboard.
 
-Only the second half needs Windows, so only the second half gets a VM:
+Neither half needs Windows any more. Both are Java, and both run in a
+container:
 
 ```
 BarkleyV120.exe
    |  the GM6 decompiler (game/original/GMDecompilerDecompiled), headless,
-   |  in a container on the host -- no VM, about 75 seconds
+   |  in a container -- about 75 seconds
    v
 BarkleyV120.gm6
-   |  GameMaker: Studio 1.4.9999, driven through its own windows,
-   |  in a throwaway Windows 10 VM
+   |  LateralGM, patched and headless, in a container -- about a minute
    v
 BarkleyV120.gmx
 ```
 
-One command:
-
-```sh
-virt/run.sh
-```
-
-It decompiles on the host, caches the pinned downloads, starts the file service
-the guest pulls from, brings the VM up, provisions it and runs the GameMaker
-half inside it. The export lands on the host as `build/virt/BarkleyV120.gmx.zip`.
-
-Step 1 on its own, which is worth knowing about because it needs none of the
-rest:
+Two commands:
 
 ```sh
 virt/decompile.sh [out.gm6]      # -> build/virt/BarkleyV120.gm6
+virt/convert.sh [in.gm6] [out]   # -> build/virt/BarkleyV120.gmx (+ .gmx.tar)
 ```
+
+Each script's own header says how it works and why. Both take `BARKLEY_ROOT`,
+and `BARKLEY_CONTAINER` to pick podman or docker.
+
+The Windows VM that used to do step 2 is still here, unused, and the rest of
+this file is mostly about it. [Why it is no longer the way in](#why-lateralgm-and-not-the-ide)
+is below.
 
 ## What you need
 
-- **podman** or **docker**, for step 1. `virt/decompile.sh` prefers podman and
-  takes `BARKLEY_CONTAINER` to override.
+For both steps, which is all you need for a GMX:
+
+- **podman** or **docker**. Both scripts prefer podman and take
+  `BARKLEY_CONTAINER` to override.
+- **git**, for the LateralGM clone (kept in `build/virt/lateralgm-src`).
+- The inputs, which are untracked and have to be in place:
+  `game/original/BarkleyV120.exe` and `game/original/GMDecompilerDecompiled/`.
+- An internet connection the first time: the JDK image and that clone.
+- Around three minutes.
+
+Only for the VM, which nothing in the pipeline needs any more:
+
 - **Vagrant** with the **vagrant-qemu** plugin (`vagrant plugin install vagrant-qemu`).
 - **QEMU**. On an Intel Mac running a recent macOS, Homebrew has no bottle for
   it and builds from source for the better part of an hour, so use MacPorts:
   `sudo port install qemu`. `virt/vagrant.sh` finds it under `/opt/local`,
   `/usr/local` or `/opt/homebrew`, or takes `QEMU_PREFIX`.
-- **Node 22+** — the host side is two small scripts with no dependencies.
-- The inputs, which are untracked and have to be in place:
-  `tools/GameMaker-Studio-(SimonElJoyas).zip`, `game/original/BarkleyV120.exe`
-  and `game/original/GMDecompilerDecompiled/`.
+- **Node 22+** for `host/serve.mjs` and `host/prepare.mjs`.
+- `tools/GameMaker-Studio-(SimonElJoyas).zip`.
 - About **40 GB** of disk (a 17 GB box plus the machine's overlay) and an
-  hour for a first run, most of it Windows booting and GameMaker importing.
-- An internet connection for the first run: the box, the JDK image and the
-  Visual C++ runtime.
+  hour for a first run, most of it Windows booting.
 
 If `tools/` and `game/` live in another checkout (they are untracked, so a git
 worktree does not have them), point `BARKLEY_ROOT` at the one that does.
@@ -61,8 +64,11 @@ worktree does not have them), point `BARKLEY_ROOT` at the one that does.
 
 | | |
 |---|---|
-| `decompile.sh` | step 1, on the host: the exe to a `.gm6`, in a container |
+| `decompile.sh` | step 1: the exe to a `.gm6`, in a container |
 | `java/Decompile.java` | the decompiler's "GM6 EXE" path with the window left out |
+| `convert.sh` | step 2: the `.gm6` to a `.gmx`, in a container, with LateralGM |
+| `lateralgm/Gm6ToGmx.java` | LateralGM's open-and-save-as with no window |
+| `lateralgm/patches/` | the four fixes to LateralGM's GMX writer, applied at build time |
 | `Vagrantfile` | the VM: `gusztavvargadr/windows-10` on QEMU with the host's accelerator |
 | `vagrant.sh` | vagrant with QEMU on PATH and `BARKLEY_ROOT` set — use it instead of bare `vagrant` |
 | `run.sh` | the whole pipeline, one command |
@@ -133,7 +139,69 @@ its buttons are found by colour (`guest/screen.ps1`) rather than by control name
 
 **3. `guest/export.ps1` — the `.gm6` to a `.gmx`.** Drives the IDE's
 File → Import Project, which is the only way in: GameMaker Studio 1.4 has no
-command line for it.
+command line for it. Superseded by `convert.sh`; never finished.
+
+## Why LateralGM, and not the IDE
+
+`convert.sh` does step 2 with [LateralGM](https://github.com/IsmAvatar/LateralGM),
+which reads GM6 and writes GMX directly. That removes Windows, a 17 GB box, a
+cracked IDE, an hour of provisioning, GUI automation by pixel colour, and a
+hypervisor bug, and it takes a minute. The question was only whether what it
+writes is the same game.
+
+It is, once four things in its GMX writer are fixed. The patches are in
+`lateralgm/patches`, applied to a pinned upstream clone at build time so
+nothing is vendored:
+
+1. **The transparency key.** The sprite path ran the pixels through java.awt's
+   `RGBImageFilter`, which clears the colour under the pixels it makes
+   transparent; the background path never applied the key at all, so ten
+   backgrounds came out fully opaque.
+2. **Smooth edges.** GM6 stores every image as a 24-bit BMP, so there is no
+   alpha in the file; the flag is a bool in the sprite record and GM6 softened
+   the silhouette itself. GMX has no field for the flag, so GameMaker bakes the
+   result into the PNG — meaning that if the export does not bake it, the
+   setting is gone for good. The rule is
+   `alpha = 255 - 32 * transparent neighbours`, measured off the hand-made
+   export: this game has exactly one sprite with the flag, `sShadow`, and all
+   86 of its pixels match it exactly.
+3. **Separate collision masks.** GM6 has no field for them either, so the
+   property kept its default of false and every frame of an animation would
+   have shared one merged mask. GameMaker Studio's own GM6 import says
+   otherwise, giving all 458 sprites `<sepmasks>-1</sepmasks>`.
+4. **The size of a sprite with no frames.** There is nothing to measure, so
+   LateralGM wrote `0`. GameMaker writes `32`, and for good reason: importing a
+   0x0 sprite leaves `frames`, `layers` and `sequence` all null in the `.yy`,
+   and the LTS asset compiler dereferences them — `NullReferenceException` in
+   `GMSprite.SetFromResource`, no build. This game has four such sprites,
+   `sBG0`, `sBG1`, `sBG2` and `sNull`.
+
+Checked against `game/BarkleyV120.gmx`:
+
+- all **1452 PNGs are pixel-identical**, including the RGB left under fully
+  transparent pixels;
+- `migrate.mjs` audits clean ("No items to review"), and its code tree differs
+  from the pristine one **only in the 165 `inst_XXXXXXXX` filenames**, which
+  are arbitrary hashes on both sides — not one line of GML.
+
+What is left is how the XML is written, not what it says: attribute order,
+`1.0` for `1`, `&#13;` for a carriage return, `<caption/>` for an empty
+caption, Studio-only fields (`TextureGroups`, `audioGroup`,
+`clearDisplayBuffer`, the Android and iOS option lists) that LTS regenerates or
+ignores, and `Configs/` platform templates. `src/lib/gmx.mjs` and
+`src/migrate.mjs` used to read GMX by attribute position and now read it by
+attribute name, which is what makes those differences not matter.
+
+The one thing LateralGM keeps that GameMaker lost: `scripts/sA.gml` beside
+`scripts/sa.gml`, and `bgm_Init.gml` beside `bgm_init.gml`. A case-insensitive
+filesystem collapses each pair, which is what happened to the pristine export
+and why `game/recovered-scripts/` exists. The `.gmx.tar` that `convert.sh`
+leaves beside the directory keeps all four.
+
+Two gaps, both moot: LateralGM writes no font glyph PNGs (upstream's writer has
+that commented out) and no `<glyph>` entries — `importFonts` in
+`src/assets.mjs` writes both from the original executable anyway, for the
+pristine export as much as for this one.
 
 ## Gotchas
 
