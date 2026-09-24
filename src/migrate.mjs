@@ -68,8 +68,13 @@ step('find runtime-loaded sounds', () => {
 step('delete BGM DLL wrappers and unused rt_ transitions; restore sA name', () => {
   const dir = path.join(code, 'scripts');
   for (const f of fs.readdirSync(dir)) if (/^(bgm_|rt_)/.test(f)) fs.rmSync(path.join(dir, f));
-  // On disk the music player was saved as sa.gml (case collision); rename via a temp name for case-insensitive filesystems.
-  if (fs.readdirSync(dir).includes('sa.gml')) {
+  // The game has two scripts, sa and sA (the music player). On a case-insensitive filesystem only one file survives,
+  // holding sA's code under either name; game/recovered-scripts has sa, and patch 01 brings it back as sBeatAdd. On a
+  // case-sensitive one (Linux, from virt/'s tar) both survive, so drop sa to get the same tree.
+  const names = fs.readdirSync(dir);
+  if (names.includes('sa.gml') && names.includes('sA.gml')) fs.rmSync(path.join(dir, 'sa.gml'));
+  // Otherwise rename sa.gml via a temp name, for case-insensitive filesystems.
+  else if (names.includes('sa.gml')) {
     fs.renameSync(path.join(dir, 'sa.gml'), path.join(dir, 'sA.tmp'));
     fs.renameSync(path.join(dir, 'sA.tmp'), path.join(dir, 'sA.gml'));
   }

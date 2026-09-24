@@ -15,7 +15,7 @@
 // the touch overlay of patch modernized/09 needs. The browser is muted unless AUDIO=1.
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { chrome as browserPath } from './toolchain.mjs';
 import path from 'node:path';
 
 const [root, out, steps = 'wait:14000,shot:title'] = process.argv.slice(2);
@@ -24,9 +24,7 @@ if (!out) {
   process.exit(1);
 }
 mkdirSync(out, { recursive: true });
-const chromePath =
-  process.env.CHROME ??
-  `${homedir()}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-x64/chrome-headless-shell`;
+const chromePath = browserPath();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HTTP = 'http://127.0.0.1:8766';
 

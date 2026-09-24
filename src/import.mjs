@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Imports a migrated GMX into a GameMaker LTS project without the IDE, using the IDE's bundled ProjectTool,
-// and fails if the importer reports GML it could not convert (it leaves such files as 1.4 code).
+// Imports a migrated GMX into a GameMaker LTS project without the IDE, using the IDE's ProjectTool (the installed
+// IDE's, or one toolchain.mjs downloads), and fails if the importer reports GML it could not convert (it leaves such
+// files as 1.4 code).
 //
 //   node src/import.mjs <migrated GMX dir> <output .yyp path> [ProjectTool path]
 import fs from 'node:fs';
@@ -8,11 +9,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { VERSION } from './offline.mjs';
+import { projectTool } from './toolchain.mjs';
 
 // The files that ship into the page live in src/web/: index.html, the extension shims and the PWA assets.
 const web = (f) => path.join(import.meta.dirname, 'web', f);
 
-const [gmx, yyp, tool = defaultTool()] = process.argv.slice(2).map((p) => p && path.resolve(p));
+const [gmx, yyp, tool = projectTool()] = process.argv.slice(2).map((p) => p && path.resolve(p));
 if (!yyp) {
   console.error('usage: node import.mjs <migrated GMX dir> <output .yyp path> [ProjectTool path]');
   process.exit(1);
@@ -20,11 +22,6 @@ if (!yyp) {
 if (fs.existsSync(path.dirname(yyp))) {
   console.error(`${path.dirname(yyp)} already exists`);
   process.exit(1);
-}
-
-function defaultTool() {
-  const arch = os.arch() === 'arm64' ? 'arm64' : 'x86_64';
-  return `/Applications/GameMaker LTS 2026.app/Contents/MacOS/${arch}/packages/project-tool-osx-${arch === 'arm64' ? 'arm64' : 'x64'}/ProjectTool`;
 }
 
 const project = fs.readdirSync(gmx).find((f) => f.endsWith('.project.gmx'));

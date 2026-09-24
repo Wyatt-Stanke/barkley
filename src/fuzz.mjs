@@ -67,16 +67,12 @@ import {
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { renameSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { writeBuild } from './offline.mjs';
+import { chrome, igor } from './toolchain.mjs';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
-const CHROME =
-  process.env.CHROME ??
-  `${homedir()}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-x64/chrome-headless-shell`;
-const RT = '/Users/Shared/GameMakerStudio2-LTS2026/Cache/runtimes/runtime-2026.0.0.23';
-const UF = `${homedir()}/Library/Application Support/GameMakerStudio2-LTS2026/wyattstanke_5117727`;
 // --port: the build's server; the browsers' DevTools ports are port+530 to port+629 (default 8870, 9400-9499)
 let HTTP_PORT = 8870;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -155,7 +151,7 @@ class Browser {
     mkdirSync(this.dir, { recursive: true });
     // No autoplay flag: the audio context stays suspended (see __fuzz.quiet).
     this.proc = spawn(
-      CHROME,
+      chrome(),
       [
         '--no-sandbox',
         `--remote-debugging-port=${this.port}`,
@@ -1499,6 +1495,7 @@ function build(yyp, outDir, minify = false) {
       opts,
       readFileSync(opts, 'utf8').replace(/("option_html5_index":)"[^"]*"/, `$1${JSON.stringify(index)}`),
     );
+    const { igor: IGOR, runtime: RT, userFolder: UF } = igor();
     const uf = path.join(tmp, 'user');
     cpSync(UF, uf, { recursive: true });
     const settings = JSON.parse(readFileSync(path.join(uf, 'local_settings.json'), 'utf8'));
@@ -1506,7 +1503,7 @@ function build(yyp, outDir, minify = false) {
     settings['machine.Platform Settings.HTML5.pretty_print'] = !minify;
     writeFileSync(path.join(uf, 'local_settings.json'), JSON.stringify(settings, null, 4));
     const r = spawnSync(
-      `${RT}/bin/igor/osx/x64/Igor`,
+      IGOR,
       [
         '-j=8',
         `--project=${path.join(proj, path.basename(yyp))}`,

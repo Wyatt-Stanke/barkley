@@ -1,0 +1,82 @@
+# Builds the whole port from the original executable (node src/pipeline.mjs) and deploys the site to this
+# repository's GitHub Pages. Needs the repository secret GAMEMAKER_ACCESS_KEY (https://gamemaker.io/account/access_keys),
+# which Igor turns into a licence; everything else is downloaded, pinned, by src/fetch.mjs and src/toolchain.mjs.
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; a newer push waits rather than cancelling one half-deployed.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      # The inputs (the game from archive.org, the decompiler's source) and the tools (ProjectTool, Igor, the runtime,
+      # Chromium) are pinned in these two files, so their hashes key the caches. The licence is never cached.
+      - name: Cache the game's inputs
+        uses: actions/cache@v6
+        with:
+          path: game/original
+          key: game-original-${{ hashFiles('src/fetch.mjs') }}
+
+      - name: Cache the GameMaker tools
+        uses: actions/cache@v6
+        with:
+          path: |
+            build/tools/igor
+            build/tools/runtimes
+            build/tools/project-tool-*
+            build/tools/chrome
+          key: gm-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/toolchain.mjs') }}
+
+      - name: Build (exe -> GMX -> LTS project -> HTML5 -> play-test)
+        run: node src/pipeline.mjs --out=build/pipeline
+        env:
+          GAMEMAKER_ACCESS_KEY: ${{ secrets.GAMEMAKER_ACCESS_KEY }}
+          BARKLEY_CONTAINER: docker
+
+      - name: Keep the play-test's screenshot and console
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playtest
+          path: build/pipeline/playtest/*.*
+          if-no-files-found: ignore
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/pipeline/site
+
+  deploy:
+    needs: build
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

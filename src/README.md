@@ -18,14 +18,47 @@ imports are named after it too — `build/outputs/barkley-<version>.gmx` and `bu
 
 ## Requirements
 
-- Node.js 22+ (no npm packages; `playtest.mjs` uses the built-in `WebSocket`). Peggy is only needed to regenerate the parser after editing the grammar: `npx -y peggy@5.1.0 --format es --allowed-start-rules Program,Tokens -o src/lib/gml.parser.mjs src/lib/gml.peggy`
-- `ffmpeg`, `ffprobe` and `patch` on PATH (on Windows, Git Bash provides `patch`)
-- The pristine GMX export (never modified) and the original distribution folder with
-  `Music/`, `Voice/` and `BG/`
-- For building: GameMaker LTS with the HTML5 target installed, signed in (Igor reads the licence from the user folder)
-- For play-testing: `python3` and a Chromium headless shell
+- Node.js 24+ (no npm packages; `playtest.mjs` uses the built-in `WebSocket`, the scripts `import.meta.main`). Peggy is only needed to regenerate the parser after editing the grammar: `npx -y peggy@5.1.0 --format es --allowed-start-rules Program,Tokens -o src/lib/gml.parser.mjs src/lib/gml.peggy`
+- `ffmpeg`, `ffprobe` and `patch` on PATH (on Windows, Git Bash provides `patch`); `curl`, `unzip` and `git` for the downloads
+- The inputs: `node src/fetch.mjs` puts the original distribution (with `Music/`, `Voice/` and `BG/`) and the GM6
+  decompiler's source in `game/original/`, and `virt/run.sh` (podman or docker) makes the GMX export from them
+- For importing and building, GameMaker's tools and a licence, which `toolchain.mjs` finds or installs (below)
+- For play-testing: `python3` and a Chromium headless shell (`toolchain.mjs` again)
+
+### The GameMaker tools (`src/toolchain.mjs`)
+
+`import.mjs` needs ProjectTool; `fuzz.mjs build` needs Igor, the runtime and a user folder holding `licence.plist`;
+`playtest.mjs` and `fuzz.mjs` need a headless Chromium. `toolchain.mjs` resolves each in this order:
+
+1. an environment variable: `BARKLEY_PROJECTTOOL`, `BARKLEY_RUNTIME`, `BARKLEY_USER_DIR`, `CHROME`;
+2. the local install of GameMaker LTS 2026 on a Mac: the IDE's bundled ProjectTool, the runtime in `/Users/Shared`,
+   the signed-in user folder;
+3. a pinned download into `build/tools/`: ProjectTool from GameMaker's package registry (`gmpm.gamemaker.io`,
+   `@gm-tools/project-tool-<os>-<arch>`, the version the LTS 2026 IDE bundles), the Igor bootstrapper from
+   `gms.yoyogames.com`, a licence Igor fetches with `GAMEMAKER_ACCESS_KEY` (an access key from
+   <https://gamemaker.io/account/access_keys>), the runtime's `html5` module from the LTS 2026 feed, and
+   chrome-headless-shell through `npx @puppeteer/browsers`.
+
+The third is how a Linux machine with no GameMaker at all builds the game, and what the GitHub workflow does.
+`node src/toolchain.mjs` installs whatever is missing and prints where everything is.
 
 ## Run
+
+The whole chain, from the original executable to a play-tested site, is one command:
+
+```sh
+node src/pipeline.mjs [--out=<dir>] [--mode=modernized|faithful] [--from=exe|pristine] [--no-playtest]
+```
+
+It runs `fetch.mjs`, `virt/run.sh`, `migrate.mjs` (and fails unless the audit prints "No items to review"),
+`import.mjs`, `fuzz.mjs build --minify` and a play-test (boot, Start, no uncaught exception), writing
+`<out>/BarkleyV120.gmx`, `<out>/barkley-<version>.gmx`, `<out>/barkley-<version>/BarkleyLTS.yyp`, `<out>/site/` and
+`<out>/playtest/` (`<out>` defaults to `build/pipeline`). A step whose output exists is kept, so delete that output to
+redo the step. `--from=pristine` migrates `game/BarkleyV120.gmx` instead of exporting one.
+`.github/workflows/pages.yml` runs the pipeline on every push to `main` and deploys `site/` to the repository's
+GitHub Pages.
+
+The steps one at a time:
 
 ```sh
 node src/migrate.mjs [--mode=modernized|faithful] <pristine GMX dir> <original game dir> <output GMX dir>
@@ -37,8 +70,8 @@ The output is a new project; the unpacked code is left beside it as `<output>.co
 result can be grepped and reviewed as plain `.gml`. The run ends with an audit listing any
 remaining use of an API that LTS removed (it should print "No items to review").
 
-Then import it into an LTS project without the IDE, using the ProjectTool bundled with GameMaker LTS
-(the same importer the IDE runs):
+Then import it into an LTS project without the IDE, using GameMaker's ProjectTool (the same importer the IDE runs;
+"The GameMaker tools" above says where it comes from):
 
 ```sh
 node src/import.mjs <output GMX dir> <new project dir>/<name>.yyp [ProjectTool path]
@@ -74,7 +107,9 @@ A modernized migration also gets `controls.js` (`extensions/Controls/`), which n
 
 ## Build and play-test (HTML5)
 
-Build with Igor from the runtime, against the signed-in user folder:
+The supported build is `node src/fuzz.mjs build <.yyp> <dir> [--minify]`: unobfuscated, from copies of the project and
+the user folder, with the tools `toolchain.mjs` finds. By hand, with Igor from the runtime and the signed-in user
+folder:
 
 ```sh
 RT=/Users/Shared/GameMakerStudio2-LTS2026/Cache/runtimes/runtime-2026.0.0.23

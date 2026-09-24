@@ -25,6 +25,15 @@ Don't hand-edit the GMX resources in `game/BarkleyV120.gmx` (`objects/`, `script
 ## Commands
 
 ```sh
+# 0. Everything, from the original exe to a play-tested site (10-15 min; each step's output is kept, so a rerun resumes).
+#    fetch (archive.org zip, MD5-checked, + the GM6 decompiler's source at a pinned commit, into game/original/) ->
+#    virt/run.sh -> migrate (fails unless the audit is clean) -> import -> fuzz.mjs build --minify -> play-test.
+#    Writes <out>/BarkleyV120.gmx, barkley-<version>.gmx, barkley-<version>/BarkleyLTS.yyp, site/, playtest/.
+#    --from=pristine migrates game/BarkleyV120.gmx instead of exporting. This is what the GitHub workflow runs.
+node src/pipeline.mjs [--out=build/pipeline] [--mode=modernized|faithful] [--from=exe|pristine] [--no-playtest]
+node src/fetch.mjs        # step 1 alone
+node src/toolchain.mjs    # finds or installs ProjectTool, Igor + runtime, the licence, Chromium; prints where each is
+
 # 1. Migrate the pristine GMX into a new GMX (refuses to overwrite; about 25 s).
 #    --mode=modernized is the default, and the user wants it unless they say otherwise: it applies
 #    patches/*.patch, then patches/modernized/*.patch (web adaptations). --mode=faithful applies only patches/*.patch.
@@ -112,15 +121,32 @@ There's no test suite. Verify in these ways:
 ## Layout
 
 Everything lives in `~/Documents/barkley/`, which is both the working directory and a **git repo**
-(initialised 2026-09-20; no remote — the deploy repo below is separate). `.gitignore` keeps the
-generated and bulk-binary folders out, so only `src/`, `virt/`, `docs/`, `game/recovered-scripts/`,
-`.gitignore` and this file are tracked.
+(initialised 2026-09-20), moving to **`github.com/Wyatt-Stanke/barkley`** (public; the old deploy repo below is
+separate). `.gitignore` keeps the generated and bulk-binary folders out, so only `src/`, `virt/`, `docs/`,
+`game/recovered-scripts/`, `.github/`, `README.md`, `.gitignore` and this file are tracked.
+
+### GitHub Actions (`.github/workflows/pages.yml`)
+
+On every push to `main` (and on `workflow_dispatch`), an `ubuntu-24.04` runner runs `node src/pipeline.mjs` and
+deploys `build/pipeline/site` to the repo's own GitHub Pages (`https://wyatt-stanke.github.io/barkley/`). The deploy
+job runs only on the default branch; Pages must be set to "GitHub Actions" as its source. The one secret is
+**`GAMEMAKER_ACCESS_KEY`** (repo secret, already set), which `toolchain.mjs` hands to Igor's `runtime FetchLicense`.
+Caches: `game/original` (keyed on `src/fetch.mjs`) and `build/tools/{igor,runtimes,project-tool-*,chrome}` (keyed on
+`src/toolchain.mjs`); the licence is never cached. The play-test's screenshot and console are the `playtest` artifact.
+
+**How HTML5 works in CI when the bscotch actions don't:** `bscotch/igor-setup`/`igor-build` (GameMaker's blog post)
+only know Windows/Android/iOS, but what they do is small, and `toolchain.mjs` does it for HTML5 on Linux: download
+`https://gms.yoyogames.com/igor_linux-x64.zip`, `Igor runtime FetchLicense -ak=<key> -of=<uf>/licence.plist`, then
+`Igor /rp=<dir> /ru=https://gms.yoyogames.com/Zeus-Runtime-LTS2026.rss /uf=<uf> /m=html5,base-module-linux-x64 --
+Runtime Install 2026.0.0.23` and the runtime's `bin/linux-post-install.sh`. The importer the bscotch actions don't
+need at all (they build `.yyp` projects) is **ProjectTool, published per platform on GameMaker's npm registry**:
+`https://gmpm.gamemaker.io/@gm-tools%2fproject-tool-linux-x64` (pinned to `2024.14.165`, what the LTS 2026 IDE bundles).
 
 ```
 barkley/
   CLAUDE.md      this file
   src/           all the tooling (Node.js 22+, no npm packages)
-    *.mjs        the pipeline: migrate, import, playtest, fuzz, deploy, assets, transforms, offline
+    *.mjs        the pipeline: pipeline (all of it), fetch, toolchain, migrate, import, playtest, fuzz, deploy, assets, transforms, offline
     version.json the port's semver version, the one place it is written
     lib/         the GML grammar/parser and the GMX code (un)packer
     patches/     hand-written GML rewrites; modernized/ holds the web adaptations
@@ -130,7 +156,9 @@ barkley/
   game/          inputs: large, immutable, untracked (except recovered-scripts/)
   docs/          an earlier audit page
   tools/         the GameMaker Studio 1.4.9999 installer and a how-to video, for virt/'s unused VM (untracked)
-  build/         everything generated; all of it reproducible from src/ (untracked)
+  build/         everything generated; all of it reproducible from src/ (untracked); tools/ holds downloaded GameMaker tools
+  .github/       workflows/pages.yml: the whole pipeline on every push to main, deployed to GitHub Pages
+  README.md      the GitHub front page: what this is and the one command
 ```
 
 Anything not in that tree (a throwaway migration, a test build, scratch output) goes in a temp or
@@ -139,7 +167,7 @@ scratchpad dir, never in the project.
 - `game/BarkleyV120.gmx`: the pristine export, and `migrate.mjs`'s first argument. **Read-only; never write to it.**
   It is 28 MB (the migrated output is ~185 MB, because the migration brings in the real music). A copy is in
   `~/Documents/barkley copy/BarkleyV120.gmx.orig`, a backup of the pre-reorganisation layout from 2026-09-19.
-- `game/original/`: the original distribution (exe, `.gm6`, `Music/`, `Voice/`, `BG/`, `bgm.dll`), and `migrate.mjs`'s second argument.
+- `game/original/`: the original distribution (exe, `.gm6`, `Music/`, `Voice/`, `BG/`, `bgm.dll`), and `migrate.mjs`'s second argument. `src/fetch.mjs` recreates it (minus the `.gm6`) from `archive.org/download/BarkleyShutUpAndJamGaiden/BarkleyV120.zip`, whose contents are byte-identical to it.
   - `GMDecompilerDecompiled/`: Java source of the GM6 decompiler that produced the export. It's the reference for the exe format `importFonts` reads.
 - `game/recovered-scripts/`: the 8 scripts lost to case collisions (the patch source for `sBeatAdd`). Small, so it's the one tracked part of `game/`.
 - `game/releases/`: zips of other releases (V106–V110, and OS X and RPG Maker 2003 versions).
@@ -300,7 +328,7 @@ The pipeline lives in `migrate.mjs`. It copies the project, unpacks the code, ap
   - There's no `timeout` command (use `perl -e 'alarm N; exec @ARGV' …`).
   - `cat` and `strings` are BSD versions: use `cat -vet`, not `cat -A`; `strings` has no `-el`.
   - `pgrep -f`/`pkill -f` match their own shell: anchor the pattern (`pgrep -f "^node src/fuzz.mjs run"`). To stop a fuzz run, send one SIGINT to the node process only; `pkill -INT -f` also hits the shell wrapper, which counts as a second Ctrl-C and exits without the final save.
-- The filesystem is case-insensitive. The export lost `sa`/`sA` and `bgm_Init`/`bgm_init` to case collisions, so rename through a temporary name.
+- The filesystem is case-insensitive. The export lost `sa`/`sA` and `bgm_Init`/`bgm_init` to case collisions, so rename through a temporary name. **On Linux (CI) both survive** from `virt/`'s tar; `migrate.mjs` drops `sa.gml` when `sA.gml` is also there, and the Linux migration then matches the Mac one except for PNG bytes (ffmpeg/zlib builds differ; all 140 are pixel-identical).
 - **Editing this file:** a JS `String.replace` replacement string containing `$` can splice the file (`` $` `` inserts everything before the match, `$'` everything after). Use a replacer function, `split/join`, or Python's `str.replace`. Write the whole new file to `<name>.new`, `mv` it into place, and check it (`wc -l`, one `## ` per section).
 - **The LTS importer silently skips any file it can't parse.** It logs "Too many errors - GML not processed" in `<project>/notes/compatibility_report_*/*.txt`, and the file keeps its 1.4 syntax, which then fails to compile with "invalid token '". Fixed causes so far: a modern keyword used as a name (`throw`), and a parenthesised statement as an `if`/`repeat` body. When a compile error names a file, check the report first.
 - The importer does convert quotes and backslash escapes, `view_*` → `__view_get`/`__view_set`, and generates compatibility scripts (`instance_create`, `joystick_*`, `__background_*`). It does **not** touch code inside strings, which is why the cinema strings are extracted before import. A script that uses `argumentN` becomes `function name(argument0, …)`; one that also uses `argument[i]` becomes `function name()`.
