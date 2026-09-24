@@ -125,7 +125,10 @@ export function runtime() {
   if (found(path.join(MAC_RUNTIME, 'html5'))) return MAC_RUNTIME;
   const runtimes = path.join(TOOLS, 'runtimes');
   const rt = path.join(runtimes, `runtime-${RUNTIME_VERSION}`);
-  if (found(path.join(rt, 'html5')) && found(igorIn(rt))) return rt;
+  if (found(path.join(rt, 'html5')) && found(igorIn(rt))) {
+    if (OS === 'linux') linuxPostInstall(rt); // idempotent; a restored cache may predate it
+    return rt;
+  }
   console.log(`- installing runtime ${RUNTIME_VERSION} (html5) into ${rt}`);
   const igor = bootstrapper();
   run(
@@ -142,10 +145,37 @@ export function runtime() {
     ],
     { cwd: path.dirname(igor) },
   );
-  if (OS === 'linux') run('bash', [path.join(rt, 'bin', 'linux-post-install.sh')], { cwd: rt });
+  if (OS === 'linux') linuxPostInstall(rt);
   if (!found(path.join(rt, 'html5')) || !found(igorIn(rt)))
     throw new Error(`the runtime install left no ${igorIn(rt)}`);
   return rt;
+}
+
+// What the runtime's bin/linux-post-install.sh does, for this architecture only: the script walks every architecture
+// with set -e, so it dies on the first one that wasn't installed. It marks the tools executable and links, beside
+// Igor, the folders the asset compiler reads.
+function linuxPostInstall(rt) {
+  for (const dir of ['igor', 'assetcompiler', 'webserver'].map((d) => path.join(rt, 'bin', d, 'linux', ARCH))) {
+    if (!found(dir)) continue;
+    for (const e of fs.readdirSync(dir, { withFileTypes: true }))
+      if (e.isFile() && !e.name.includes('.')) fs.chmodSync(path.join(dir, e.name), 0o755);
+  }
+  const igorDir = path.dirname(igorIn(rt));
+  for (const target of [
+    'FiltersAndEffects',
+    'assetcompiler/ParticleImages',
+    'assetcompiler/Shaders',
+    'assetcompiler/BuiltinFonts',
+  ]) {
+    const link = path.join(igorDir, path.basename(target));
+    let exists = true;
+    try {
+      fs.lstatSync(link);
+    } catch {
+      exists = false;
+    }
+    if (!exists) fs.symlinkSync(`../../../${target}`, link);
+  }
 }
 
 const igorIn = (rt) => path.join(rt, 'bin', 'igor', OS === 'win' ? 'windows' : OS, ARCH, `Igor${EXE}`);
