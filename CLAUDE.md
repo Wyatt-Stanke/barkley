@@ -25,7 +25,7 @@ Don't hand-edit the GMX resources in `game/BarkleyV120.gmx` (`objects/`, `script
 ## Commands
 
 ```sh
-# 0. Everything, from the original exe to a play-tested site (10-15 min; each step's output is kept, so a rerun resumes).
+# 0. Everything, from the original exe to a play-tested site (~5 min on a GitHub runner; each step's output is kept, so a rerun resumes).
 #    fetch (archive.org zip, MD5-checked, + the GM6 decompiler's source at a pinned commit, into game/original/) ->
 #    virt/run.sh -> migrate (fails unless the audit is clean) -> import -> fuzz.mjs build --minify -> play-test.
 #    Writes <out>/BarkleyV120.gmx, barkley-<version>.gmx, barkley-<version>/BarkleyLTS.yyp, site/, playtest/.
@@ -129,7 +129,11 @@ separate). `.gitignore` keeps the generated and bulk-binary folders out, so only
 
 On every push to `main` (and on `workflow_dispatch`), an `ubuntu-24.04` runner runs `node src/pipeline.mjs` and
 deploys `build/pipeline/site` to the repo's own GitHub Pages (`https://wyatt-stanke.github.io/barkley/`). The deploy
-job runs only on the default branch; Pages must be set to "GitHub Actions" as its source. The one secret is
+job runs only on the default branch; Pages is set to "GitHub Actions" as its source, and the `github-pages`
+environment's deployment branch policy allows `main` only (it was created naming whatever the default branch was, so
+renaming the default branch means updating it: `gh api repos/Wyatt-Stanke/barkley/environments/github-pages/deployment-branch-policies`).
+The whole run takes ~5 min (export 37 s, migrate 34 s, import 34 s, Igor + terser 97 s, play-test 25 s) plus the
+deploy job. The one secret is
 **`GAMEMAKER_ACCESS_KEY`** (repo secret, already set), which `toolchain.mjs` hands to Igor's `runtime FetchLicense`.
 Caches: `game/original` (keyed on `src/fetch.mjs`) and `build/tools/{igor,runtimes,project-tool-*,chrome}` (keyed on
 `src/toolchain.mjs`); the licence is never cached. The play-test's screenshot and console are the `playtest` artifact.
@@ -406,6 +410,12 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
 
 ## Current state and next steps
 
+- **The repo is on GitHub (`Wyatt-Stanke/barkley`, `main`) and builds itself** (2026-09-24): run `36066668585`
+  built v1.3.1 from the archive.org exe on `ubuntu-24.04` with no GameMaker installed (ProjectTool, Igor, the runtime
+  and the licence all come through `toolchain.mjs`), play-tested it (game started, no exception), and deployed it to
+  `https://wyatt-stanke.github.io/barkley/`. The CI migration matches a Mac migration of the same export except for
+  PNG encoding (pixel-identical). `bsuajg-test` (below) is still live and `deploy.mjs` still targets it; the GitHub
+  Pages site is now built only by the workflow.
 - **v1.3.1 is deployed (`3b7522f`, 2026-09-22): the same game as v1.3.0, rebuilt from an export `virt/` now
   makes from the original executable on its own.** Not a line of GML or a pixel of art changed; what changed is
   that the hand-made step in front of the pipeline is gone (see "`virt/` … is done and needs no VM" below).

@@ -13,7 +13,8 @@ GameMaker no longer supports, and builds the web version, every time, from scrat
 node src/pipeline.mjs
 ```
 
-That runs every step, and takes 10-15 minutes the first time:
+That runs every step, in about five minutes on a GitHub runner (a little longer the first time on a new machine,
+while it downloads the game and the tools):
 
 | step | what | tool |
 |---|---|---|
