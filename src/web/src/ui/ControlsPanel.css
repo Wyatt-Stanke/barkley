@@ -1,0 +1,60 @@
+/* The binding lists, and the test that lights a control as it is pressed */
+.ctl-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+}
+.ctl-list dt {
+  font-weight: 700;
+}
+.ctl-list dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+}
+.ctl-key {
+  padding: 1px 7px;
+  font: 12px/1.6 var(--mono);
+  border: 1px solid var(--ink);
+}
+.ctl-or,
+.ctl-note {
+  font-size: 13px;
+  color: var(--mute);
+}
+.ctl-lamps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ctl-lamp {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 76px;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+}
+.ctl-lamp.on {
+  color: var(--paper);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.ctl-lamp-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+.ctl-lamp-key {
+  font: 12px/1.4 var(--mono);
+  color: var(--mute);
+}
+.ctl-lamp.on .ctl-lamp-key {
+  color: var(--paper);
+}
+.ctl-raw {
+  font: 12px/1.5 var(--mono);
+  color: var(--mute);
+}

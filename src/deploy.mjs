@@ -1,11 +1,12 @@
 // Deploy an HTML5 build to GitHub Pages (github.com/Wyatt-Stanke/bsuajg-test) in one command:
 //   node src/deploy.mjs <project .yyp | build dir> --message-file=<file> [--dry-run]
-// 1. build: a .yyp is built with `fuzz.mjs build --minify` (the page is the current src/web/index.html); a build dir
-//    is used as it is. 2. check: the page is the custom one, and a headless play-test boots it to the title screen with
-//    no uncaught exception. 3. commit: into the clone in build/deploy/bsuajg-test (cloned on first use), reset to
-//    origin/main first, so a deploy pushed from elsewhere is never dropped; the author is the previous deploy's.
-// 4. push, and watch the Pages workflow. 5. verify: the live index.html and game script match the build (cache-busted,
-//    retried while the CDN catches up) and every html5game script answers 200.
+// 1. build: a .yyp is built with `fuzz.mjs build --minify` (the page is the current src/web); a build dir is used as
+//    it is, with the current page and offline layer written over it. 2. check: the page is the custom one, and a
+//    headless play-test boots it to the title screen with no uncaught exception. 3. commit: into the clone in
+//    build/deploy/bsuajg-test (cloned on first use), reset to origin/main first, so a deploy pushed from elsewhere is
+//    never dropped; the author is the previous deploy's.
+// 4. push, and watch the Pages workflow. 5. verify: the live index.html, page app and game script match the build
+//    (cache-busted, retried while the CDN catches up) and every html5game script answers 200.
 // --dry-run stops after the commit, which stays local (the next deploy resets it away).
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -55,14 +56,15 @@ if (dir.endsWith('.yyp')) {
 const index = readFileSync(path.join(dir, 'index.html'), 'utf8');
 const game = index.match(/html5game\/([\w.-]+\.js)/)?.[1];
 if (!game || !existsSync(path.join(dir, 'html5game', game))) throw new Error(`${dir} isn't an HTML5 build`);
-// The service worker and its file list, made from the tree that is about to go up, whatever built it. Players on the
-// live site download this build in full before it replaces the one they have (src/offline.mjs, src/web/sw.js).
+// The page app, the service worker and its file list, made from the tree that is about to go up, whatever built it.
+// Players on the live site download this build in full before it replaces the one they have (src/offline.mjs,
+// src/web/public/sw.js).
 const version = writeBuild(dir);
 console.log(`version ${version.version}, build ${version.id}: ${version.files.length} files for offline play`);
 
 // 2. check
 step('check');
-if (!index.includes('barkley_loading')) throw new Error('index.html is the runtime default, not src/web/index.html');
+if (!index.includes('app/barkley.js')) throw new Error('index.html is the runtime default, not src/web/index.html');
 const test = mkdtempSync(path.join(tmpdir(), 'barkley-deploy-test-'));
 writeFileSync(path.join(test, 'probe.js'), "window.barkley && barkley.started ? 'game started' : 'not started'");
 const pt = spawnSync('node', [
@@ -136,6 +138,8 @@ const want = {
   'index.html': md5(index),
   'version.json': md5(readFileSync(path.join(dir, 'version.json'))),
   'sw.js': md5(readFileSync(path.join(dir, 'sw.js'))),
+  'app/barkley.js': md5(readFileSync(path.join(dir, 'app', 'barkley.js'))),
+  'app/barkley.css': md5(readFileSync(path.join(dir, 'app', 'barkley.css'))),
   [`html5game/${game}`]: md5(readFileSync(path.join(dir, 'html5game', game))),
 };
 for (const [file, sum] of Object.entries(want)) {

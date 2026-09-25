@@ -54,6 +54,7 @@
 import { spawn, spawnSync, execSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import {
+  readdirSync,
   readFileSync,
   writeFileSync,
   mkdirSync,
@@ -89,7 +90,14 @@ const ansi = (code) => (s) => (tty ? `\x1b[${code}m${s}\x1b[0m` : String(s));
 const [dim, bold, red, green, yellow, blue, magenta, cyan] = [2, 1, '1;31', 32, 33, 34, 35, 36].map(ansi);
 
 // ---- static server for the build ----
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json' };
+const TYPES = {
+  '.html': 'text/html',
+  '.js': 'text/javascript',
+  '.css': 'text/css', // a style sheet served as anything else is ignored
+  '.png': 'image/png',
+  '.json': 'application/json',
+  '.woff2': 'font/woff2',
+};
 function serve(root) {
   const server = createServer((req, res) => {
     const p = path.join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname));
@@ -1486,8 +1494,15 @@ function build(yyp, outDir, minify = false) {
   try {
     const proj = path.join(tmp, 'project');
     cpSync(path.dirname(yyp), proj, { recursive: true, filter: (s) => !s.includes(`${path.sep}mvc`) });
+    // The extensions' files have to be the one-line stubs import.mjs writes: the page app defines their functions. A
+    // project whose extensions carry their own code would draw a second touch overlay and define everything twice.
+    const extensions = path.join(proj, 'extensions');
+    for (const name of existsSync(extensions) ? readdirSync(extensions) : [])
+      for (const f of readdirSync(path.join(extensions, name)).filter((f) => f.endsWith('.js')))
+        if (!readFileSync(path.join(extensions, name, f), 'utf8').includes('barkley.extension('))
+          throw new Error(`${yyp}: extensions/${name}/${f} isn't a page stub; import the project again (src/import.mjs)`);
     // the custom index.html, at an absolute path: always the current src/web/index.html, so a page change needs no
-    // re-import (and an earlier Igor build may have deleted the project's copy)
+    // re-import (and an earlier Igor build may have deleted the project's copy); writeBuild adds the page app it loads
     const index = path.join(proj, 'options', 'html5', 'index.html');
     cpSync(path.join(HERE, 'web', 'index.html'), index);
     const opts = path.join(proj, 'options', 'html5', 'options_html5.yy');
@@ -1537,7 +1552,8 @@ function build(yyp, outDir, minify = false) {
     }
     rmSync(outDir, { recursive: true, force: true });
     cpSync(path.join(tmp, 'out'), outDir, { recursive: true });
-    // the service worker and the file list it caches the build from (a page under the fuzz harness never registers it)
+    // the page app (src/web), the service worker and the file list it caches the build from (a page under the fuzz
+    // harness never registers the worker)
     const v = writeBuild(outDir);
     harness(outDir); // checks it's fuzzable
     console.log(`built ${outDir}: v${v.version}, build ${v.id}, ${v.files.length} files to cache`);

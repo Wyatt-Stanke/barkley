@@ -2,7 +2,11 @@
 #   build/outputs/  migrations and their LTS imports
 #   build/fuzz/     the fuzzer's build, corpus and saved findings
 #   build/deploy/   the deploy repo's working clone
+#   build/web/      the page app (src/page.mjs builds src/web into it)
 build/
+
+# The page's npm packages (src/web; src/page.mjs installs them from its lockfile).
+node_modules/
 
 # Third-party installers (~320 MB).
 tools/
