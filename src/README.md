@@ -180,12 +180,14 @@ The worker has no version of its own; it does what the manifest it fetches tells
   The version alone (`v1.0.0`) is shown by `barkley_version()`, which reads the build's own `version.json`
   and so works with no worker at all — a browser without service workers, or a page opened with `?nosw`.
   Whatever the worker has said stands: it knows more, and it knows the version offline too.
-- **The link**, in a browser tab: `#offline-go`, beside Controls at the foot of the Start screen, grey
-  and underlined. It says what there is to download: **Save for offline play** (no copy yet),
-  **Finish saving for offline play** (a download that stopped after the files the game needs to
-  start), or **Update the offline copy to v1.4.1** (the server has a newer build than the copy,
-  which is what the tab keeps playing until then). A click hides it and downloads, with the progress
-  in the line under Start; a download that fails brings it back. The click also asks for persistent
+- **The link**, in a browser tab: `#offline-go`, grey and underlined, at the end of that same line,
+  and clicking it turns it into the progress. It says what there is to download:
+  `v1.4.0 · Save for offline play` (no copy yet), then `v1.4.0 · Saving for offline play 42%`;
+  `v1.4.0 · Finish saving for offline play` (a download that stopped after the files the game needs
+  to start), then `v1.4.0 · Saving the music 80%`; or
+  `v1.4.0 · Ready to play offline · Update to v1.4.1` (the server has a newer build than the copy,
+  which is what the tab keeps playing until then), then `v1.4.0 · Updating to v1.4.1 42%`. A
+  download that fails brings the link back. The click also asks for persistent
   storage (`navigator.storage.persist()`; Firefox asks the player), so the browser keeps the copy
   when space runs low. A tab that has clicked downloads for the rest of that page's life; the next
   visit asks again.
