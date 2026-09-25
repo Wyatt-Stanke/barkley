@@ -21,14 +21,14 @@ while it downloads the game and the tools):
 | fetch | the original game (archive.org, MD5-checked) and the GM6 decompiler's source | `src/fetch.mjs` |
 | export | `BarkleyV120.exe` → `.gm6` → a GameMaker: Studio 1.4 GMX, in Java containers | `virt/run.sh` |
 | migrate | the GMX → one that GameMaker LTS can import (patches, AST transforms, the real music and fonts) | `src/migrate.mjs` |
-| import | → a GameMaker LTS project, with the web page and its extensions | `src/import.mjs` |
-| build | Igor's HTML5 build, minified, plus the service worker for offline play | `src/fuzz.mjs build` |
+| import | → a GameMaker LTS project, with the page template and its extensions | `src/import.mjs` |
+| build | Igor's HTML5 build, minified, plus the page around the game (SolidJS, built from `src/web`) and the service worker for offline play | `src/fuzz.mjs build`, `src/page.mjs` |
 | play-test | boots the site in headless Chromium and starts the game; fails on an uncaught exception | `src/playtest.mjs` |
 
 The site lands in `build/pipeline/site/`; serve it with `python3 -m http.server` from there. A step whose output
 already exists is skipped, so a failed run picks up where it stopped.
 
-**What you need:** Node.js 24+, `curl`, `unzip`, `git`, `patch`, `ffmpeg`/`ffprobe`, `python3`, and podman or docker.
+**What you need:** Node.js 24+ with npm (for the page's packages), `curl`, `unzip`, `git`, `patch`, `ffmpeg`/`ffprobe`, `python3`, and podman or docker.
 And a GameMaker licence, one of:
 
 - GameMaker LTS 2026 installed and signed in (on a Mac, the pipeline uses the IDE's importer and the installed
@@ -45,7 +45,7 @@ deploy from GitHub Actions. The play-test's screenshot is kept as the run's `pla
 
 ## More
 
-- [`src/README.md`](src/README.md): every patch and transform, the web page, offline play, and the fuzzer.
+- [`src/README.md`](src/README.md): every patch and transform, the web page (`src/web`), offline play, and the fuzzer.
 - [`virt/README.md`](virt/README.md): how the executable becomes a GMX without Windows.
 - [`CLAUDE.md`](CLAUDE.md): the working notes — commands, gotchas, current state.
 

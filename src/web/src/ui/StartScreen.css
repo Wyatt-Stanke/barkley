@@ -1,0 +1,121 @@
+/* The Start word's loading fill; registered so it can animate between progress reports */
+@property --p {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+/* The Start screen: the whole page is the button, so a click or tap anywhere starts. Its words are drawn over it by
+   #face, which lets every click through but the offline link's (a button can't hold that link). They sit on the left
+   edge of the picture to come (4:3, centred), in the middle of the height. */
+#start {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  border: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+#start:focus {
+  outline: none;
+}
+#start:disabled {
+  cursor: default;
+}
+#face {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  --edge: calc((100vw - 100vh * 4 / 3) / 2 + var(--g));
+  padding: var(--touch-top) max(var(--edge), calc(var(--g) + var(--touch-right))) var(--touch-bottom)
+    max(var(--edge), calc(var(--g) + var(--touch-left)));
+  color: var(--ink);
+  font: 15px/1.3 var(--font);
+  pointer-events: none;
+}
+#face .name {
+  color: var(--mute);
+}
+/* While the game loads, the word fills from grey to white, left to right */
+#face .word {
+  margin: 8px 0 16px -0.04em;
+  font-size: clamp(56px, 14vmin, 128px);
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  color: transparent;
+  background: linear-gradient(to right, var(--ink) var(--p), var(--mute) var(--p));
+  -webkit-background-clip: text;
+  background-clip: text;
+  transition: --p 0.6s linear;
+}
+#face .hint {
+  color: var(--mute);
+}
+/* The version, and the offline copy (sw.js): how far it has got, or in a browser tab, a link to save it */
+#face #offline {
+  margin-top: 14px;
+  font-size: 13px;
+}
+#face #offline-go {
+  position: relative;
+  min-height: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  pointer-events: auto;
+}
+#face #offline-go:hover {
+  color: var(--ink);
+}
+/* a finger-sized target around the small words, without moving them */
+#face #offline-go::after {
+  content: '';
+  position: absolute;
+  inset: -14px -6px;
+}
+@media (pointer: coarse) {
+  #face .key {
+    display: none;
+  }
+}
+@media not (pointer: coarse) {
+  #face .touch {
+    display: none;
+  }
+}
+/* The foot of the Start screen, flush with the words above it: the Controls link, then (when a resume state is
+   waiting) a way to begin at the title screen instead. The rows stack, however they wrap. */
+#foot {
+  position: fixed;
+  z-index: 11;
+  left: max(calc(var(--g) + var(--touch-left)), calc((100vw - 100vh * 4 / 3) / 2 + var(--g)));
+  right: calc(var(--g) + var(--touch-right));
+  bottom: calc(var(--g) / 2 + var(--touch-bottom));
+  font: 15px/1.3 var(--font);
+}
+#ctlbar,
+#fresh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+#fresh {
+  column-gap: 12px;
+  color: var(--mute);
+}
+#fresh .ui-link {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+#fresh .ui-link:disabled {
+  opacity: 0.35;
+  cursor: default;
+}

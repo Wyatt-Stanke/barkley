@@ -7,7 +7,7 @@
 //   2. export    BarkleyV120.exe -> .gm6 -> GMX, in containers                     -> <out>/BarkleyV120.gmx (virt/run.sh)
 //   3. migrate   the GMX -> a GMX that GameMaker LTS can import                    -> <out>/barkley-<version>.gmx
 //   4. import    -> a GameMaker LTS project, with the page and its extensions      -> <out>/barkley-<version>/
-//   5. build     Igor HTML5, minified, plus the offline layer                      -> <out>/site/
+//   5. build     Igor HTML5, minified, plus the page (src/web) and offline layer  -> <out>/site/
 //   6. play-test the site in headless Chromium: it boots, Start is clicked, the game runs with no uncaught exception
 //
 // <out> defaults to build/pipeline. A step whose output already exists is skipped, so a failed run picks up where it
@@ -15,7 +15,7 @@
 // steps 1-2, when you have it. The GameMaker tools come from src/toolchain.mjs: the installed IDE and runtime on a Mac
 // that has them, otherwise downloads into build/tools/ (which need GAMEMAKER_ACCESS_KEY for the licence).
 //
-// Needs Node 24+, curl, unzip, git, patch, ffmpeg/ffprobe, python3, and podman or docker (step 2).
+// Needs Node 24+ and npm, curl, unzip, git, patch, ffmpeg/ffprobe, python3, and podman or docker (step 2).
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';

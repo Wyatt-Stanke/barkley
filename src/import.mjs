@@ -11,7 +11,8 @@ import { execFileSync } from 'node:child_process';
 import { VERSION } from './offline.mjs';
 import { projectTool } from './toolchain.mjs';
 
-// The files that ship into the page live in src/web/: index.html, the extension shims and the PWA assets.
+// The files that ship into the page live in src/web/: index.html (the page template) and pwa/ (the app manifest and
+// icon) come in here; the page app itself is built into every HTML5 build instead (src/page.mjs, src/offline.mjs).
 const web = (f) => path.join(import.meta.dirname, 'web', f);
 
 const [gmx, yyp, tool = projectTool()] = process.argv.slice(2).map((p) => p && path.resolve(p));
@@ -31,9 +32,11 @@ console.log(`importing ${project} with ${tool}`);
 execFileSync(tool, ['SCRIPT', `PATH=${script}`], { cwd: path.dirname(tool), stdio: 'ignore' });
 fs.rmSync(script);
 
-// The HTML5 runtime's window_set_fullscreen does nothing, so fullscreen.js from this folder provides fullscreen_set and
-// fullscreen_get (called by patch 14 and modernized/05). resume.js keeps the game state across a reload for patch
-// modernized/06, so only a modernized migration gets it.
+// The extensions declare the functions the GML calls; the page (src/web/src/extensions/) defines them, and each
+// extension's file only turns its part of the page on as the runtime loads it. The HTML5 runtime's
+// window_set_fullscreen does nothing, so Fullscreen provides fullscreen_set and fullscreen_get (called by patch 14 and
+// modernized/05). Resume keeps the game state across a reload for patch modernized/06, so only a modernized migration
+// gets it.
 addExtension('Fullscreen', 'fullscreen.js', [
   ['fullscreen_set', [2], 2],
   ['fullscreen_get', [], 2],
@@ -44,10 +47,10 @@ if (fs.existsSync(path.join(gmx, 'scripts', 'resume_save.gml')))
     ['resume_take', [], 1],
     ['resume_clear', [], 2],
   ]);
-// saves.js carries the save slots in and out of browser storage as text, for patch modernized/09.
+// Saves carries the save slots in and out of browser storage as text, for patch modernized/09.
 if (fs.existsSync(path.join(gmx, 'scripts', 'sSaveData.gml')))
   addExtension('Saves', 'saves.js', [['saves_open', [1], 2]]);
-// touch.js draws the mobile control overlay for patch modernized/09.
+// Touch draws the mobile control overlay for patch modernized/10.
 if (fs.readFileSync(path.join(gmx, 'scripts', 'key_doset.gml'), 'utf8').includes('touch_keys'))
   addExtension('Touch', 'touch.js', [
     ['touch_keys', [2, 2, 2, 2, 2, 2, 2], 2],
@@ -59,17 +62,17 @@ if (fs.readFileSync(path.join(gmx, 'scripts', 'key_doset.gml'), 'utf8').includes
     ['touch_view_h', [], 2],
     ['touch_dpr', [], 2],
   ]);
-// gamepad.js sends the bound keys from a game controller, for patch modernized/11.
+// Gamepad sends the bound keys from a game controller, for patch modernized/11.
 if (fs.readFileSync(path.join(gmx, 'scripts', 'key_doset.gml'), 'utf8').includes('pad_keys'))
   addExtension('Gamepad', 'gamepad.js', [
     ['pad_keys', [2, 2, 2, 2, 2, 2, 2], 2],
     ['pad_context', [2], 2],
   ]);
-// controls.js shows the Controls panel, which index.html's Start screen opens before the game runs. It is a page
-// feature, so nothing in the GML calls it; it ships with a modernized migration, beside gamepad.js.
+// Controls turns on the Controls panel, which the Start screen opens before the game runs. It is a page feature, so
+// nothing in the GML calls it; it ships with a modernized migration, beside Gamepad.
 if (fs.readFileSync(path.join(gmx, 'scripts', 'key_doset.gml'), 'utf8').includes('pad_keys'))
   addExtension('Controls', 'controls.js', [['controls_show', [], 2]]);
-// crash.js records what a crash report needs for patch modernized/07.
+// Crash records what a crash report needs for patch modernized/07.
 if (
   fs.existsSync(path.join(gmx, 'scripts', 'resume_tick.gml')) &&
   fs.readFileSync(path.join(gmx, 'scripts', 'resume_tick.gml'), 'utf8').includes('crash_put')
@@ -81,12 +84,18 @@ if (
     ['crash_end', [1], 2],
   ]);
 
-// Adds a JavaScript file from this folder to the project as an extension. functions are [name, argument types, return
-// type], where a type is 1 (string) or 2 (real).
+// Adds an extension to the project: a JavaScript file that turns its part of the page on, declaring the functions the
+// page defines for it. functions are [name, argument types, return type], where a type is 1 (string) or 2 (real).
 function addExtension(name, file, functions) {
   const extension = path.join(path.dirname(yyp), 'extensions', name);
   fs.mkdirSync(extension, { recursive: true });
-  fs.copyFileSync(web(file), path.join(extension, file));
+  fs.writeFileSync(
+    path.join(extension, file),
+    `// Written by src/import.mjs. The page (app/barkley.js, built from src/web) defines the ${name} extension's\n` +
+      `// functions: ${functions.map(([fn]) => fn).join(', ')}.\n` +
+      `// The runtime loads this file with the game, which turns them on.\n` +
+      `barkley.extension(${JSON.stringify(name)});\n`,
+  );
   fs.writeFileSync(
     path.join(extension, `${name}.yy`),
     `{
@@ -166,20 +175,19 @@ ${functions.map(([fn]) => `        {"name":"${fn}","path":"extensions/${name}/${
 }
 
 // Files the page uses, as Included Files, which the HTML5 build copies into html5game/ beside the game (index.html
-// links them from there): the web manifest and its icons, made from web/icon.png, which make the page
-// installable as an app (PWA), and the page's font, Inter, with its licence (SIL OFL 1.1, which asks for it to travel
-// with the font).
+// links them from there): the web manifest and its icons, made from web/pwa/icon.png, which make the page
+// installable as an app (PWA).
 const datafiles = path.join(path.dirname(yyp), 'datafiles');
 fs.mkdirSync(datafiles);
-const included = ['manifest.webmanifest', 'inter.woff2', 'inter-OFL.txt'];
-for (const f of included) fs.copyFileSync(web(f), path.join(datafiles, f));
+const included = ['manifest.webmanifest'];
+for (const f of included) fs.copyFileSync(web(`pwa/${f}`), path.join(datafiles, f));
 for (const size of [180, 192, 512]) {
   const icon = `icon-${size}.png`;
   execFileSync('ffmpeg', [
     '-v',
     'error',
     '-i',
-    web('icon.png'),
+    web('pwa/icon.png'),
     '-vf',
     `scale=${size}:${size}:flags=lanczos`,
     path.join(datafiles, icon),
@@ -197,8 +205,9 @@ fs.writeFileSync(
   ),
 );
 
-// The importer skips the HTML5 options, so write them: the game's name as the page title, and web/index.html
-// (a Start button, and MP3 sounds instead of Ogg for Safari). Igor finds the index only by absolute path.
+// The importer skips the HTML5 options, so write them: the game's name as the page title, web/index.html as the page
+// (it loads the page app, the Start screen and the rest), and barkley_loading (the page's) as the loading bar. Igor
+// finds the index only by absolute path.
 const html5 = path.join(path.dirname(yyp), 'options', 'html5');
 fs.mkdirSync(html5, { recursive: true });
 fs.copyFileSync(web('index.html'), path.join(html5, 'index.html'));
