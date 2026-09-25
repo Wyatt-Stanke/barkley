@@ -25,22 +25,22 @@ const streamed = (p, bytes) => /\.mp3$/.test(p) && bytes > 512 * 1024;
 const hash = (buf) => createHash('sha256').update(buf).digest('hex').slice(0, 16);
 
 export function writeBuild(dir) {
-  cpSync(buildPage(), dir, { recursive: true });
-  const files = [];
-  (function walk(rel) {
-    for (const e of readdirSync(path.join(dir, rel), { withFileTypes: true }).sort((a, b) =>
-      a.name < b.name ? -1 : 1,
-    )) {
-      const p = rel ? `${rel}/${e.name}` : e.name;
-      if (SKIP.test(p)) continue;
-      if (e.isDirectory()) walk(p);
-      else {
-        const full = path.join(dir, p);
-        files.push([p, hash(readFileSync(full)), statSync(full).size, streamed(p, statSync(full).size) ? 0 : 1]);
-      }
-    }
-  })('');
-  const version = { version: VERSION, id: hash(files.map((f) => f.join(' ')).join('\n')), files };
-  writeFileSync(path.join(dir, 'version.json'), JSON.stringify(version));
-  return version;
+	cpSync(buildPage(), dir, { recursive: true });
+	const files = [];
+	(function walk(rel) {
+		for (const e of readdirSync(path.join(dir, rel), { withFileTypes: true }).sort((a, b) =>
+			a.name < b.name ? -1 : 1,
+		)) {
+			const p = rel ? `${rel}/${e.name}` : e.name;
+			if (SKIP.test(p)) continue;
+			if (e.isDirectory()) walk(p);
+			else {
+				const full = path.join(dir, p);
+				files.push([p, hash(readFileSync(full)), statSync(full).size, streamed(p, statSync(full).size) ? 0 : 1]);
+			}
+		}
+	})('');
+	const version = { version: VERSION, id: hash(files.map((f) => f.join(' ')).join('\n')), files };
+	writeFileSync(path.join(dir, 'version.json'), JSON.stringify(version));
+	return version;
 }

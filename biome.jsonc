@@ -1,0 +1,109 @@
+// Formatting and linting for the hand-written JS, TS, CSS, HTML and JSON (see CLAUDE.md, "Commands").
+// Run from the repository root: npx -y @biomejs/biome@2.5.14 check --write
+{
+	"$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+	"vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+	"files": {
+		// Generated: the Peggy parser (from gml.peggy) and npm's lockfile. docs/ holds a saved artifact page.
+		"includes": ["**", "!src/lib/gml.parser.mjs", "!**/package-lock.json", "!docs"]
+	},
+	"formatter": { "indentStyle": "tab", "indentWidth": 2, "lineWidth": 120 },
+	"javascript": { "formatter": { "quoteStyle": "single" } },
+	"css": { "formatter": { "quoteStyle": "single" } },
+	"html": { "formatter": { "enabled": true, "indentScriptAndStyle": true } },
+	"linter": {
+		"rules": {
+			"preset": "recommended",
+			// Beyond the recommended set, and recommended rules that only warn, raised to errors.
+			"complexity": {
+				"noArguments": "error",
+				"noCommaOperator": "error",
+				"noForEach": "error",
+				"noUselessCatchBinding": "error",
+				"noUselessStringConcat": "error",
+				"noUselessUndefined": "error",
+				"useArrowFunction": "error",
+				"useOptionalChain": "error"
+			},
+			"correctness": {
+				"noUndeclaredVariables": "error",
+				"noUnusedFunctionParameters": "error",
+				"noUnusedImports": "error",
+				"noUnusedPrivateClassMembers": "error",
+				"noUnusedVariables": "error"
+			},
+			"style": {
+				"noCommonJs": "error",
+				"noNonNullAssertion": "error",
+				"noUselessElse": "error",
+				"noYodaExpression": "error",
+				"useAtIndex": "error",
+				"useCollapsedElseIf": "error",
+				"useCollapsedIf": "error",
+				"useConsistentArrayType": "error",
+				"useConsistentCurlyBraces": "error",
+				"useConsistentTypeDefinitions": "error",
+				"useConst": "error",
+				"useExponentiationOperator": "error",
+				"useForOf": "error",
+				"useShorthandAssign": "error",
+				"useTemplate": "error",
+				"useThrowNewError": "error",
+				"useThrowOnlyError": "error"
+			},
+			"suspicious": {
+				"noAlert": "error",
+				"noEvolvingTypes": "error",
+				"noImplicitAnyLet": "error",
+				"noUnusedExpressions": "error",
+				"noVar": "error",
+				"useAwait": "error",
+				"useNumberToFixedDigitsArgument": "error"
+			}
+		}
+	},
+	"overrides": [
+		{
+			// The page app: tsc (npm run check) sees env.d.ts's declare global, which Biome's scope analysis doesn't.
+			"includes": ["src/web/src/**"],
+			"linter": { "rules": { "correctness": { "noUndeclaredVariables": "off" } } }
+		},
+		{
+			// Injected as a classic (sloppy) script, not a module: its 'use strict' functions, function expressions and
+			// arguments are deliberate. The runtime's error trace walks arguments.callee.caller and has to stop at a strict
+			// function; an arrow function, or rest parameters beside 'use strict', would change that or not parse.
+			"includes": ["src/fuzz-page.js"],
+			"javascript": {
+				"globals": [
+					"GetWithArray",
+					"JSON_game",
+					"asset_get_index",
+					"g_pBuiltIn",
+					"game_restart",
+					"gml_Script_resume_restore",
+					"gml_Script_resume_save",
+					"json_parse",
+					"object_get_name",
+					"room_get_name",
+					"string",
+					"surface_reset_target"
+				]
+			},
+			"linter": {
+				"rules": {
+					"complexity": { "noArguments": "off", "useArrowFunction": "off" },
+					"suspicious": { "noRedundantUseStrict": "off" }
+				}
+			}
+		},
+		{
+			// Functions that fuzz.mjs sends into the page, where fuzz-page.js has defined __fuzz
+			"includes": ["src/fuzz.mjs"],
+			"javascript": { "globals": ["__fuzz"] }
+		},
+		{
+			"includes": ["src/web/index.html"],
+			"javascript": { "globals": ["barkley"] }
+		}
+	]
+}

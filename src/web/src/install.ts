@@ -4,8 +4,8 @@ import { createSignal } from 'solid-js';
 import { isApp, storage } from './page';
 
 export const ios =
-  /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-  (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+	/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+	(/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 
 export const [installOpen, setInstallOpen] = createSignal(false);
 // Chrome can show its own install dialog, but only once it decides the page qualifies, so the Install button appears
@@ -13,13 +13,13 @@ export const [installOpen, setInstallOpen] = createSignal(false);
 export const [installPrompt, setInstallPrompt] = createSignal<BeforeInstallPromptEvent | null>(null);
 
 export function offerInstall() {
-  const touch = navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches;
-  if (isApp() || !touch || storage.get('barkley.install') !== null) return;
-  storage.set('barkley.install', '1');
-  addEventListener('beforeinstallprompt', (e) => {
-    if (!installOpen()) return;
-    e.preventDefault();
-    setInstallPrompt(e);
-  });
-  setInstallOpen(true);
+	const touch = navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches;
+	if (isApp() || !touch || storage.get('barkley.install') !== null) return;
+	storage.set('barkley.install', '1');
+	addEventListener('beforeinstallprompt', (e) => {
+		if (!installOpen()) return;
+		e.preventDefault();
+		setInstallPrompt(e);
+	});
+	setInstallOpen(true);
 }

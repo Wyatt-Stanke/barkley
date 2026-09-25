@@ -1,98 +1,98 @@
 /* Panels over the game (install, Controls, Saves, crash report): a black sheet, a title and its hairline, flush-left
    text in one column. Above the touch overlay, whose hit layer would otherwise take their taps. */
 .ui-panel {
-  position: fixed;
-  inset: 0;
-  z-index: 2147483600;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  padding: calc(var(--g) / 2 + var(--touch-top)) calc(var(--g) + var(--touch-right))
-    calc(var(--g) + var(--touch-bottom)) calc(var(--g) + var(--touch-left));
-  overflow-y: auto;
-  color: var(--ink);
-  background: var(--paper);
-  font: 15px/1.45 var(--font);
-  -webkit-user-select: text;
-  user-select: text;
+	position: fixed;
+	inset: 0;
+	z-index: 2147483600;
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+	padding: calc(var(--g) / 2 + var(--touch-top)) calc(var(--g) + var(--touch-right))
+		calc(var(--g) + var(--touch-bottom)) calc(var(--g) + var(--touch-left));
+	overflow-y: auto;
+	color: var(--ink);
+	background: var(--paper);
+	font: 15px / 1.45 var(--font);
+	-webkit-user-select: text;
+	user-select: text;
 }
 .ui-panel:focus {
-  outline: none;
+	outline: none;
 }
 .ui-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  min-height: 44px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--ink);
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 16px;
+	min-height: 44px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--ink);
 }
 .ui-panel h2 {
-  margin: 0;
-  font: 700 22px/1.1 var(--font);
-  letter-spacing: -0.01em;
+	margin: 0;
+	font: 700 22px / 1.1 var(--font);
+	letter-spacing: -0.01em;
 }
 .ui-panel h3 {
-  margin: 0;
-  padding-top: 8px;
-  border-top: 1px solid var(--rule);
-  font: 700 12px/1.3 var(--font);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+	margin: 0;
+	padding-top: 8px;
+	border-top: 1px solid var(--rule);
+	font: 700 12px / 1.3 var(--font);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
 }
 .ui-panel p {
-  margin: 0;
-  max-width: 36em;
+	margin: 0;
+	max-width: 36em;
 }
 .ui-panel .ui-mute {
-  color: var(--mute);
+	color: var(--mute);
 }
 .ui-panel .ui-status {
-  min-height: 1.45em;
-  font-weight: 700;
+	min-height: 1.45em;
+	font-weight: 700;
 }
 .ui-cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 32px;
-  flex: 1 0 auto;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 32px;
+	flex: 1 0 auto;
 }
 @media (min-width: 720px) {
-  .ui-cols {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
+	.ui-cols {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	}
 }
 .ui-col {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
 }
 .ui-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
 }
 .ui-foot {
-  display: grid;
-  gap: 8px;
+	display: grid;
+	gap: 8px;
 }
 .ui-code {
-  flex: 1 0 8em;
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 8em;
-  padding: 8px;
-  font: 12px/1.4 var(--mono);
-  color: var(--ink);
-  background: transparent;
-  border: 1px solid var(--rule);
-  border-radius: 0;
-  resize: vertical;
-  word-break: break-all;
+	flex: 1 0 8em;
+	box-sizing: border-box;
+	width: 100%;
+	min-height: 8em;
+	padding: 8px;
+	font: 12px / 1.4 var(--mono);
+	color: var(--ink);
+	background: transparent;
+	border: 1px solid var(--rule);
+	border-radius: 0;
+	resize: vertical;
+	word-break: break-all;
 }
 .ui-code::placeholder {
-  color: var(--mute);
+	color: var(--mute);
 }

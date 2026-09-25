@@ -1,13 +1,15 @@
 #!/usr/bin/env node
+
 // Imports a migrated GMX into a GameMaker LTS project without the IDE, using the IDE's ProjectTool (the installed
 // IDE's, or one toolchain.mjs downloads), and fails if the importer reports GML it could not convert (it leaves such
 // files as 1.4 code).
 //
 //   node src/import.mjs <migrated GMX dir> <output .yyp path> [ProjectTool path]
+
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { VERSION } from './offline.mjs';
 import { projectTool } from './toolchain.mjs';
 
@@ -17,12 +19,12 @@ const web = (f) => path.join(import.meta.dirname, 'web', f);
 
 const [gmx, yyp, tool = projectTool()] = process.argv.slice(2).map((p) => p && path.resolve(p));
 if (!yyp) {
-  console.error('usage: node import.mjs <migrated GMX dir> <output .yyp path> [ProjectTool path]');
-  process.exit(1);
+	console.error('usage: node import.mjs <migrated GMX dir> <output .yyp path> [ProjectTool path]');
+	process.exit(1);
 }
 if (fs.existsSync(path.dirname(yyp))) {
-  console.error(`${path.dirname(yyp)} already exists`);
-  process.exit(1);
+	console.error(`${path.dirname(yyp)} already exists`);
+	process.exit(1);
 }
 
 const project = fs.readdirSync(gmx).find((f) => f.endsWith('.project.gmx'));
@@ -38,67 +40,67 @@ fs.rmSync(script);
 // modernized/05). Resume keeps the game state across a reload for patch modernized/06, so only a modernized migration
 // gets it.
 addExtension('Fullscreen', 'fullscreen.js', [
-  ['fullscreen_set', [2], 2],
-  ['fullscreen_get', [], 2],
+	['fullscreen_set', [2], 2],
+	['fullscreen_get', [], 2],
 ]);
 if (fs.existsSync(path.join(gmx, 'scripts', 'resume_save.gml')))
-  addExtension('Resume', 'resume.js', [
-    ['resume_put', [1], 2],
-    ['resume_take', [], 1],
-    ['resume_clear', [], 2],
-  ]);
+	addExtension('Resume', 'resume.js', [
+		['resume_put', [1], 2],
+		['resume_take', [], 1],
+		['resume_clear', [], 2],
+	]);
 // Saves carries the save slots in and out of browser storage as text, for patch modernized/09.
 if (fs.existsSync(path.join(gmx, 'scripts', 'sSaveData.gml')))
-  addExtension('Saves', 'saves.js', [['saves_open', [1], 2]]);
+	addExtension('Saves', 'saves.js', [['saves_open', [1], 2]]);
 // Touch draws the mobile control overlay for patch modernized/10.
 if (fs.readFileSync(path.join(gmx, 'scripts', 'key_doset.gml'), 'utf8').includes('touch_keys'))
-  addExtension('Touch', 'touch.js', [
-    ['touch_keys', [2, 2, 2, 2, 2, 2, 2], 2],
-    ['touch_context', [2], 2],
-    ['touch_active', [], 2],
-    ['touch_view_x', [], 2],
-    ['touch_view_y', [], 2],
-    ['touch_view_w', [], 2],
-    ['touch_view_h', [], 2],
-    ['touch_dpr', [], 2],
-  ]);
+	addExtension('Touch', 'touch.js', [
+		['touch_keys', [2, 2, 2, 2, 2, 2, 2], 2],
+		['touch_context', [2], 2],
+		['touch_active', [], 2],
+		['touch_view_x', [], 2],
+		['touch_view_y', [], 2],
+		['touch_view_w', [], 2],
+		['touch_view_h', [], 2],
+		['touch_dpr', [], 2],
+	]);
 // Gamepad sends the bound keys from a game controller, for patch modernized/11.
 if (fs.readFileSync(path.join(gmx, 'scripts', 'key_doset.gml'), 'utf8').includes('pad_keys'))
-  addExtension('Gamepad', 'gamepad.js', [
-    ['pad_keys', [2, 2, 2, 2, 2, 2, 2], 2],
-    ['pad_context', [2], 2],
-  ]);
+	addExtension('Gamepad', 'gamepad.js', [
+		['pad_keys', [2, 2, 2, 2, 2, 2, 2], 2],
+		['pad_context', [2], 2],
+	]);
 // Controls turns on the Controls panel, which the Start screen opens before the game runs. It is a page feature, so
 // nothing in the GML calls it; it ships with a modernized migration, beside Gamepad.
 if (fs.readFileSync(path.join(gmx, 'scripts', 'key_doset.gml'), 'utf8').includes('pad_keys'))
-  addExtension('Controls', 'controls.js', [['controls_show', [], 2]]);
+	addExtension('Controls', 'controls.js', [['controls_show', [], 2]]);
 // Crash records what a crash report needs for patch modernized/07.
 if (
-  fs.existsSync(path.join(gmx, 'scripts', 'resume_tick.gml')) &&
-  fs.readFileSync(path.join(gmx, 'scripts', 'resume_tick.gml'), 'utf8').includes('crash_put')
+	fs.existsSync(path.join(gmx, 'scripts', 'resume_tick.gml')) &&
+	fs.readFileSync(path.join(gmx, 'scripts', 'resume_tick.gml'), 'utf8').includes('crash_put')
 )
-  addExtension('Crash', 'crash.js', [
-    ['crash_put', [1, 1], 2],
-    ['crash_step', [2], 2],
-    ['crash_wanted', [], 2],
-    ['crash_end', [1], 2],
-  ]);
+	addExtension('Crash', 'crash.js', [
+		['crash_put', [1, 1], 2],
+		['crash_step', [2], 2],
+		['crash_wanted', [], 2],
+		['crash_end', [1], 2],
+	]);
 
 // Adds an extension to the project: a JavaScript file that turns its part of the page on, declaring the functions the
 // page defines for it. functions are [name, argument types, return type], where a type is 1 (string) or 2 (real).
 function addExtension(name, file, functions) {
-  const extension = path.join(path.dirname(yyp), 'extensions', name);
-  fs.mkdirSync(extension, { recursive: true });
-  fs.writeFileSync(
-    path.join(extension, file),
-    `// Written by src/import.mjs. The page (app/barkley.js, built from src/web) defines the ${name} extension's\n` +
-      `// functions: ${functions.map(([fn]) => fn).join(', ')}.\n` +
-      `// The runtime loads this file with the game, which turns them on.\n` +
-      `barkley.extension(${JSON.stringify(name)});\n`,
-  );
-  fs.writeFileSync(
-    path.join(extension, `${name}.yy`),
-    `{
+	const extension = path.join(path.dirname(yyp), 'extensions', name);
+	fs.mkdirSync(extension, { recursive: true });
+	fs.writeFileSync(
+		path.join(extension, file),
+		`// Written by src/import.mjs. The page (app/barkley.js, built from src/web) defines the ${name} extension's\n` +
+			`// functions: ${functions.map(([fn]) => fn).join(', ')}.\n` +
+			`// The runtime loads this file with the game, which turns them on.\n` +
+			`barkley.extension(${JSON.stringify(name)});\n`,
+	);
+	fs.writeFileSync(
+		path.join(extension, `${name}.yy`),
+		`{
   "$GMExtension":"",
   "%Name":"${name}",
   "androidactivityinject":"",
@@ -165,13 +167,13 @@ ${functions.map(([fn]) => `        {"name":"${fn}","path":"extensions/${name}/${
   "tvosThirdPartyFrameworkEntries":[],
 }
 `,
-  );
-  fs.writeFileSync(
-    yyp,
-    fs
-      .readFileSync(yyp, 'utf8')
-      .replace('"resources":[\n', `$&    {"id":{"name":"${name}","path":"extensions/${name}/${name}.yy",},},\n`),
-  );
+	);
+	fs.writeFileSync(
+		yyp,
+		fs
+			.readFileSync(yyp, 'utf8')
+			.replace('"resources":[\n', `$&    {"id":{"name":"${name}","path":"extensions/${name}/${name}.yy",},},\n`),
+	);
 }
 
 // Files the page uses, as Included Files, which the HTML5 build copies into html5game/ beside the game (index.html
@@ -182,27 +184,27 @@ fs.mkdirSync(datafiles);
 const included = ['manifest.webmanifest'];
 for (const f of included) fs.copyFileSync(web(`pwa/${f}`), path.join(datafiles, f));
 for (const size of [180, 192, 512]) {
-  const icon = `icon-${size}.png`;
-  execFileSync('ffmpeg', [
-    '-v',
-    'error',
-    '-i',
-    web('pwa/icon.png'),
-    '-vf',
-    `scale=${size}:${size}:flags=lanczos`,
-    path.join(datafiles, icon),
-  ]);
-  included.push(icon);
+	const icon = `icon-${size}.png`;
+	execFileSync('ffmpeg', [
+		'-v',
+		'error',
+		'-i',
+		web('pwa/icon.png'),
+		'-vf',
+		`scale=${size}:${size}:flags=lanczos`,
+		path.join(datafiles, icon),
+	]);
+	included.push(icon);
 }
 const project_yyp = fs.readFileSync(yyp, 'utf8');
 if (!project_yyp.includes('"IncludedFiles":[],')) throw new Error('no empty IncludedFiles list in the .yyp');
 fs.writeFileSync(
-  yyp,
-  project_yyp.replace(
-    '"IncludedFiles":[],',
-    () =>
-      `"IncludedFiles":[\n${included.map((f) => `    {"$GMIncludedFile":"","%Name":"${f}","CopyToMask":-1,"filePath":"datafiles","name":"${f}","resourceType":"GMIncludedFile","resourceVersion":"2.0",},\n`).join('')}  ],`,
-  ),
+	yyp,
+	project_yyp.replace(
+		'"IncludedFiles":[],',
+		() =>
+			`"IncludedFiles":[\n${included.map((f) => `    {"$GMIncludedFile":"","%Name":"${f}","CopyToMask":-1,"filePath":"datafiles","name":"${f}","resourceType":"GMIncludedFile","resourceVersion":"2.0",},\n`).join('')}  ],`,
+	),
 );
 
 // The importer skips the HTML5 options, so write them: the game's name as the page title, web/index.html as the page
@@ -212,8 +214,8 @@ const html5 = path.join(path.dirname(yyp), 'options', 'html5');
 fs.mkdirSync(html5, { recursive: true });
 fs.copyFileSync(web('index.html'), path.join(html5, 'index.html'));
 fs.writeFileSync(
-  path.join(html5, 'options_html5.yy'),
-  `{
+	path.join(html5, 'options_html5.yy'),
+	`{
   "$GMHtml5Options":"",
   "%Name":"HTML5",
   "name":"HTML5",
@@ -253,10 +255,10 @@ fs.writeFileSync(
 
 const notes = path.join(path.dirname(yyp), 'notes');
 const report = fs
-  .readdirSync(notes, { recursive: true })
-  .filter((f) => /^compatibility_report.*\.txt$/.test(path.basename(f)))
-  .map((f) => fs.readFileSync(path.join(notes, f), 'utf8'))
-  .join('\n');
+	.readdirSync(notes, { recursive: true })
+	.filter((f) => /^compatibility_report.*\.txt$/.test(path.basename(f)))
+	.map((f) => fs.readFileSync(path.join(notes, f), 'utf8'))
+	.join('\n');
 const problems = report.split('\n').filter((l) => /^ERROR|^Too many errors/.test(l));
 console.log(problems.length ? `importer could not convert:\n${problems.join('\n')}` : 'importer converted all GML');
 console.log(`project: ${yyp}`);

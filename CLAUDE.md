@@ -105,9 +105,11 @@ cd src/web && npm run check   # type-check only
 # Regenerate the GML parser after editing src/lib/gml.peggy (never edit gml.parser.mjs by hand)
 npx -y peggy@5.1.0 --format es --allowed-start-rules Program,Tokens -o src/lib/gml.parser.mjs src/lib/gml.peggy
 
-# Format (no config file; these flags match the existing style; skip the generated parser)
-npx prettier@3.9.6 --write --single-quote --print-width 120 "src/**/*.mjs" "!src/lib/gml.parser.mjs"
-npx prettier@3.9.6 --write --single-quote --print-width 120 "src/web/src/**/*.{ts,tsx,css}" src/web/vite.config.ts
+# Format and lint every hand-written JS, TS, CSS, HTML and JSON file with Biome (biome.jsonc, from the repo root; it
+# skips the generated parser, the lockfile and docs/). check --write applies the safe fixes and formats; --unsafe also
+# applies the rest, which can change behaviour, so read what it did. ci changes nothing and fails on any finding.
+npx -y @biomejs/biome@2.5.14 check --write
+npx -y @biomejs/biome@2.5.14 ci
 ```
 
 For **readable runtime stacks** from a plain Igor build, use a copy of the user folder (in a temp dir, never edit the real one) whose `local_settings.json` sets `"machine.Platform Settings.HTML5.obfuscate": false` and `"machine.Platform Settings.HTML5.pretty_print": true`. `fuzz.mjs build` does exactly this. The default build obfuscates, and stacks show names like `_pN2`.
@@ -122,7 +124,11 @@ There's no test suite. Verify in these ways:
 - Every `.gml` in a code tree should parse with `parse()` from `src/lib/gml.mjs`. This is a weak syntax check: when a keyword statement fails to parse, the PEG falls back to a plain statement, so `if (a) = 3` with no body parses as assigning to a call `if(a)`, and `if = 3`, `with = 2` or a bare `return` at end of file also pass. The LTS importer is the real syntax check.
 - Every called function should exist in LTS. Walk the code tree with `parse`/`walk`/`isCall`, then subtract the built-ins from `$RT/GmlSpec.xml` (`<Function Name="…">`, about 2,357), the project's `scripts/`, the imported project's `scripts/` (the importer's compatibility scripts: `instance_create`, `joystick_exists`, `joystick_direction`, `joystick_check_button`, `draw_set_blend_mode`, `room_set_view`), and the extension functions (listed per extension in `import.mjs`: `fullscreen_*`, `resume_*`, `saves_open`, `touch_*`, `crash_*`). Nothing should be left.
 - `import.mjs` should report "importer converted all GML". The strongest check: scan the imported `.gml` for single-quoted strings outside `"…"` strings and comments. Any hit means the importer skipped that file.
-- `node src/page.mjs` should type-check and build clean (`tsc --noEmit` is the page's only static check).
+- `node src/page.mjs` should type-check and build clean.
+- `npx -y @biomejs/biome@2.5.14 ci` should pass. The rules are `recommended` plus a stricter set, all errors. Biome
+  parses every `.js` as a module, but `src/fuzz-page.js` is injected as a sloppy script whose `'use strict'` functions,
+  function expressions and `arguments` keep the runtime's `arguments.callee.caller` walk working, so its override turns
+  off the rules that would rewrite those. Put a real exception in a `// biome-ignore <rule>: <why>` comment.
 - Igor should exit 0 and `playtest.mjs` should show no exception. On HTML5, a GML runtime error shows up as `Unhandled Exception - Uncaught { message : … stacktrace : [ … gml_Script_…/gml_Object_… ] }`.
 
 ## Layout
@@ -130,7 +136,7 @@ There's no test suite. Verify in these ways:
 Everything lives in `~/Documents/barkley/`, which is both the working directory and a **git repo**
 (initialised 2026-09-20), moving to **`github.com/Wyatt-Stanke/barkley`** (public; the old deploy repo below is
 separate). `.gitignore` keeps the generated and bulk-binary folders out, so only `src/`, `virt/`, `docs/`,
-`game/recovered-scripts/`, `.github/`, `README.md`, `.gitignore` and this file are tracked.
+`game/recovered-scripts/`, `.github/`, `README.md`, `biome.jsonc`, `.gitignore` and this file are tracked.
 
 ### GitHub Actions (`.github/workflows/pages.yml`)
 
@@ -156,6 +162,7 @@ need at all (they build `.yyp` projects) is **ProjectTool, published per platfor
 ```
 barkley/
   CLAUDE.md      this file
+  biome.jsonc    Biome's formatter and linter settings (see "Commands")
   src/           all the tooling (Node.js 22+, no npm packages but the page's)
     *.mjs        the pipeline: pipeline (all of it), fetch, toolchain, migrate, import, playtest, fuzz, deploy, assets, transforms, offline, page
     version.json the port's semver version, the one place it is written
