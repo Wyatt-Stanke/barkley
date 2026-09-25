@@ -16,29 +16,29 @@ import { load, markReady, openControls, start } from './start';
 import { App } from './ui/App';
 
 const api: Api = {
-  get started() {
-    return started();
-  },
-  load,
-  ready: markReady,
-  start,
-  controls: openControls,
-  offlineSave: saveOffline,
-  extension,
-  get resumeState() {
-    return resumeState();
-  },
-  get padMuted() {
-    return padMuted();
-  },
+	get started() {
+		return started();
+	},
+	load,
+	ready: markReady,
+	start,
+	controls: openControls,
+	offlineSave: saveOffline,
+	extension,
+	get resumeState() {
+		return resumeState();
+	},
+	get padMuted() {
+		return padMuted();
+	},
 };
 window.barkley = api;
 
 reportNoOgg();
 if (!fuzz) {
-  installHold(markReady);
-  installTextureProgress();
-  installAudio();
+	installHold(markReady);
+	installTextureProgress();
+	installAudio();
 }
 exposeToGame();
 offerInstall();

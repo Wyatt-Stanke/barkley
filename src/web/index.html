@@ -1,164 +1,164 @@
 <!doctype html>
 <html lang="en">
-  <!-- The HTML5 page template Igor builds with (import.mjs names it in the HTML5 options; fuzz.mjs build copies it in
-       fresh): the runtime's own template, with the page app (app/barkley.js and app/barkley.css, built from src/web by
-       src/page.mjs) loaded before the game's script. Igor fills in the placeholders. -->
+	<!-- The HTML5 page template Igor builds with (import.mjs names it in the HTML5 options; fuzz.mjs build copies it in
+	     fresh): the runtime's own template, with the page app (app/barkley.js and app/barkley.css, built from src/web by
+	     src/page.mjs) loaded before the game's script. Igor fills in the placeholders. -->
 
-  <!-- Custom PreHead code is injected here -->
-  ${GM_HTML5_PreHead}
+	<!-- Custom PreHead code is injected here -->
+	${GM_HTML5_PreHead}
 
-  <head>
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover"
-    >
-    <!-- No apple-mobile-web-app-status-bar-style: black-translucent put the page under the status bar, and since iOS 26
-         the home-screen app blurs that band and a little below it (the top of the picture in portrait). The default
-         opaque status bar keeps the page below it; theme-color makes it black. -->
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#000000">
-    <!-- Installable as an app that opens full screen; import.mjs adds these files to html5game/ as Included Files. -->
-    <link rel="manifest" href="${GM_HTML5_GameFolder}/manifest.webmanifest">
-    <link rel="apple-touch-icon" href="${GM_HTML5_GameFolder}/icon-180.png">
-    <!-- The page's font, Inter (SIL OFL 1.1; licence in inter-OFL.txt beside it) -->
-    <link rel="preload" href="app/inter.woff2" as="font" type="font/woff2" crossorigin>
-    <meta charset="utf-8">
+	<head>
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta name="apple-mobile-web-app-capable" content="yes">
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover"
+		>
+		<!-- No apple-mobile-web-app-status-bar-style: black-translucent put the page under the status bar, and since iOS 26
+		     the home-screen app blurs that band and a little below it (the top of the picture in portrait). The default
+		     opaque status bar keeps the page below it; theme-color makes it black. -->
+		<meta name="mobile-web-app-capable" content="yes">
+		<meta name="theme-color" content="#000000">
+		<!-- Installable as an app that opens full screen; import.mjs adds these files to html5game/ as Included Files. -->
+		<link rel="manifest" href="${GM_HTML5_GameFolder}/manifest.webmanifest">
+		<link rel="apple-touch-icon" href="${GM_HTML5_GameFolder}/icon-180.png">
+		<!-- The page's font, Inter (SIL OFL 1.1; licence in inter-OFL.txt beside it) -->
+		<link rel="preload" href="app/inter.woff2" as="font" type="font/woff2" crossorigin>
+		<meta charset="utf-8">
 
-    <!-- Builtin injector for disabling cache -->
-    ${GM_HTML5_InjectDisableCache}
+		<!-- Builtin injector for disabling cache -->
+		${GM_HTML5_InjectDisableCache}
 
-    <!-- Set the title bar of the page -->
-    <title>${GM_HTML5_BrowserTitle}</title>
+		<!-- Set the title bar of the page -->
+		<title>${GM_HTML5_BrowserTitle}</title>
 
-    <!-- Custom PreStyle code is injected here -->
-    ${GM_HTML5_PreStyle}
+		<!-- Custom PreStyle code is injected here -->
+		${GM_HTML5_PreStyle}
 
-    <!-- Everything the page draws around the game -->
-    <link rel="stylesheet" href="app/barkley.css">
-    <!-- The font, and the runtime's own elements -->
-    <style>
-      @font-face {
-        font-family: 'Inter';
-        src: url('app/inter.woff2') format('woff2');
-        font-weight: 100 900;
-        font-style: normal;
-        font-display: swap;
-      }
+		<!-- Everything the page draws around the game -->
+		<link rel="stylesheet" href="app/barkley.css">
+		<!-- The font, and the runtime's own elements -->
+		<style>
+			@font-face {
+				font-family: 'Inter';
+				src: url('app/inter.woff2') format('woff2');
+				font-weight: 100 900;
+				font-style: normal;
+				font-display: swap;
+			}
 
-      canvas {
-        image-rendering: optimizeSpeed;
-        -webkit-interpolation-mode: nearest-neighbor;
-        -ms-touch-action: none;
-        touch-action: none;
-        margin: 0px;
-        padding: 0px;
-        border: 0px;
-      }
-      :-webkit-full-screen #canvas {
-        width: 100%;
-        height: 100%;
-      }
-      :-webkit-full-screen {
-        width: 100%;
-        height: 100%;
-      }
-      /* The runtime's own loading bar: the game loads behind the Start screen instead. */
-      #loading_screen {
-        display: none;
-      }
+			canvas {
+				image-rendering: optimizeSpeed;
+				-webkit-interpolation-mode: nearest-neighbor;
+				-ms-touch-action: none;
+				touch-action: none;
+				margin: 0px;
+				padding: 0px;
+				border: 0px;
+			}
+			:-webkit-full-screen #canvas {
+				width: 100%;
+				height: 100%;
+			}
+			:-webkit-full-screen {
+				width: 100%;
+				height: 100%;
+			}
+			/* The runtime's own loading bar: the game loads behind the Start screen instead. */
+			#loading_screen {
+				display: none;
+			}
 
-      /* Custom Runner Styles */
-      div.gm4html5_div_class {
-        margin: 0px;
-        padding: 0px;
-        border: 0px;
-      }
-      div.gm4html5_login {
-        padding: 20px;
-        position: absolute;
-        border: solid 2px #000000;
-        background-color: #404040;
-        color: #00ff00;
-        border-radius: 15px;
-        box-shadow: #101010 20px 20px 40px;
-      }
-      div.gm4html5_cancel_button {
-        float: right;
-      }
-      div.gm4html5_login_button {
-        float: left;
-      }
-      div.gm4html5_login_header {
-        text-align: center;
-      }
-      /* END - Custom Runner Styles */
-    </style>
+			/* Custom Runner Styles */
+			div.gm4html5_div_class {
+				margin: 0px;
+				padding: 0px;
+				border: 0px;
+			}
+			div.gm4html5_login {
+				padding: 20px;
+				position: absolute;
+				border: solid 2px #000000;
+				background-color: #404040;
+				color: #00ff00;
+				border-radius: 15px;
+				box-shadow: #101010 20px 20px 40px;
+			}
+			div.gm4html5_cancel_button {
+				float: right;
+			}
+			div.gm4html5_login_button {
+				float: left;
+			}
+			div.gm4html5_login_header {
+				text-align: center;
+			}
+			/* END - Custom Runner Styles */
+		</style>
 
-    <!-- Custom PostStyle code is injected here -->
-    ${GM_HTML5_PostStyle}
+		<!-- Custom PostStyle code is injected here -->
+		${GM_HTML5_PostStyle}
 
-    <!-- Builtin injector for injecting flurry analytics code -->
-    ${GM_HTML5_InjectFlurryAnalytics}
-  </head>
+		<!-- Builtin injector for injecting flurry analytics code -->
+		${GM_HTML5_InjectFlurryAnalytics}
+	</head>
 
-  <!-- Custom PostHead code is injected here -->
-  ${GM_HTML5_PostHead}
+	<!-- Custom PostHead code is injected here -->
+	${GM_HTML5_PostHead}
 
-  <!-- Custom PreBody code is injected here -->
-  ${GM_HTML5_PreBody}
+	<!-- Custom PreBody code is injected here -->
+	${GM_HTML5_PreBody}
 
-  <body>
-    <!-- Custom BodyStart code is injected here -->
-    ${GM_HTML5_BodyStart}
+	<body>
+		<!-- Custom BodyStart code is injected here -->
+		${GM_HTML5_BodyStart}
 
-    <!-- The page app draws here: the Start screen, the install prompt, the touch overlay and the panels. It is a classic
-         script before the game's, so it is in place before the runtime loads (the runtime captures requestAnimationFrame
-         as its script runs). -->
-    <div id="page"></div>
-    <script src="app/barkley.js" data-folder="${GM_HTML5_GameFolder}"></script>
+		<!-- The page app draws here: the Start screen, the install prompt, the touch overlay and the panels. It is a classic
+		     script before the game's, so it is in place before the runtime loads (the runtime captures requestAnimationFrame
+		     as its script runs). -->
+		<div id="page"></div>
+		<script src="app/barkley.js" data-folder="${GM_HTML5_GameFolder}"></script>
 
-    <div class="gm4html5_div_class" id="gm4html5_div_id">
-      <!-- Builtin injector for splash screen -->
-      ${GM_HTML5_InjectSplashScreen}
+		<div class="gm4html5_div_class" id="gm4html5_div_id">
+			<!-- Builtin injector for splash screen -->
+			${GM_HTML5_InjectSplashScreen}
 
-      <!-- Custom PreCanvas code is injected here -->
-      ${GM_HTML5_PreCanvas}
+			<!-- Custom PreCanvas code is injected here -->
+			${GM_HTML5_PreCanvas}
 
-      <!-- Create the canvas element the game draws to -->
-      <canvas id="canvas" width="${GM_HTML5_GameWidth}" height="${GM_HTML5_GameHeight}" ${GM_HTML5_InjectCenterStyle}>
-        ${GM_HTML5_Canvas}
-        <p>Your browser doesn't support HTML5 canvas.</p>
-      </canvas>
+			<!-- Create the canvas element the game draws to -->
+			<canvas id="canvas" width="${GM_HTML5_GameWidth}" height="${GM_HTML5_GameHeight}" ${GM_HTML5_InjectCenterStyle}>
+				${GM_HTML5_Canvas}
+				<p>Your browser doesn't support HTML5 canvas.</p>
+			</canvas>
 
-      <!-- Custom PostCanvas code is injected here -->
-      ${GM_HTML5_PostCanvas}
-    </div>
+			<!-- Custom PostCanvas code is injected here -->
+			${GM_HTML5_PostCanvas}
+		</div>
 
-    <!-- Run the game code -->
-    <script
-      type="text/javascript"
-      src="${GM_HTML5_GameFolder}/${GM_HTML5_GameFilename}?cachebust=${GM_HTML5_CacheBust}"
-    ></script>
+		<!-- Run the game code -->
+		<script
+			type="text/javascript"
+			src="${GM_HTML5_GameFolder}/${GM_HTML5_GameFilename}?cachebust=${GM_HTML5_CacheBust}"
+		></script>
 
-    <!-- Builtin injector for injecting runner path -->
-    ${GM_HTML5_InjectRunnerPath}
+		<!-- Builtin injector for injecting runner path -->
+		${GM_HTML5_InjectRunnerPath}
 
-    <!-- As the runtime's template has window.onload = GameMaker_Init: the page starts loading the game, holds it just
-         before Game Start, and lets it go on Start (barkley_loading, named as the HTML5 loading bar, shows how far it
-         has got). -->
-    <script>
-      window.onload = barkley.load;
-    </script>
+		<!-- As the runtime's template has window.onload = GameMaker_Init: the page starts loading the game, holds it just
+		     before Game Start, and lets it go on Start (barkley_loading, named as the HTML5 loading bar, shows how far it
+		     has got). -->
+		<script>
+			window.onload = barkley.load;
+		</script>
 
-    <!-- Builtin injector for injecting google analytics code -->
-    ${GM_HTML5_InjectGoogleAnalytics}
+		<!-- Builtin injector for injecting google analytics code -->
+		${GM_HTML5_InjectGoogleAnalytics}
 
-    <!-- Custom BodyEnd code is injected here -->
-    ${GM_HTML5_BodyEnd}
-  </body>
+		<!-- Custom BodyEnd code is injected here -->
+		${GM_HTML5_BodyEnd}
+	</body>
 
-  <!-- Custom PostBody code is injected here -->
-  ${GM_HTML5_PostBody}
+	<!-- Custom PostBody code is injected here -->
+	${GM_HTML5_PostBody}
 </html>

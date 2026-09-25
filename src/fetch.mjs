@@ -26,37 +26,37 @@ const original = path.join(root, 'game', 'original');
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: 'inherit', ...opts });
 
 export function fetchInputs() {
-  fs.mkdirSync(original, { recursive: true });
+	fs.mkdirSync(original, { recursive: true });
 
-  if (fs.existsSync(path.join(original, 'BarkleyV120.exe'))) console.log(`- game: already in ${original}`);
-  else {
-    const tmp = fs.mkdtempSync(path.join(path.dirname(original), '.fetch-'));
-    try {
-      const zip = path.join(tmp, 'BarkleyV120.zip');
-      console.log(`- game: downloading ${ZIP_URL}`);
-      run('curl', ['-fL', '--retry', '3', '--retry-all-errors', '-sS', '-o', zip, ZIP_URL]);
-      const md5 = crypto.createHash('md5').update(fs.readFileSync(zip)).digest('hex');
-      if (md5 !== ZIP_MD5) throw new Error(`BarkleyV120.zip has MD5 ${md5}, expected ${ZIP_MD5}`);
-      run('unzip', ['-q', zip, '-d', tmp]);
-      // the zip holds one folder, BarkleyV120/
-      for (const f of fs.readdirSync(path.join(tmp, 'BarkleyV120')))
-        fs.renameSync(path.join(tmp, 'BarkleyV120', f), path.join(original, f));
-      console.log(`  unpacked into ${original}`);
-    } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
-    }
-  }
+	if (fs.existsSync(path.join(original, 'BarkleyV120.exe'))) console.log(`- game: already in ${original}`);
+	else {
+		const tmp = fs.mkdtempSync(path.join(path.dirname(original), '.fetch-'));
+		try {
+			const zip = path.join(tmp, 'BarkleyV120.zip');
+			console.log(`- game: downloading ${ZIP_URL}`);
+			run('curl', ['-fL', '--retry', '3', '--retry-all-errors', '-sS', '-o', zip, ZIP_URL]);
+			const md5 = crypto.createHash('md5').update(fs.readFileSync(zip)).digest('hex');
+			if (md5 !== ZIP_MD5) throw new Error(`BarkleyV120.zip has MD5 ${md5}, expected ${ZIP_MD5}`);
+			run('unzip', ['-q', zip, '-d', tmp]);
+			// the zip holds one folder, BarkleyV120/
+			for (const f of fs.readdirSync(path.join(tmp, 'BarkleyV120')))
+				fs.renameSync(path.join(tmp, 'BarkleyV120', f), path.join(original, f));
+			console.log(`  unpacked into ${original}`);
+		} finally {
+			fs.rmSync(tmp, { recursive: true, force: true });
+		}
+	}
 
-  const decompiler = path.join(original, 'GMDecompilerDecompiled');
-  if (fs.existsSync(path.join(decompiler, 'src', 'main', 'java')))
-    console.log(`- decompiler: already in ${decompiler}`);
-  else {
-    console.log(`- decompiler: cloning ${DECOMPILER_REPO} at ${DECOMPILER_COMMIT.slice(0, 7)}`);
-    fs.rmSync(decompiler, { recursive: true, force: true });
-    run('git', ['init', '-q', decompiler]);
-    run('git', ['-C', decompiler, 'fetch', '-q', '--depth', '1', DECOMPILER_REPO, DECOMPILER_COMMIT]);
-    run('git', ['-C', decompiler, 'checkout', '-q', 'FETCH_HEAD']);
-  }
+	const decompiler = path.join(original, 'GMDecompilerDecompiled');
+	if (fs.existsSync(path.join(decompiler, 'src', 'main', 'java')))
+		console.log(`- decompiler: already in ${decompiler}`);
+	else {
+		console.log(`- decompiler: cloning ${DECOMPILER_REPO} at ${DECOMPILER_COMMIT.slice(0, 7)}`);
+		fs.rmSync(decompiler, { recursive: true, force: true });
+		run('git', ['init', '-q', decompiler]);
+		run('git', ['-C', decompiler, 'fetch', '-q', '--depth', '1', DECOMPILER_REPO, DECOMPILER_COMMIT]);
+		run('git', ['-C', decompiler, 'checkout', '-q', 'FETCH_HEAD']);
+	}
 }
 
 if (import.meta.main) fetchInputs();

@@ -11,17 +11,17 @@ const web = path.join(import.meta.dirname, 'web');
 export const PAGE = path.resolve(import.meta.dirname, '..', 'build', 'web');
 
 function npm(...args) {
-  const r = spawnSync('npm', args, { cwd: web, stdio: ['ignore', 'inherit', 'inherit'] });
-  if (r.status !== 0) throw new Error(`npm ${args.join(' ')} (in src/web) exited ${r.status ?? r.signal}`);
+	const r = spawnSync('npm', args, { cwd: web, stdio: ['ignore', 'inherit', 'inherit'] });
+	if (r.status !== 0) throw new Error(`npm ${args.join(' ')} (in src/web) exited ${r.status ?? r.signal}`);
 }
 
 export function buildPage() {
-  // npm keeps its own copy of the lockfile it installed from; an older one means package-lock.json has moved on
-  const installed = path.join(web, 'node_modules', '.package-lock.json');
-  if (!existsSync(installed) || statSync(installed).mtimeMs < statSync(path.join(web, 'package-lock.json')).mtimeMs)
-    npm('ci', '--no-audit', '--no-fund');
-  npm('run', '--silent', 'build');
-  return PAGE;
+	// npm keeps its own copy of the lockfile it installed from; an older one means package-lock.json has moved on
+	const installed = path.join(web, 'node_modules', '.package-lock.json');
+	if (!existsSync(installed) || statSync(installed).mtimeMs < statSync(path.join(web, 'package-lock.json')).mtimeMs)
+		npm('ci', '--no-audit', '--no-fund');
+	npm('run', '--silent', 'build');
+	return PAGE;
 }
 
 if (import.meta.main) console.log(`page: ${buildPage()}`);

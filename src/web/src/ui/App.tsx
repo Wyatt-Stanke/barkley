@@ -16,27 +16,27 @@ import { StartScreen } from './StartScreen';
 import { TouchOverlay } from './TouchOverlay';
 
 export function App() {
-  return (
-    <>
-      <Show when={!started()}>
-        <StartScreen />
-        <Show when={installOpen()}>
-          <InstallPrompt />
-        </Show>
-      </Show>
-      <Show when={touchReady()}>
-        <TouchOverlay />
-      </Show>
-      <Show when={controlsOpen()}>
-        <ControlsPanel />
-      </Show>
-      {/* keyed: each saves_open is a fresh panel */}
-      <Show when={savesOpen()} keyed>
-        {(_opening) => <SavesPanel />}
-      </Show>
-      <Show when={crashReport()} keyed>
-        {(r) => <CrashPanel kind={r.kind} text={r.text} />}
-      </Show>
-    </>
-  );
+	return (
+		<>
+			<Show when={!started()}>
+				<StartScreen />
+				<Show when={installOpen()}>
+					<InstallPrompt />
+				</Show>
+			</Show>
+			<Show when={touchReady()}>
+				<TouchOverlay />
+			</Show>
+			<Show when={controlsOpen()}>
+				<ControlsPanel />
+			</Show>
+			{/* keyed: each saves_open is a fresh panel */}
+			<Show when={savesOpen()} keyed>
+				{(_opening) => <SavesPanel />}
+			</Show>
+			<Show when={crashReport()} keyed>
+				{(r) => <CrashPanel kind={r.kind} text={r.text} />}
+			</Show>
+		</>
+	);
 }

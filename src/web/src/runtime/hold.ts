@@ -12,28 +12,28 @@ let holding = false;
 const held: FrameRequestCallback[] = [];
 
 export function installHold(onReady: () => void) {
-  const raf = window.requestAnimationFrame.bind(window);
-  window.requestAnimationFrame = (cb) =>
-    raf((t) => {
-      if (holding) return void held.push(cb);
-      try {
-        cb(t);
-      } catch (e) {
-        if (e !== HOLD) throw e;
-      }
-    });
-  const log = console.log;
-  console.log = (...args: unknown[]) => {
-    if (args[0] === 'Entering main loop...' && !started() && !holding) {
-      holding = true;
-      onReady();
-      throw HOLD;
-    }
-    return log.apply(console, args);
-  };
+	const raf = window.requestAnimationFrame.bind(window);
+	window.requestAnimationFrame = (cb) =>
+		raf((t) => {
+			if (holding) return void held.push(cb);
+			try {
+				cb(t);
+			} catch (e) {
+				if (e !== HOLD) throw e;
+			}
+		});
+	const log = console.log;
+	console.log = (...args: unknown[]) => {
+		if (args[0] === 'Entering main loop...' && !started() && !holding) {
+			holding = true;
+			onReady();
+			throw HOLD;
+		}
+		return log.apply(console, args);
+	};
 }
 
 export function release() {
-  holding = false;
-  for (const cb of held.splice(0)) window.requestAnimationFrame(cb);
+	holding = false;
+	for (const cb of held.splice(0)) window.requestAnimationFrame(cb);
 }

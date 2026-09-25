@@ -3,13 +3,13 @@
 import * as generated from './gml.parser.mjs';
 
 function run(src, startRule) {
-  try {
-    return generated.parse(src, { startRule });
-  } catch (e) {
-    if (!e.location) throw e;
-    const line = e.location.start.line;
-    throw new SyntaxError(`${e.message} at line ${line}: ${src.split('\n')[line - 1]?.trim()}`);
-  }
+	try {
+		return generated.parse(src, { startRule });
+	} catch (e) {
+		if (!e.location) throw e;
+		const line = e.location.start.line;
+		throw new SyntaxError(`${e.message} at line ${line}: ${src.split('\n')[line - 1]?.trim()}`);
+	}
 }
 
 // The AST: a Block of statements, every node {type, start, end, ...} with source offsets.
@@ -20,27 +20,27 @@ export const tokenize = (src) => run(src, 'Tokens');
 
 // Calls fn(node, parent) for every node, depth first.
 export function walk(n, fn, parent = null) {
-  fn(n, parent);
-  for (const v of Object.values(n)) {
-    if (Array.isArray(v))
-      for (const c of v) {
-        if (c?.type) walk(c, fn, n);
-      }
-    else if (v?.type) walk(v, fn, n);
-  }
+	fn(n, parent);
+	for (const v of Object.values(n)) {
+		if (Array.isArray(v))
+			for (const c of v) {
+				if (c?.type) walk(c, fn, n);
+			}
+		else if (v?.type) walk(v, fn, n);
+	}
 }
 
 // Applies non-overlapping {start, end, text} edits to src.
 export function applyEdits(src, edits) {
-  edits = [...edits].sort((a, b) => b.start - a.start);
-  let last = Infinity;
-  for (const e of edits) {
-    if (e.end > last) throw new Error(`overlapping edits at ${e.start}`);
-    src = src.slice(0, e.start) + e.text + src.slice(e.end);
-    last = e.start;
-  }
-  return src;
+	edits = [...edits].sort((a, b) => b.start - a.start);
+	let last = Infinity;
+	for (const e of edits) {
+		if (e.end > last) throw new Error(`overlapping edits at ${e.start}`);
+		src = src.slice(0, e.start) + e.text + src.slice(e.end);
+		last = e.start;
+	}
+	return src;
 }
 
 export const isCall = (n, name) =>
-  n.type === 'Call' && n.callee.type === 'Identifier' && (!name || n.callee.name === name);
+	n.type === 'Call' && n.callee.type === 'Identifier' && (!name || n.callee.name === name);

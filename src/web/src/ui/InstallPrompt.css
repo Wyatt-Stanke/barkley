@@ -1,39 +1,39 @@
 /* The first-visit prompt on a phone or tablet to install the game as an app */
 #install .ui-steps {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: step;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	counter-reset: step;
 }
 #install .ui-steps li {
-  display: grid;
-  grid-template-columns: 2em 1fr;
-  padding: 12px 0;
-  border-top: 1px solid var(--rule);
-  counter-increment: step;
+	display: grid;
+	grid-template-columns: 2em 1fr;
+	padding: 12px 0;
+	border-top: 1px solid var(--rule);
+	counter-increment: step;
 }
 #install .ui-steps li::before {
-  content: counter(step);
-  font-weight: 700;
+	content: counter(step);
+	font-weight: 700;
 }
 #install svg {
-  width: 1.1em;
-  height: 1.1em;
-  vertical-align: -0.15em;
+	width: 1.1em;
+	height: 1.1em;
+	vertical-align: -0.15em;
 }
 #install .ui-foot {
-  margin-top: auto;
+	margin-top: auto;
 }
 @media (max-height: 500px) {
-  #install {
-    gap: 16px;
-    font-size: 14px;
-  }
-  #install .ui-steps li {
-    padding: 8px 0;
-  }
-  #install .ui-foot {
-    grid-auto-flow: column;
-    grid-auto-columns: 1fr;
-  }
+	#install {
+		gap: 16px;
+		font-size: 14px;
+	}
+	#install .ui-steps li {
+		padding: 8px 0;
+	}
+	#install .ui-foot {
+		grid-auto-flow: column;
+		grid-auto-columns: 1fr;
+	}
 }

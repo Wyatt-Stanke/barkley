@@ -2,88 +2,88 @@
    Black, white and a muted white, Inter (index.html loads it), flush left on a 16 px gutter (32 px from 720 px wide),
    hairline rules, square 44 px buttons; an active control inverts to white. */
 :root {
-  --ink: #ffffff;
-  --paper: #000000;
-  --mute: #8f8f8f; /* solid, so overlapping glyphs in the tight Start word do not double up */
-  --rule: rgba(255, 255, 255, 0.24);
-  --font: Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  --mono: ui-monospace, Menlo, Consolas, monospace;
-  --g: 16px;
-  /* Safe-area insets (the Dynamic Island or notch, rounded corners, the home indicator). Everything the page draws
-     stays inside them: the touch overlay's layout, the panels' and sheets' padding, the Start screen. */
-  --touch-top: env(safe-area-inset-top, 0px);
-  --touch-bottom: env(safe-area-inset-bottom, 0px);
-  --touch-left: env(safe-area-inset-left, 0px);
-  --touch-right: env(safe-area-inset-right, 0px);
-  color-scheme: dark;
+	--ink: #ffffff;
+	--paper: #000000;
+	--mute: #8f8f8f; /* solid, so overlapping glyphs in the tight Start word do not double up */
+	--rule: rgba(255, 255, 255, 0.24);
+	--font: Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+	--mono: ui-monospace, Menlo, Consolas, monospace;
+	--g: 16px;
+	/* Safe-area insets (the Dynamic Island or notch, rounded corners, the home indicator). Everything the page draws
+	   stays inside them: the touch overlay's layout, the panels' and sheets' padding, the Start screen. */
+	--touch-top: env(safe-area-inset-top, 0px);
+	--touch-bottom: env(safe-area-inset-bottom, 0px);
+	--touch-left: env(safe-area-inset-left, 0px);
+	--touch-right: env(safe-area-inset-right, 0px);
+	color-scheme: dark;
 }
 @media (min-width: 720px) {
-  :root {
-    --g: 32px;
-  }
+	:root {
+		--g: 32px;
+	}
 }
 body {
-  /* Igor writes the game's black as "#0", which is not CSS, so the page showed white before Start. */
-  background: var(--paper);
-  color: var(--ink);
-  font: 15px / 1.45 var(--font);
-  margin: 0px;
-  padding: 0px;
-  border: 0px;
-  /* For the touch overlay: no pull-to-refresh, selection loupe or long-press callout. */
-  overscroll-behavior: none;
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-touch-callout: none;
-  -webkit-font-smoothing: antialiased;
+	/* Igor writes the game's black as "#0", which is not CSS, so the page showed white before Start. */
+	background: var(--paper);
+	color: var(--ink);
+	font: 15px / 1.45 var(--font);
+	margin: 0px;
+	padding: 0px;
+	border: 0px;
+	/* For the touch overlay: no pull-to-refresh, selection loupe or long-press callout. */
+	overscroll-behavior: none;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-touch-callout: none;
+	-webkit-font-smoothing: antialiased;
 }
 
 /* Buttons: square, hairline, 44 px tall; .primary is filled; .ui-link is bare text. */
 .ui-btn {
-  appearance: none;
-  box-sizing: border-box;
-  min-height: 44px;
-  padding: 0 20px;
-  font: 500 15px / 1 var(--font);
-  color: var(--ink);
-  background: transparent;
-  border: 1px solid var(--ink);
-  border-radius: 0;
-  cursor: pointer;
-  touch-action: manipulation;
+	appearance: none;
+	box-sizing: border-box;
+	min-height: 44px;
+	padding: 0 20px;
+	font: 500 15px / 1 var(--font);
+	color: var(--ink);
+	background: transparent;
+	border: 1px solid var(--ink);
+	border-radius: 0;
+	cursor: pointer;
+	touch-action: manipulation;
 }
 .ui-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.14);
+	background: rgba(255, 255, 255, 0.14);
 }
 .ui-btn.primary {
-  color: var(--paper);
-  background: var(--ink);
+	color: var(--paper);
+	background: var(--ink);
 }
 .ui-btn.primary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.84);
+	background: rgba(255, 255, 255, 0.84);
 }
 .ui-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
+	opacity: 0.35;
+	cursor: default;
 }
 .ui-link {
-  appearance: none;
-  min-height: 44px;
-  padding: 0;
-  font: 500 15px / 1 var(--font);
-  color: var(--ink);
-  background: none;
-  border: 0;
-  cursor: pointer;
-  touch-action: manipulation;
+	appearance: none;
+	min-height: 44px;
+	padding: 0;
+	font: 500 15px / 1 var(--font);
+	color: var(--ink);
+	background: none;
+	border: 0;
+	cursor: pointer;
+	touch-action: manipulation;
 }
 .ui-link:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+	text-decoration: underline;
+	text-underline-offset: 3px;
 }
 .ui-btn:focus-visible,
 .ui-link:focus-visible,
 .ui-code:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
+	outline: 2px solid var(--ink);
+	outline-offset: 2px;
 }

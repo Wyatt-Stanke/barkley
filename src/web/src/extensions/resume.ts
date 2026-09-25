@@ -7,45 +7,45 @@ import { storage } from '../page';
 
 export const RESUME_KEY = 'barkley.resume';
 let state = '',
-  written = 0,
-  taken = false,
-  failed = false;
+	written = 0,
+	taken = false,
+	failed = false;
 
 export const resumeState = () => state;
 
 export function resume_put(s: string) {
-  if (failed) return 0;
-  state = s;
-  if (Date.now() - written > 5000) write();
-  return 0;
+	if (failed) return 0;
+	state = s;
+	if (Date.now() - written > 5000) write();
+	return 0;
 }
 
 export function resume_take() {
-  if (taken) return ''; // game_restart runs Game Start again
-  taken = true;
-  const s = storage.get(RESUME_KEY) || '';
-  storage.remove(RESUME_KEY); // a state that fails to restore isn't tried again
-  return s;
+	if (taken) return ''; // game_restart runs Game Start again
+	taken = true;
+	const s = storage.get(RESUME_KEY) || '';
+	storage.remove(RESUME_KEY); // a state that fails to restore isn't tried again
+	return s;
 }
 
 export function resume_clear() {
-  state = '';
-  storage.remove(RESUME_KEY);
-  return 0;
+	state = '';
+	storage.remove(RESUME_KEY);
+	return 0;
 }
 
 function write() {
-  written = Date.now();
-  if (state) storage.set(RESUME_KEY, state);
+	written = Date.now();
+	if (state) storage.set(RESUME_KEY, state);
 }
 
 export function enableResume() {
-  addEventListener('error', () => {
-    failed = true;
-    resume_clear();
-  });
-  addEventListener('pagehide', write);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') write();
-  });
+	addEventListener('error', () => {
+		failed = true;
+		resume_clear();
+	});
+	addEventListener('pagehide', write);
+	document.addEventListener('visibilitychange', () => {
+		if (document.visibilityState === 'hidden') write();
+	});
 }

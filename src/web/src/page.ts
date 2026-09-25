@@ -22,46 +22,46 @@ export const addExtension = (name: string) => setExtensions(new Set([...extensio
 
 // Opened as an installed app, not in a browser tab
 export const isApp = () =>
-  matchMedia('(display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui)').matches ||
-  !!navigator.standalone;
+	matchMedia('(display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui)').matches ||
+	!!navigator.standalone;
 
 // localStorage, which throws when the browser blocks storage
 export const storage = {
-  get(key: string): string | null {
-    try {
-      return localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  set(key: string, value: string) {
-    try {
-      localStorage.setItem(key, value);
-    } catch {}
-  },
-  remove(key: string) {
-    try {
-      localStorage.removeItem(key);
-    } catch {}
-  },
-  keys(): string[] {
-    try {
-      return Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i) ?? '');
-    } catch {
-      return [];
-    }
-  },
+	get(key: string): string | null {
+		try {
+			return localStorage.getItem(key);
+		} catch {
+			return null;
+		}
+	},
+	set(key: string, value: string) {
+		try {
+			localStorage.setItem(key, value);
+		} catch {}
+	},
+	remove(key: string) {
+		try {
+			localStorage.removeItem(key);
+		} catch {}
+	},
+	keys(): string[] {
+		try {
+			return Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i) ?? '');
+		} catch {
+			return [];
+		}
+	},
 };
 
 export interface Api {
-  readonly started: boolean;
-  load(): void;
-  ready(): void;
-  start(fresh?: boolean): void;
-  controls(): void;
-  offlineSave(): void;
-  extension(name: string): void;
-  // for js: probes in a play-test
-  readonly resumeState: string;
-  readonly padMuted: boolean;
+	readonly started: boolean;
+	load(): void;
+	ready(): void;
+	start(fresh?: boolean): void;
+	controls(): void;
+	offlineSave(): void;
+	extension(name: string): void;
+	// for js: probes in a play-test
+	readonly resumeState: string;
+	readonly padMuted: boolean;
 }
