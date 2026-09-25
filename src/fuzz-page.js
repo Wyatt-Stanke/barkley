@@ -496,19 +496,43 @@
 		}
 		for (const t of s.talked ?? []) known.talked.add(t);
 	};
+	// In a battle: the first enemy, the eighths of the enemies' vitality left and the party members standing, e.g.
+	// 'oBBallmonster:3:2'. As part of the cell it gives a battle somewhere to go: a state that got a boss lower is new.
+	// Undefined with no battlers (global.battlers stays set in some rooms outside a fight).
+	const foes = () => {
+		let n = 0,
+			name = '',
+			vp = 0,
+			max = 0,
+			up = 0;
+		for (const i of GetWithArray(asset_get_index('oBattler'))) {
+			if (!i || i.marked) continue;
+			n++;
+			const v = Math.max(0, Number(i.gml_vp) || 0);
+			if (Number(i.gmlenemy) !== 1) up += v > 0 ? 1 : 0;
+			else {
+				name ||= objName(i);
+				vp += v;
+				max += Math.max(v, Number(i.gml_rvp) || 0);
+			}
+		}
+		return n ? `${name}:${max ? Math.ceil((8 * vp) / max) : 0}:${up}` : undefined;
+	};
 	F.probe = () => {
 		const g = gml();
 		const p = safe(() => inst('oBarkley'));
+		const battle = g.gmlbattlers > 0 ? 1 : 0;
 		return {
 			room: safe(roomName),
 			plot: g.gmlplot ?? null,
-			battle: g.gmlbattlers > 0 ? 1 : 0,
+			battle,
 			x: p ? Math.round(p.x) : null,
 			y: p ? Math.round(p.y) : null,
 			frame: F.frame,
+			foes: battle ? safe(foes, undefined) : undefined,
 		};
 	};
-	const cellOf = (p) => `${p.room}|${p.plot}|${p.battle}|${p.x == null ? '-' : `${p.x >> 5},${p.y >> 5}`}`;
+	const cellOf = (p) => `${p.room}|${p.plot}|${p.battle}|${p.foes ?? (p.x == null ? '-' : `${p.x >> 5},${p.y >> 5}`)}`;
 	// The globals' values as flags: 'name=value', 'name[i]=value', 'name[i][j]=value'
 	const flagsNow = (out) => {
 		const g = gml();
@@ -755,6 +779,39 @@
 		yield [['z'], 2];
 		yield [[], 6];
 	}
+	// A dialog that offers a choice (oDialog's option[], cursor cho): one of the options at random, the cursor moved to
+	// it. Pressing on through takes the first one, and some choices end the game (a wrong answer in a cutscene).
+	const chosen = new WeakMap();
+	function* pickOption() {
+		const d = safe(() => inst('oDialog'));
+		const opts = d?.gmloption;
+		if (!Array.isArray(opts) || opts[0] === '0' || opts[0] === undefined) return;
+		if (!chosen.has(d)) {
+			let k = 0;
+			while (k < opts.length && opts[k] !== '0' && opts[k] !== undefined) k++;
+			chosen.set(d, Math.floor(rng() * k));
+		}
+		const want = chosen.get(d);
+		for (let i = 0; i < 12 && Number(d.gmlcho) !== want; i++) {
+			yield [[Number(d.gmlcho) < want ? 'down' : 'up'], 2];
+			yield [[], 6];
+		}
+	}
+	// A quick-time event (oQuicker: press the key it shows, key 0-5, within about 20 frames, or lose a life): the
+	// right key, but now and then a wrong one, so both ways are played.
+	const QUICK = ['right', 'up', 'left', 'down', 'z', 'x'];
+	function* quick() {
+		for (let i = 0; i < 30; i++) {
+			const q = safe(() => inst('oQuicker'));
+			if (!q) return;
+			if (Number(q.gmlgot) > 0 || !(Number(q.gmltime) > 0)) {
+				yield [[], 2];
+				continue;
+			}
+			yield [[rng() < 0.9 ? QUICK[Number(q.gmlkey)] : choose(QUICK)], 2];
+			yield [[], 2];
+		}
+	}
 	const G = {
 		// Presses action through dialog and cutscenes until the player can move again
 		*dialog(a) {
@@ -778,6 +835,11 @@
 					yield [[], 10];
 					continue;
 				}
+				if (exists('oQuicker')) {
+					yield* quick();
+					continue;
+				}
+				yield* pickOption();
 				if (rng() < 0.08) yield [[choose(['up', 'down'])], 2];
 				yield [['z'], 2];
 				yield [[], 8];
@@ -883,8 +945,16 @@
 				}
 			}
 		},
-		// In a battle: action, cancel and the arrows, with the rhythm menus and combos take
+		// In a battle: action, cancel and the arrows, with the rhythm menus and combos take. Half the time only action at
+		// a varied pace: attack, the first target, the hits, over and over, which is what wins a long fight.
 		*battle(a) {
+			if (rng() < 0.5) {
+				for (let t = 0; t < a.n; t += 12) {
+					yield [['z'], 2];
+					yield [[], 4 + Math.floor(rng() * 12)];
+				}
+				return;
+			}
 			for (let t = 0; t < a.n; t += 12) {
 				const r = rng();
 				if (r < 0.55) yield [['z'], 2];

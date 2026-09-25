@@ -25,33 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The page (src/web) is the one part with npm packages; src/page.mjs installs them from this lockfile.
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: src/web/package-lock.json
-
-      - name: Install ffmpeg
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-
-      # The inputs (the game from archive.org, the decompiler's source) and the tools (ProjectTool, Igor, the runtime,
-      # Chromium) are pinned in these two files, so their hashes key the caches. The licence is never cached.
-      - name: Cache the game's inputs
-        uses: actions/cache@v6
-        with:
-          path: game/original
-          key: game-original-${{ hashFiles('src/fetch.mjs') }}
-
-      - name: Cache the GameMaker tools
-        uses: actions/cache@v6
-        with:
-          path: |
-            build/tools/igor
-            build/tools/runtimes
-            build/tools/project-tool-*
-            build/tools/chrome
-          key: gm-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/toolchain.mjs') }}
+      - uses: ./.github/actions/setup
 
       - name: Build (exe -> GMX -> LTS project -> HTML5 -> play-test)
         run: node src/pipeline.mjs --out=build/pipeline

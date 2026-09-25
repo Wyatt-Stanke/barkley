@@ -209,21 +209,50 @@ unobfuscated modernized build, which its `build` command makes from an imported 
 folder, so neither is touched):
 
 ```sh
-node src/fuzz.mjs build build/outputs/BarkleyLTS35/BarkleyLTS.yyp build/fuzz/build      # about 70 s
+node src/fuzz.mjs build build/outputs/barkley-1.4.1/BarkleyLTS.yyp build/fuzz/build     # about 70 s
 node src/fuzz.mjs run build/fuzz/build --save --corpus --through --verbose           # until Ctrl-C (or --minutes=M)
+node src/fuzz.mjs verify build/fuzz/build --minutes=5                               # the corpus against this build
 node src/fuzz.mjs replay build/fuzz/build build/fuzz/<run>/crashes/1                    # from a fresh page, with screenshots
 ```
 
-`--save` keeps the findings in `~/Documents/barkley/fuzz/<date-time>/` (or `--save=<dir>`): `summary.md` indexes every
+It also runs on the deployable build (`fuzz.mjs build --minify`, the pipeline's `site/`): terser keeps the `gml_*`
+names, and the harness finds the runtime's variables in both forms. Replays on the two match.
+
+`--save` keeps the findings in `build/fuzz/<date-time>/` (or `--save=<dir>`): `summary.md` indexes every
 crash (`crashes/<n>/`) and milestone path (`paths/<n>-<room>-p<plot>/`, the first time the search reached a room or a
 plot), each with a `report.md`, the inputs from the new game, a snapshot of the game state and screenshots. `--verbose`
 prints a line per episode: where it started, how long it played, and what was new (◆ cells, ƒ GML functions, ⚑ values
-of globals). `--corpus` keeps the archive in `~/Documents/barkley/fuzz/corpus/` (or `--corpus=<dir>`) and starts
-the next run from it (saved every 5 minutes and at the end; from another build, the most advanced paths are replayed to
-make their snapshots again; if not one of them replays, the run stops and leaves the corpus as it was, since that means the
-harness or the build is broken). `--through` patches known crash classes in the page (numbers drawn as text, `real()` of a
+of globals). `--corpus` starts from the archive in git, `fuzz/corpus.json.gz`, and keeps it
+there (below). `--through` patches known crash classes in the page (numbers drawn as text, `real()` of a
 non-number, `script_execute` of a number that is no script) so the search gets past them; each patched spot is still reported, as a `patched` crash, and replayed
 without the patches. `--workers` (default: physical cores − 2) sets the number of browsers, `--port` the ports.
+
+**The corpus in git** (`fuzz/corpus.json.gz`, ~250 KB): one gzipped JSON of the search's state (features, learned
+globals, exits, things talked to, known crash signatures, the program dictionary) and its nodes, pruned to the ones on
+the way to a node that owned features, and without snapshots. Snapshots only restore into the build that made them, and
+Igor builds are never byte-identical, so they would be dead weight: a run makes them again from the paths. The file's
+bytes depend only on its content (no timestamps, a fixed gzip header), so a run that found nothing leaves no diff.
+`run --corpus` unpacks it into `build/fuzz/corpus/`, which keeps the snapshots between runs on the same build (the
+directory is reused while `packed.md5` matches the file; otherwise it is replaced), and packs it again at every save.
+Commit the file after a run that found something. `--corpus=<file.json.gz>` uses another packed corpus;
+`--corpus=<dir>` a plain directory, never packed.
+
+**Rebase** (a corpus from another build, which is every run on a fresh build): the corpus's paths are played again on
+the new build as a tree. Each node is played from the snapshot of the node its episode started from, which is made again
+first, so every recorded frame is played once and the restores are the ones the search made (about 6 paths a second
+on 6 browsers). A replay that ends in another room or plot than recorded is dropped with everything recorded after it:
+those inputs were for a state that no longer happens, and kept as candidates that own nothing they crowded the search
+(the first try kept them, and 1,100 of 2,400 snapshots stood in one room). Their features can be found again. If not one path replays,
+the run stops and leaves the corpus as it was, since that means the harness or the build is broken.
+
+**`verify`** checks the game rather than looking for new things (the pull request workflow runs it). It reads the
+packed corpus (never writes it), plays the spine again (the furthest node of each room and plot and the nodes on its
+way, ~320 paths in about 2 minutes; `--all` for every one), explores for `--minutes` (none by default) with
+`--through`, and replays every crash the corpus doesn't know, from its snapshot and from a fresh page. It exits 1 on a
+new crash that replays either way or couldn't be replayed. Crashes that only a restore causes (`restore`, `stall`,
+`hang`), paths that now end in another room or plot, and rooms no replayed path reached are warnings; `--strict` makes
+the last two failures. A change to the game that moves where recorded inputs lead shows up as those warnings, not as a
+failure. The verdict is `<findings>/verify.md` and goes to `$GITHUB_STEP_SUMMARY`.
 
 How it works:
 
@@ -253,8 +282,9 @@ How it works:
   `fuzz.mjs` is part of the corpus's build id; bump it when a harness change makes recorded paths play differently.
 - **Search** (Go-Explore): a new game is started and snapshotted once. Each worker repeatedly picks a snapshot, restores
   it and plays a random program of input macros (walks, taps, dialog mashing, waits, the start menu, and programs that
-  found something before). After every macro step the page looks for something new: a cell (room, plot, battle, player
-  position in 32 px), a (room, GML function) pair (every `gml_*` function is wrapped to record that it ran; a cutscene
+  found something before). After every macro step the page looks for something new: a cell (room, plot, and the
+  player's position in 32 px; in a battle instead the first enemy, the eighths of the enemies' vitality left and the
+  party members standing, so a state that brought a boss lower is new and the search can work its way to a win), a (room, GML function) pair (every `gml_*` function is wrapped to record that it ran; a cutscene
   shows up as its `cin_NNNN` steps), or a value of a game global never seen before (story flags such as `plot=3` or
   `treasure[3]=1`; globals whose values churn are learned as volatile and ignored), including the pseudo-flag
   `goal=<plot>:<bits>`, which of the next plot's conditions hold (so a state that meets two of them at once, such as
@@ -263,7 +293,11 @@ How it works:
   (plot, the next plot's conditions met, rooms on the path, story globals changed since the new game; recomputed when
   the corpus loads); menus and the debug room hardly count.
 - **Generators** (in the page, closed-loop: they read the game between 4-frame chunks, and the keys they press are
-  recorded, so replays need no generator): `dialog` presses action until the player can move; `exit` walks to an exit
+  recorded, so replays need no generator): `dialog` presses action until the player can move,
+  moves the cursor to a random option when a dialog offers a choice (pressing straight through takes the first), and
+  answers quick-time events (`oQuicker`, a cinema command: the key it shows within about 20 frames, or a life lost; the
+  right key 9 times in 10) - the way from NeoYork1 to the catacombs at plot 3 is a run of them, which random presses
+  almost never passed; `exit` walks to an exit
   not taken from this room yet (a breadth-first route on an 8 px grid around solid instances) and takes it, by
   walking into it (`oExitPar` children and exits with their own collision event with `oBarkley`) or pressing action
   beside it; the exit recorded is the one nearest the player's last position, since the way to one exit can cross
@@ -272,7 +306,7 @@ How it works:
   not visited yet; `travel` heads for a story goal room through the known room graph (several hops; after a failed hop it tries
   other exits) (goal rooms place objects whose
   code sets `global.plot` to the next value, read from the build); `battle` presses action, cancel and arrows in a
-  battle's rhythm. Programs are either random macros or a few generators with macro bits between them; each
+  battle's rhythm, or half the time only action (attack, the first target, the hits). Programs are either random macros or a few generators with macro bits between them; each
   generator's pick weight grows with what it found per frame lately.
 - **Crashes** are grouped by message and GML function. The first of each is replayed on a separate browser from its
   nearest snapshot (the same restores: a determinism check) and from a fresh page with no restores at all (fresh pages start alike: the loading pump stops at Game Start

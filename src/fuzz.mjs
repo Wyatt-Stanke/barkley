@@ -3,8 +3,9 @@
 // packages). It needs an unobfuscated modernized build, which `build` makes.
 //
 //   node src/fuzz.mjs build  <project .yyp> <build dir> [--minify]
-//   node src/fuzz.mjs run    <build dir> [--save[=<dir>]] [--corpus[=<dir>]] [--through] [--verbose]
+//   node src/fuzz.mjs run    <build dir> [--save[=<dir>]] [--corpus[=<file|dir>]] [--through] [--verbose]
 //                                            [--workers=N] [--minutes=M] [--port=N] [--draw]
+//   node src/fuzz.mjs verify <build dir> [--minutes=M] [--all] [--strict] [--save[=<dir>]] [--corpus=<file>] [...]
 //   node src/fuzz.mjs replay <build dir> <finding dir | crash report file> [--shots=<every N frames>] [--through]
 //
 // build: an Igor HTML5 build with obfuscation off (gml_* names kept), from a copy of the project and of the user folder.
@@ -27,15 +28,17 @@
 // nearest snapshot with the same restores (a determinism check) and from a fresh page with no restores at all,
 // which tells a real crash from an artifact of the resume snapshots. Milestones (the first node in a new room or at
 // a new plot) are replayed from a fresh page too, with screenshots.
-//   --save       keep the findings in ~/Documents/barkley/fuzz/<date-time>/ (or --save=<dir>): summary.md,
+//   --save       keep the findings in build/fuzz/<date-time>/ (or --save=<dir>): summary.md,
 //                crashes/<n>/ and paths/<n>-<room>-p<plot>/ with a report, the inputs, a snapshot and screenshots.
 //                Without it they go to the temporary work dir, which is printed at the start.
 //   --verbose    a line per episode (new cells ◆, functions ƒ, flags ⚑), crashes and milestones as they happen.
 //   --workers    browsers (default: physical cores - 2, leaving room for the two replay browsers);
 //   --minutes    stop after M minutes (default: at Ctrl-C);
-//   --corpus     keep the archive in ~/Documents/barkley/fuzz/corpus (or --corpus=<dir>) and start from it: the
-//                snapshots, features, learned globals, exits, known crashes. Saved every 5 minutes and at the end.
-//                From another build, the most advanced paths are replayed to make their snapshots again.
+//   --corpus     start from the archive in git, fuzz/corpus.json.gz (or --corpus=<file.json.gz>), and keep it: it is
+//                unpacked into build/fuzz/corpus (kept as it is, snapshots and all, when it came from this very file)
+//                and packed again at every save, every 5 minutes and at the end. The paths, features, learned globals,
+//                exits, known crashes; --corpus=<dir> keeps a plain directory instead. From another build, every path
+//                is played again to make its snapshot again.
 //   --through    patch known crash classes in the page (numbers drawn as text, real() of a non-number,
 //                script_execute of a number that is no script) so the
 //                search goes on past them. Each patched spot is still reported (kind "patched", once per signature)
@@ -43,6 +46,12 @@
 //   --draw       keep WebGL drawing (slower).
 //   --port=N     serve the build on port N (default 8870) and give the browsers ports N+530 to N+629, so two fuzz
 //                processes can run at once (run and replay take it).
+//
+// verify: checks the game against the corpus rather than looking for new things. It plays the corpus's paths again
+// on this build (the furthest of each room and plot and the ones on their way; --all: every one), with --through, then
+// explores for --minutes (default none), and replays any crash the corpus doesn't know. Exit 1 on a new crash that
+// replays; paths that now end elsewhere and places no path reached are warnings (--strict: failures). The verdict is
+// <findings>/verify.md, and is appended to $GITHUB_STEP_SUMMARY. The corpus is only read.
 //
 // replay: plays a finding's full input path from a fresh page with no restores, with screenshots in <finding>/replay.
 // Given a crash report instead (the BARKLEY-CRASH-1: text a player sends, from crash.js and patch modernized/07), it
@@ -67,7 +76,7 @@ import {
 	writeFileSync,
 } from 'node:fs';
 import { createServer } from 'node:http';
-import { tmpdir } from 'node:os';
+import { availableParallelism, tmpdir } from 'node:os';
 import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { writeBuild } from './offline.mjs';
@@ -114,8 +123,8 @@ function harness(root) {
 	const js = readFileSync(path.join(root, 'html5game', game), 'utf8');
 	if (!js.includes('function gml_Script_resume_save'))
 		throw new Error('needs an unobfuscated modernized build (fuzz.mjs build)');
-	// both the pretty build and the minified one (fuzz.mjs build --minify), which writes 1e6 for 1000000 and turns the
-	// surface check into a conditional
+	// both the pretty build and the minified one (fuzz.mjs build --minify, the deployed build), which writes 1e6 for
+	// 1000000, turns the surface check into a conditional and folds loops and ifs
 	const rng = js.match(/var state=\[\]\s*[;,]\s*(?:var\s+)?(\w+)\s*=\s*0\s*[;,]\s*(?:var\s+)?(\w+)\s*=\s*\w+\(0\)/);
 	const ids = js.match(/(\w+)\s*=\s*(?:1000000|1e6)\s*[;,]\s*g_pBuiltIn\.game_id\s*=/);
 	const surfaces =
@@ -123,17 +132,62 @@ function harness(root) {
 		js.match(/0==(\w+)\.length\?[^;]{0,300}?yyError\("Unbalanced surface stack/);
 	const mouse = js.match(/function (\w+)\(\)\s*\{\s*if\(\w+\)\s*\{[\s\S]{0,200}?window_views_mouse_get_x\(\)/);
 	// the room's method that removes destroyed instances (the runtime calls it near the end of a frame), and the room
-	const sweep = js.match(
-		/prototype\.(\w+)=\s*function\(\)\s*\{\s*var (\w+)=\[\];[\s\S]{0,200}?\.marked\)\s*\{\s*\2\[\2\.length\]=/,
-	);
+	const sweep =
+		js.match(
+			/prototype\.(\w+)=\s*function\(\)\s*\{\s*var (\w+)=\[\];[\s\S]{0,200}?\.marked\)\s*\{\s*\2\[\2\.length\]=/,
+		) ??
+		js.match(
+			/prototype\.(\w+)=function\(\)\{for\(var (\w+)=\[\],[^{}]{0,100}\{[^{}]{0,40}\.marked&&\(\2\[\2\.length\]=/,
+		);
 	const room = sweep && js.match(new RegExp(`(\\w+)\\.${sweep[1]}\\(\\)`));
 	// frame pacing: when the next frame is due (delay = due + 1000/room_speed - now; due = now + delay)
-	const pace = js.match(/var (\w+)=(\w+)\+1000\/(\w+)-now;\s*if\(\1<0\)\1=0;\s*\2=now\+\1;/);
+	const pace =
+		js.match(/var (\w+)=(\w+)\+1000\/(\w+)-now;\s*if\(\1<0\)\1=0;\s*\2=now\+\1;/) ??
+		js.match(/(\w+)=(\w+)\+1e3\/(\w+)-(\w+);if\(\1<0&&\(\1=0\),\2=\4\+\1,/);
 	if (!rng || !ids || !surfaces)
 		throw new Error('RNG state, instance id counter or surface stack not found in the runtime');
 	const names = { state: 'state', b: rng[1], c: rng[2], ids: ids[1], surfaces: surfaces[1], mouse: mouse?.[1] };
 	Object.assign(names, { sweep: sweep?.[1], room: room?.[1], pace: pace?.[2] });
 	return `window.__fuzzNames=${JSON.stringify(names)};\n${readFileSync(path.join(HERE, 'fuzz-page.js'), 'utf8')}`;
+}
+
+// ---- the corpus in git: fuzz/corpus.json.gz ----
+// What the search knows, packed into one file: the state and the nodes on the way to every node that owned features
+// (the rest led nowhere), without snapshots. Snapshots only restore into the build that made them, and no two builds
+// are byte-identical, so a run always makes them again from the paths (rebase). The bytes depend only on the content,
+// so an unchanged corpus is an unchanged file.
+const PACK = path.join(HERE, '..', 'fuzz', 'corpus.json.gz');
+const md5 = (b) => createHash('md5').update(b).digest('hex');
+function packCorpus(dir, file) {
+	const st = JSON.parse(readFileSync(path.join(dir, 'state.json'), 'utf8'));
+	const nodes = JSON.parse(readFileSync(path.join(dir, 'nodes.json'), 'utf8'));
+	const byId = new Map(nodes.map((n) => [n.id, n]));
+	const keep = new Set();
+	for (const n of nodes)
+		if (n.progress !== undefined) for (let m = n; m && !keep.has(m.id); m = byId.get(m.parent)) keep.add(m.id);
+	// a crash's directory is this machine's; its signature is what the next run needs
+	const crashes = st.crashes.map(({ dir: _, ...c }) => c);
+	const json = JSON.stringify({ state: { ...st, build: null, crashes }, nodes: nodes.filter((n) => keep.has(n.id)) });
+	const gz = gzipSync(json, { level: 9 });
+	gz[9] = 3; // the gzip header's OS byte, which differs by platform
+	mkdirSync(path.dirname(file), { recursive: true });
+	writeFileSync(`${file}.tmp`, gz);
+	renameSync(`${file}.tmp`, file);
+	writeFileSync(path.join(dir, 'packed.md5'), md5(gz));
+}
+// Makes dir the unpacked corpus. A dir last packed to (or unpacked from) this very file is kept as it is, with the
+// snapshots its build made; otherwise it is replaced.
+function unpackCorpus(file, dir) {
+	if (!existsSync(file)) return;
+	const gz = readFileSync(file);
+	const mark = path.join(dir, 'packed.md5');
+	if (existsSync(mark) && readFileSync(mark, 'utf8') === md5(gz)) return;
+	const { state, nodes } = JSON.parse(gunzipSync(gz).toString());
+	rmSync(dir, { recursive: true, force: true });
+	mkdirSync(path.join(dir, 'nodes'), { recursive: true });
+	writeFileSync(path.join(dir, 'state.json'), JSON.stringify(state));
+	writeFileSync(path.join(dir, 'nodes.json'), JSON.stringify(nodes));
+	writeFileSync(mark, md5(gz));
 }
 
 // Identifies a build: snapshots and function numbers only carry over to a run on the same one.
@@ -317,6 +371,7 @@ const retime = (prog) => prog.map(([k, n]) => [k, Math.max(1, Math.round(n * (0.
 const frameCount = (prog) => prog.reduce((a, [, n]) => a + n, 0);
 
 // ---- the archive ----
+// Rooms that hardly count: menus, the debug room and Game Over
 const MENU_ROOMS = new Set([
 	'RomInit',
 	'RomStarter',
@@ -326,6 +381,7 @@ const MENU_ROOMS = new Set([
 	'RomLoad',
 	'RomConfig',
 	'RomTest',
+	'RomGameover', // a dead end: it goes back to the title
 ]);
 // Globals that churn: timers, scratch variables, cursors
 const STATIC_VOLATILE = [
@@ -474,6 +530,7 @@ class Fuzzer {
 			crashes: [...this.crashes.values()].map(({ n, sig, count, dir, verify }) => ({ n, sig, count, dir, verify })),
 			milestones: this.pastMilestones + this.paths.length,
 		});
+		if (this.opts.pack) packCorpus(dir, this.opts.pack);
 	}
 
 	// Returns 'same' (the archive as it was), 'rebase' (another build: its snapshots must be made again) or null.
@@ -583,64 +640,123 @@ class Fuzzer {
 		return 'rebase';
 	}
 
-	// For another build: the new game is made again (root), then the most advanced nodes (the best of each room and
-	// plot, and the 20 furthest) are replayed from it without restores, on all workers, to make their snapshots.
-	// Features owned by the rest are forgotten, so the search finds them again.
+	// For another build: the new game is made again (root), then the archive's paths are played again on it to make
+	// their snapshots. They are played as a tree, each node from the snapshot of the node its episode started from
+	// (made again first), so every recorded frame is played once and the restores are the ones the search made.
+	// With opts.spine only the furthest node of each room and plot is made again, with the nodes on its way (verify).
+	// A replay can end somewhere else than the node recorded (another build or harness, or a change in the game). Then
+	// it and everything recorded after it are dropped: their inputs were for a state that no longer happens, and kept
+	// as candidates that own nothing they crowded the search (1,100 of 2,400 snapshots once stood in one room). The room
+	// is the signal; the plot only counts when both sides have one (F.probe() reports null wherever global.plot is not
+	// set yet). Features owned by nodes that didn't come back are forgotten, so the search finds them again, and the
+	// next pack leaves those nodes out. this.rebased says how it went.
 	async rebase() {
 		const st = this.corpusState;
 		const olds = [...this.nodes.values()].filter((n) => n.progress !== undefined && n.id !== 0);
-		const best = new Map();
+		const had = new Set([0, ...olds.map((n) => n.id)]);
+		const base = new Map(); // node -> the node its episode started from
 		for (const n of olds) {
-			const k = `${n.probe.room}|${n.probe.plot}`;
-			if (!best.has(k) || best.get(k).progress < n.progress) best.set(k, n);
+			let p = this.nodes.get(n.parent);
+			while (p && !had.has(p.id)) p = this.nodes.get(p.parent);
+			base.set(n.id, p?.id ?? 0);
 		}
-		const jobs = [...new Set([...best.values(), ...olds.sort((a, b) => b.progress - a.progress).slice(0, 20)])];
-		const tried = jobs.length;
-		this.say(`corpus from another build: replaying ${tried} paths to make their snapshots again`);
+		let targets = olds;
+		if (this.opts.spine) {
+			const best = new Map();
+			for (const n of olds) {
+				const k = `${n.probe.room}|${n.probe.plot}`;
+				if (!best.has(k) || best.get(k).progress < n.progress) best.set(k, n);
+			}
+			const want = new Set();
+			for (let n of best.values())
+				for (; n && n.id !== 0 && !want.has(n); n = this.nodes.get(base.get(n.id))) want.add(n);
+			targets = olds.filter((n) => want.has(n));
+		}
+		this.rebaseTargets = targets.map((n) => ({ id: n.id, probe: n.probe }));
 		for (const n of olds) delete n.progress;
-		const done = new Set([0]);
-		let drifted = 0,
-			made = 0;
+		const pending = targets.sort((a, b) => a.id - b.id);
+		const status = new Map([[0, 'done']]); // done (a snapshot was made), drifted, crashed, failed or skipped
+		const r = { targets: targets.length, exact: 0, moved: 0, drifted: [], crashed: [], failed: 0, skipped: 0 };
+		this.rebased = r;
+		this.say(`corpus from another build: playing ${r.targets} paths again to make their snapshots`);
+		const t0 = Date.now();
+		const progress = setInterval(
+			() => this.say(dim(`  rebase: ${r.targets - pending.length} of ${r.targets} paths, ${dur(Date.now() - t0)}`)),
+			60000,
+		);
 		await Promise.all(
 			this.workers.map(async (w) => {
-				for (let n = jobs.shift(); n; n = jobs.shift()) {
+				while (pending.length) {
+					const i = pending.findIndex((n) => status.has(base.get(n.id)));
+					if (i < 0) {
+						await sleep(50);
+						continue;
+					}
+					const [n] = pending.splice(i, 1);
+					const from = base.get(n.id);
+					if (status.get(from) !== 'done') {
+						status.set(n.id, 'skipped');
+						r.skipped++;
+						continue;
+					}
 					try {
-						const chain = this.chain(n)
-							.slice(1)
-							.map((s) => ({ ...s, loaded: false }));
-						const r = await this.replayChain(w.b, chain, this.boot.snap);
-						if (r.crash) continue;
-						const snap = await w.b.call(() => __fuzz.save());
+						const chain = this.chain(n);
+						const steps = chain.slice(chain.findIndex((s) => s.id === from) + 1);
+						const res = await this.replayChain(w.b, steps, gunzipSync(this.nodes.get(from).snap).toString());
+						if (res.crash) {
+							status.set(n.id, 'crashed');
+							const s = steps[res.step ?? steps.length - 1];
+							r.crashed.push({ id: n.id, at: s.id, probe: res.crash.probe ?? s.probe, message: res.crash.message });
+							if (res.crash.kind !== 'restore')
+								this.crash(res.crash, {
+									parent: this.nodes.get(s.id).parent,
+									loaded: s.loaded,
+									program: s.program,
+									probe: res.crash.probe ?? s.probe,
+								});
+							await this.restart(w);
+							continue;
+						}
 						const probe = await w.b.call(() => __fuzz.probe());
-						this.nodes.delete(n.id);
+						const p = n.probe;
+						const samePlot = typeof probe.plot !== 'number' || typeof p.plot !== 'number' || probe.plot === p.plot;
+						if (probe.room !== p.room || !samePlot) {
+							status.set(n.id, 'drifted');
+							r.drifted.push({ id: n.id, want: p, got: probe });
+							continue;
+						}
+						if (probe.x === p.x && probe.y === p.y && probe.battle === p.battle) r.exact++;
+						else r.moved++;
+						const snap = await w.b.call(() => __fuzz.save());
 						const m = { ...n, probe, snap: undefined, progress: undefined, inCorpus: false };
 						this.nodes.set(n.id, m);
 						this.addSnap(m, snap);
-						made++;
-						// A replay from a fresh page can end somewhere else than the node recorded, since the path was recorded
-						// on another build or harness. The snapshot is still a real state, so it stays a candidate under the probe
-						// it actually reached - but it must not inherit features of a place it no longer stands in, or those features are
-						// owned by a state that cannot reach them and can never be found again.
-						// The room is the signal (every drift seen was a room change); the plot only counts when both sides have
-						// one, since F.probe() reports it as null wherever global.plot is not set yet.
-						const samePlot =
-							typeof probe.plot !== 'number' || typeof n.probe.plot !== 'number' || probe.plot === n.probe.plot;
-						if (probe.room === n.probe.room && samePlot) done.add(n.id);
-						else drifted++;
+						status.set(n.id, 'done');
 					} catch (err) {
+						status.set(n.id, 'failed');
+						r.failed++;
 						this.say(yellow(`rebase of node ${n.id} failed: ${err.message.split('\n')[0]}`));
+						await this.restart(w);
 					}
 				}
 			}),
 		);
+		clearInterval(progress);
 		// Not one path replayed: the harness or the build is broken, not the corpus. Saving now would mark the corpus as
 		// this build's with none of its snapshots, so stop and leave it as it was.
-		if (tried && !made)
-			throw new Error(`rebase made no snapshots from ${tried} paths; the corpus in ${this.opts.corpus} is unchanged`);
+		const made = [...status.values()].filter((s) => s === 'done').length - 1;
+		if (r.targets && !made)
+			throw new Error(
+				`rebase made no snapshots from ${r.targets} paths; the corpus in ${this.opts.corpus} is unchanged`,
+			);
 		for (const n of olds) rmSync(path.join(this.opts.corpus, 'nodes', `${n.id}.json.gz`), { force: true });
+		// the story so far is what came back, so reaching the rest again counts as a milestone again
+		const back = this.candidates.map((n) => n.probe).filter((p) => !MENU_ROOMS.has(p.room));
+		this.storyRooms = new Set(back.map((p) => p.room));
+		this.maxPlot = Math.max(0, ...back.map((p) => p.plot ?? 0));
 		const fnId = new Map(this.fnNames.map((n, i) => [n, i]));
 		for (const [k, nodeId, chosen] of st.features) {
-			if (!done.has(nodeId)) continue;
+			if (status.get(nodeId) !== 'done') continue;
 			const key = this.vKey(k, (f) => fnId.get(f) ?? -1);
 			this.features.set(key, { key, node: this.nodes.get(nodeId), chosen, t: 0 });
 			if (key.startsWith('c:')) this.log.push(['cells', key.slice(2)]);
@@ -648,8 +764,9 @@ class Fuzzer {
 			else if (key.startsWith('f:')) this.log.push(['flags', key.slice(2)]);
 		}
 		this.say(
-			`rebased ${done.size - 1} paths` +
-				(drifted ? `; ${drifted} replayed to another room or plot, so their features go back to being findable` : ''),
+			`rebased ${made} of ${r.targets} paths in ${dur(Date.now() - t0)}: ${r.exact} exactly where they were recorded, ` +
+				`${r.moved} in the same room at another spot, ${r.drifted.length} elsewhere, ` +
+				`${r.crashed.length} crashed, ${r.failed} failed, ${r.skipped} skipped after those`,
 		);
 	}
 
@@ -901,7 +1018,7 @@ class Fuzzer {
 		mkdirSync(m.dir, { recursive: true });
 		writeFileSync(path.join(m.dir, 'path.json'), JSON.stringify({ why, probe: p, chain: this.chain(node) }));
 		writeFileSync(path.join(m.dir, 'snapshot.json.gz'), node.snap);
-		this.queue.push({ type: 'path', m });
+		if (!this.opts.verify) this.queue.push({ type: 'path', m });
 		this.say(
 			`${bold(yellow(`★ milestone ${m.n}`))} ${why}: ${cyan(p.room)} plot ${yellow(p.plot)} after ${dur(m.at)}, ${(node.frames / 60).toFixed(0)} s of play`,
 		);
@@ -933,6 +1050,7 @@ class Fuzzer {
 			this.say(`${red(`✖ new crash ${e.n}`)} ${red(sig)}\n  at ${JSON.stringify(c.probe)}`);
 		}
 		e.count++;
+		e.now = (e.now ?? 0) + 1; // this run
 		return e;
 	}
 
@@ -995,7 +1113,7 @@ class Fuzzer {
 			`found per 10k frames: ${Object.entries(this.genStats)
 				.map(([g, v]) => `${g} ${((v.found * 10000) / Math.max(1, v.frames)).toFixed(1)}`)
 				.join(', ')}`,
-			`crashes ${this.crashes.size}${[...this.crashes.values()].map((e) => `\n  #${e.n} x${e.count} ${e.sig}  [${e.verify ?? 'replaying'}]`).join('')}`,
+			`crashes ${this.crashes.size}${[...this.crashes.values()].map((e) => `\n  #${e.n} x${e.count}${e.old ? ` (${e.now ?? 0} this run)` : ''} ${e.sig}  [${e.verify ?? 'replaying'}]`).join('')}`,
 			`findings: ${this.out}`,
 		];
 		writeFileSync(path.join(this.out, 'status.txt'), `${lines.join('\n')}\n`);
@@ -1019,7 +1137,7 @@ class Fuzzer {
 			'|---|---|---|---|---|',
 			...[...this.crashes.values()].map(
 				(e) =>
-					`| [${e.n}](${e.old ? `${e.dir}/report.md` : `crashes/${e.n}/report.md`}) | ${e.count} | ${e.old ? 'an earlier run' : dur(e.first.at)} | \`${e.sig.replace(/\|/g, '\\|')}\` | ${e.verify ?? 'replaying'} |`,
+					`| ${e.old ? (e.dir ? `[${e.n}](${e.dir}/report.md)` : e.n) : `[${e.n}](crashes/${e.n}/report.md)`} | ${e.count} | ${e.old ? 'an earlier run' : dur(e.first.at)} | \`${e.sig.replace(/\|/g, '\\|')}\` | ${e.verify ?? 'replaying'} |`,
 			),
 			'',
 			'## Milestones',
@@ -1119,18 +1237,19 @@ class Fuzzer {
 
 	// ---- replays on a separate browser ----
 	// Plays chain steps in order: before a step that started with a restore, restores the previous step's snapshot;
-	// after every step but the last, takes a snapshot as the fuzzer did (it uses up an instance id).
+	// after every step but the last, takes a snapshot as the fuzzer did (it uses up an instance id). A crash comes back
+	// with the index of its step.
 	async replayChain(v, steps, snap) {
 		let prev = snap,
 			r = { crash: null, probe: null };
 		if (snap) {
 			const err = await v.call((s) => __fuzz.load(s), snap);
-			if (err) return { crash: err };
+			if (err) return { crash: err, step: 0 };
 		}
 		for (const [i, s] of steps.entries()) {
 			if (s.loaded && prev && i > 0) {
 				const err = await v.call((x) => __fuzz.load(x), prev);
-				if (err) return { crash: err };
+				if (err) return { crash: err, step: i };
 			}
 			const last = i === steps.length - 1;
 			r = await v.call(
@@ -1138,7 +1257,7 @@ class Fuzzer {
 				{ program: s.program, saveAt: last ? [] : [s.program.length], drawLast: last },
 				600000,
 			);
-			if (r.crash) return r;
+			if (r.crash) return { ...r, step: i };
 			prev = r.saves[s.program.length] ?? prev;
 		}
 		return r;
@@ -1264,9 +1383,11 @@ class Fuzzer {
 			through: this.opts.through,
 		});
 		this.children.push(v);
-		while (!this.stopping) {
+		// (verify: once the search stops, the crashes still queued are replayed before it ends)
+		while (!this.stopping || this.draining) {
 			const job = this.queue.shift();
 			if (!job) {
+				if (this.stopping) return;
 				await sleep(500);
 				continue;
 			}
@@ -1279,7 +1400,7 @@ class Fuzzer {
 					this.say(`${yellow(`★ milestone ${job.m.n}`)} replayed from a fresh page: ${job.m.verify}`);
 				}
 			} catch (err) {
-				if (this.stopping) break;
+				if (this.stopping && !this.draining) break;
 				const what = job.e ?? job.m;
 				what.verify = `replay failed: ${err.message.split('\n')[0]}`;
 				this.say(yellow(`replay of ${job.type} ${what.n} failed: ${err.message.split('\n')[0]}`));
@@ -1341,7 +1462,10 @@ class Fuzzer {
 		if (corpus === 'rebase') await this.rebase();
 		this.saveCorpus();
 		const saver = setInterval(() => this.saveCorpus(), 300000);
-		const loops = [...this.workers.map((w) => this.worker(w)), this.verifier(0), this.verifier(1)];
+		// verify with no minutes: only the corpus replays (and their crashes)
+		const explore = !this.opts.verify || this.opts.minutes > 0;
+		const workers = explore ? this.workers.map((w) => this.worker(w)) : [];
+		const verifiers = [this.verifier(0), this.verifier(1)];
 		const every = this.opts.verbose ? 30000 : 60000;
 		const box = (lines) => {
 			const [head, ...rest] = lines;
@@ -1352,7 +1476,7 @@ class Fuzzer {
 			].join('\n');
 		};
 		const timer = setInterval(() => console.log(box(this.status())), every);
-		const end = this.opts.minutes ? Date.now() + this.opts.minutes * 60000 : Infinity;
+		const end = !explore ? 0 : this.opts.minutes ? Date.now() + this.opts.minutes * 60000 : Infinity;
 		await new Promise((r) => {
 			const check = setInterval(() => {
 				if (Date.now() > end || this.stop) {
@@ -1362,13 +1486,82 @@ class Fuzzer {
 			}, 500);
 		});
 		this.stopping = true;
-		clearInterval(timer);
 		clearInterval(saver);
 		this.saveCorpus();
+		if (this.opts.verify) {
+			for (const w of this.workers) w.b.kill();
+			await Promise.allSettled(workers);
+			this.draining = true;
+			if (this.queue.length) this.say(`replaying ${this.queue.length} new crash(es) before the verdict`);
+			await Promise.race([Promise.allSettled(verifiers), sleep(20 * 60000)]);
+		}
+		clearInterval(timer);
+		this.draining = false;
 		for (const b of this.children) b.kill();
-		await Promise.allSettled(loops);
+		await Promise.allSettled([...workers, ...verifiers]);
 		console.log(box(this.status()));
 		this.server.close();
+		if (this.opts.verify) return this.verdict();
+	}
+
+	// verify: whether the game still does what the corpus recorded, as markdown. It fails on a crash the corpus didn't
+	// know that replays (or couldn't be replayed); crashes that only happened after the fuzzer's restores, paths that
+	// now lead elsewhere and places no replayed path reached are warnings, unless --strict.
+	verdict() {
+		const r = this.rebased ?? { targets: 0, exact: 0, moved: 0, drifted: [], crashed: [], failed: 0, skipped: 0 };
+		const fresh = [...this.crashes.values()].filter((e) => !e.old);
+		const harness = (e) => ['restore', 'stall', 'hang'].includes(e.first.kind);
+		const failing = fresh.filter((e) => !harness(e) && (!e.verify || /reproduced|replay failed/.test(e.verify)));
+		const flaky = fresh.filter((e) => !failing.includes(e));
+		const again = [...this.crashes.values()].filter((e) => e.old && e.now);
+		// rooms and plots the replayed corpus paths were recorded in that none of them reached this time
+		const where = (p) => `${p.room} plot ${p.plot}`;
+		const want = new Set(this.rebaseTargets?.filter((n) => !MENU_ROOMS.has(n.probe.room)).map((n) => where(n.probe)));
+		const got = new Set(this.candidates.map((n) => where(n.probe)));
+		const lost = [...want].filter((w) => !got.has(w));
+		const strict = this.opts.strict && (r.drifted.length || lost.length || r.failed);
+		const ok = !failing.length && !strict;
+		const s = this.stats;
+		const md = [
+			`## Fuzz verification: ${ok ? 'passed' : 'failed'}`,
+			'',
+			`- Build \`${path.basename(this.root)}\`; the corpus: ${this.nodes.size} nodes, ${this.pastMilestones} milestones, furthest plot ${this.maxPlot}`,
+			`- Replayed ${r.targets} corpus paths (${this.opts.spine ? 'the furthest of each room and plot, and those on their way' : 'all of them'}): ` +
+				`${r.exact} ended exactly where they were recorded, ${r.moved} in the same room elsewhere, ${r.drifted.length} went ` +
+				`elsewhere, ${r.crashed.length} crashed, ${r.failed} failed to replay, ${r.skipped} skipped after those`,
+			this.opts.minutes
+				? `- Then explored for ${this.opts.minutes} min: ${s.episodes} episodes, ${(s.frames / 216000).toFixed(1)} h of play`
+				: '',
+			...(failing.length
+				? ['', '### New crashes', '', ...failing.map((e) => `- \`${e.sig}\`: ${e.verify ?? 'not replayed'} (${e.dir})`)]
+				: []),
+			...(flaky.length
+				? [
+						'',
+						'### New crashes that did not replay (warnings)',
+						'',
+						...flaky.map((e) => `- \`${e.sig}\`: ${e.verify ?? 'not replayed'}`),
+					]
+				: []),
+			...(again.length
+				? ['', '### Known crashes seen again', '', ...again.map((e) => `- \`${e.sig}\` (${e.now}×)`)]
+				: []),
+			...(r.drifted.length
+				? [
+						'',
+						`### Paths that went elsewhere (${r.drifted.length})`,
+						'',
+						...r.drifted.slice(0, 20).map((d) => `- node ${d.id}: recorded in ${where(d.want)}, now ${where(d.got)}`),
+					]
+				: []),
+			...(lost.length ? ['', '### Places no replayed path reached', '', ...lost.map((w) => `- ${w}`)] : []),
+			'',
+			`Findings: \`${this.out}\``,
+		].filter((l, i, a) => l !== '' || a[i - 1] !== '');
+		writeFileSync(path.join(this.out, 'verify.md'), `${md.join('\n')}\n`);
+		if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${md.join('\n')}\n`);
+		console.log(`\n${md.join('\n')}`);
+		return ok;
 	}
 }
 
@@ -1633,7 +1826,7 @@ function build(yyp, outDir, minify = false) {
 // setPort: for probe scripts, like --port
 const setPort = (n) => (HTTP_PORT = n);
 
-export { Browser, Fuzzer, harness, serve, setPort };
+export { Browser, Fuzzer, harness, packCorpus, serve, setPort, unpackCorpus };
 
 // ---- command line ----
 if (import.meta.main) {
@@ -1646,21 +1839,37 @@ if (import.meta.main) {
 	HTTP_PORT = +flag('port', HTTP_PORT);
 	if (cmd === 'build' && pos.length === 2) {
 		build(path.resolve(pos[0]), path.resolve(pos[1]), !!flag('minify', false));
-	} else if (cmd === 'run' && pos.length === 1) {
+	} else if ((cmd === 'run' || cmd === 'verify') && pos.length === 1) {
+		const verify = cmd === 'verify';
 		const save = flag('save', false);
+		const work = path.resolve(flag('work', path.join(tmpdir(), `barkley-fuzz-${stamp()}`)));
+		// --corpus: the packed corpus in git, unpacked into build/fuzz/corpus and packed again on every save;
+		// --corpus=<file.json.gz> another packed one; --corpus=<dir> a plain directory, not packed. verify reads the
+		// packed one (or --corpus=<file>) into its work dir and never writes it.
+		const c = flag('corpus', verify);
+		const pack = c === true ? PACK : typeof c === 'string' && c.endsWith('.gz') ? path.resolve(c) : undefined;
+		const corpus = verify
+			? path.join(work, 'corpus')
+			: c === false
+				? undefined
+				: pack
+					? path.join(HERE, '..', 'build', 'fuzz', 'corpus')
+					: path.resolve(c);
+		if (verify && !existsSync(pack ?? '')) throw new Error(`verify needs a packed corpus (${pack ?? c})`);
+		if (pack) unpackCorpus(pack, corpus);
+		const cores = process.platform === 'darwin' ? +execSync('sysctl -n hw.physicalcpu') : availableParallelism();
 		const f = new Fuzzer(path.resolve(pos[0]), {
-			workers: +flag('workers', Math.max(1, +execSync('sysctl -n hw.physicalcpu') - 2)),
+			workers: +flag('workers', Math.max(1, cores - 2)),
 			minutes: +flag('minutes', 0),
 			draw: !!flag('draw', false),
-			through: !!flag('through', false),
-			corpus: (() => {
-				const c = flag('corpus', false);
-				return c === false
-					? undefined
-					: path.resolve(c === true ? path.join(HERE, '..', 'build', 'fuzz', 'corpus') : c);
-			})(),
+			through: verify || !!flag('through', false),
+			corpus,
+			pack: verify ? undefined : pack,
+			verify,
+			spine: verify && !flag('all', false),
+			strict: !!flag('strict', false),
 			verbose: !!flag('verbose', false),
-			work: path.resolve(flag('work', path.join(tmpdir(), `barkley-fuzz-${stamp()}`))),
+			work,
 			save:
 				save === false
 					? undefined
@@ -1675,8 +1884,8 @@ if (import.meta.main) {
 			console.log('\nstopping (Ctrl-C again to quit at once)');
 		});
 		process.on('SIGTERM', () => process.exit(1));
-		await f.run();
-		process.exit(0);
+		const ok = await f.run();
+		process.exit(ok === false ? 1 : 0);
 	} else if (cmd === 'replay' && pos.length === 2) {
 		const target = path.resolve(pos[1]);
 		if (statSync(target).isFile()) await replayReport(path.resolve(pos[0]), target, +flag('shots', 600));
@@ -1685,7 +1894,7 @@ if (import.meta.main) {
 		console.error(
 			readFileSync(new URL(import.meta.url), 'utf8')
 				.split('\n')
-				.slice(1, 8)
+				.slice(1, 10)
 				.join('\n')
 				.replace(/^\/\/ ?/gm, ''),
 		);

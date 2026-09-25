@@ -1,0 +1,35 @@
+# What every job that builds the port needs before node src/pipeline.mjs: Node with the page's npm cache, ffmpeg, and
+# the caches of the game's inputs and the GameMaker tools. The inputs (the game from archive.org, the decompiler's
+# source) and the tools (ProjectTool, Igor, the runtime, Chromium) are pinned in src/fetch.mjs and src/toolchain.mjs,
+# so their hashes key the caches. The licence is never cached.
+name: Set up the build
+description: Node, ffmpeg and the cached inputs and GameMaker tools
+runs:
+  using: composite
+  steps:
+    # The page (src/web) is the one part with npm packages; src/page.mjs installs them from this lockfile.
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+        cache: npm
+        cache-dependency-path: src/web/package-lock.json
+
+    - name: Install ffmpeg
+      shell: bash
+      run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+    - name: Cache the game's inputs
+      uses: actions/cache@v6
+      with:
+        path: game/original
+        key: game-original-${{ hashFiles('src/fetch.mjs') }}
+
+    - name: Cache the GameMaker tools
+      uses: actions/cache@v6
+      with:
+        path: |
+          build/tools/igor
+          build/tools/runtimes
+          build/tools/project-tool-*
+          build/tools/chrome
+        key: gm-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/toolchain.mjs') }}

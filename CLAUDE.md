@@ -86,16 +86,22 @@ node src/playtest.mjs <dir>/out <testdir> 'wait:14000,shot:title,key:Z,wait:3000
 #    so a given port keeps its own saves and resume state.
 cd <dir>/out && python3 -m http.server 8000 --bind 127.0.0.1   # then http://127.0.0.1:8000/
 
-# 6. Fuzz (see src/README.md "Fuzzing"). Needs an unobfuscated build (`build`, ~70 s, as in step 3).
+# 6. Fuzz (see src/README.md "Fuzzing"). Runs on an unobfuscated build (`build`, ~70 s, as in step 3) or on the
+#    deployable one (`--minify`, the pipeline's site/: same replays).
 #    `run` searches until Ctrl-C or --minutes; --save keeps findings in build/fuzz/<date-time>/ (summary.md, crashes/<n>/,
 #    paths/<n>-<room>-p<plot>/), --verbose prints a line per episode, --workers defaults to physical cores - 2.
-#    --corpus keeps the archive in build/fuzz/corpus between runs; --through patches known crash classes and reports each
-#    patched spot instead. `replay` plays a finding from a fresh page with screenshots, or a player's crash report
+#    --corpus starts from the corpus in git, fuzz/corpus.json.gz: unpacked into build/fuzz/corpus (kept, snapshots and
+#    all, while it came from that very file), packed back at every save. Commit the file after a run that found
+#    something. --through patches known crash classes and reports each patched spot instead.
+#    `verify` checks a build against the corpus (read-only): replays its spine (~2 min), explores --minutes, replays new
+#    crashes; exit 1 on a new crash that replays; drift is a warning (--strict: a failure). The PR workflow runs it.
+#    `replay` plays a finding from a fresh page with screenshots, or a player's crash report
 #    (BARKLEY-CRASH-1: text) against the build it came from. Uses ports 8870 (server) and 9400-9499 (browsers);
 #    `--port=N` moves them to N and N+530 to N+629, so two fuzz processes can run at once.
 #    Run long jobs under `caffeinate -i` (a run during laptop sleep gave 108 browser restarts and useless data).
-node src/fuzz.mjs build build/outputs/barkley-1.3.1/BarkleyLTS.yyp build/fuzz/build
+node src/fuzz.mjs build build/pipeline/barkley-1.4.1/BarkleyLTS.yyp build/fuzz/build
 node src/fuzz.mjs run build/fuzz/build --save --corpus --through --verbose
+node src/fuzz.mjs verify build/fuzz/build --minutes=5
 node src/fuzz.mjs replay build/fuzz/build build/fuzz/<run>/crashes/1
 
 # The page alone (src/web): npm ci on first use, type-check (tsc), bundle (vite) into build/web. ~2 s.
@@ -135,12 +141,19 @@ There's no test suite. Verify in these ways:
 
 Everything lives in `~/Documents/barkley/`, which is both the working directory and a **git repo**
 (initialised 2026-09-20), moving to **`github.com/Wyatt-Stanke/barkley`** (public; the old deploy repo below is
-separate). `.gitignore` keeps the generated and bulk-binary folders out, so only `src/`, `virt/`, `docs/`,
-`game/recovered-scripts/`, `.github/`, `README.md`, `biome.jsonc`, `.gitignore` and this file are tracked.
+separate). `.gitignore` keeps the generated and bulk-binary folders out, so only `src/`, `virt/`, `docs/`, `fuzz/` (the packed
+fuzz corpus), `game/recovered-scripts/`, `.github/`, `README.md`, `biome.jsonc`, `.gitignore` and this file are tracked.
 
-### GitHub Actions (`.github/workflows/pages.yml`)
+### GitHub Actions (`.github/workflows/`)
 
-On every push to `main` (and on `workflow_dispatch`), an `ubuntu-24.04` runner runs `node src/pipeline.mjs` and
+Both workflows set up through `.github/actions/setup` (Node with the page's npm cache, ffmpeg, the two caches below).
+
+**`pr.yml`, on every pull request:** `node src/pipeline.mjs` (so it builds and play-tests), then
+`node src/fuzz.mjs verify build/pipeline/site --minutes=5` on the minified site (no second Igor build). The verdict
+is in the job summary; the play-test and the fuzzer's findings are the `check` artifact. Nothing is deployed. A PR
+from a fork gets no secrets, so its build fails at the licence. The runner has 4 vCPUs, so verify runs 2 browsers.
+
+**`pages.yml`:** on every push to `main` (and on `workflow_dispatch`), an `ubuntu-24.04` runner runs `node src/pipeline.mjs` and
 deploys `build/pipeline/site` to the repo's own GitHub Pages (`https://wyatt-stanke.github.io/barkley/`). The deploy
 job runs only on the default branch; Pages is set to "GitHub Actions" as its source, and the `github-pages`
 environment's deployment branch policy allows `main` only (it was created naming whatever the default branch was, so
@@ -175,10 +188,12 @@ barkley/
   virt/          makes game/BarkleyV120.gmx from the original exe (see its README)
   game/          inputs: large, immutable, untracked (except recovered-scripts/)
   docs/          an earlier audit page
+  fuzz/          corpus.json.gz: the fuzzer's corpus, packed (paths, not snapshots; see src/README.md "Fuzzing")
   tools/         the GameMaker Studio 1.4.9999 installer and a how-to video, for virt/'s unused VM (untracked)
   build/         everything generated; all of it reproducible from src/ (untracked); tools/ holds downloaded GameMaker tools,
                  web/ the page app (src/page.mjs)
-  .github/       workflows/pages.yml: the whole pipeline on every push to main, deployed to GitHub Pages
+  .github/       workflows/pages.yml: the whole pipeline on every push to main, deployed to GitHub Pages;
+                 workflows/pr.yml: the pipeline and a fuzz verify on every pull request; actions/setup: their shared setup
   README.md      the GitHub front page: what this is and the one command
 ```
 

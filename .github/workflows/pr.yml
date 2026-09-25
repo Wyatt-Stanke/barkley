@@ -1,0 +1,46 @@
+# On every pull request: the whole port builds from the original executable and play-tests (node src/pipeline.mjs),
+# then the fuzzer checks the build against the corpus in git (node src/fuzz.mjs verify): the corpus's paths are played
+# again on it, it explores for a few minutes, and a crash the corpus doesn't know that replays fails the check. Nothing
+# is deployed. Needs the repository secret GAMEMAKER_ACCESS_KEY, which a pull request from a fork doesn't get.
+name: Pull request check
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push to the branch replaces the check still running for it.
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+
+      - name: Build (exe -> GMX -> LTS project -> HTML5 -> play-test)
+        run: node src/pipeline.mjs --out=build/pipeline
+        env:
+          GAMEMAKER_ACCESS_KEY: ${{ secrets.GAMEMAKER_ACCESS_KEY }}
+          BARKLEY_CONTAINER: docker
+
+      # The deployable build is minified but keeps its gml_* names, so the fuzzer runs on it as it is. The verdict goes
+      # to the job summary.
+      - name: Fuzz (verify against the corpus)
+        run: node src/fuzz.mjs verify build/pipeline/site --minutes=5 --save=build/fuzz/verify
+
+      - name: Keep the play-test and the fuzzer's findings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: check
+          path: |
+            build/pipeline/playtest/*.*
+            build/fuzz/verify
+          if-no-files-found: ignore
