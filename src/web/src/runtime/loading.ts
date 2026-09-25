@@ -17,17 +17,19 @@ let count = { total: 0, loaded: 0 };
 export const [progress, setProgress] = createSignal(0);
 
 export function installTextureProgress() {
-  const src = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src')!;
+  // the DOM defines src as an accessor pair
+  const src = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src') as Required<PropertyDescriptor>;
   Object.defineProperty(HTMLImageElement.prototype, 'src', {
     configurable: true,
     enumerable: src.enumerable,
     get() {
-      return src.get!.call(this);
+      return src.get.call(this);
     },
     set(url: string) {
       const img = this as HTMLImageElement;
-      if (started() || !/_texture_\d+\.png/.test(url) || !window.ReadableStream) return src.set!.call(img, url);
-      const t: [number, number, boolean] = (textures[url] = [0, 0, false]);
+      if (started() || !/_texture_\d+\.png/.test(url) || !window.ReadableStream) return src.set.call(img, url);
+      const t: [number, number, boolean] = [0, 0, false];
+      textures[url] = t;
       fetch(url, { priority: 'low' }) // after the scripts, as an image would be
         .then(async (r) => {
           if (!r.ok || !r.body) throw r.status;
@@ -46,11 +48,11 @@ export function installTextureProgress() {
             const u = URL.createObjectURL(blob);
             img.addEventListener('load', () => URL.revokeObjectURL(u));
             t[2] = true;
-            src.set!.call(img, u);
+            src.set.call(img, u);
           },
           () => {
             t[1] = 0;
-            src.set!.call(img, url); // load it the ordinary way
+            src.set.call(img, url); // load it the ordinary way
           },
         );
     },
@@ -68,7 +70,11 @@ export function showProgress() {
   let got = 0,
     all = 0,
     done = 0;
-  for (const x of t) ((got += x[0]), (all += x[1]), (done += x[2] ? 1 : 0));
+  for (const x of t) {
+    got += x[0];
+    all += x[1];
+    if (x[2]) done++;
+  }
   // pages whose size isn't known yet (not started, or no Content-Length) count as the average known one
   const sized = t.filter((x) => x[1] > 0).length;
   const tex = sized ? Math.min(1, got / (all + ((n - sized) * all) / sized)) : n ? done / n : 0;

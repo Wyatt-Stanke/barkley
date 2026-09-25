@@ -18,16 +18,17 @@
   // (global.rendt) doesn't depend on where a restore left the clock (1000/60 gave 16, 17, 17, ...)
   const VSYNC = 17;
   const KEYS = { up: 38, down: 40, left: 37, right: 39, z: 90, x: 88, c: 67 };
-  const F = (window.__fuzz = { frame: 0, crash: null, ended: false, alerts: [] });
+  const F = { frame: 0, crash: null, ended: false, alerts: [] };
+  window.__fuzz = F;
   // Every page starts as a first visit: a browser profile keeps the save files and config of earlier pages (replays
   // from a fresh page would otherwise not be fresh). Snapshots carry their own.
   try {
     localStorage.clear();
-  } catch (e) {}
+  } catch {}
   const safe = (f, d = null) => {
     try {
       return f();
-    } catch (e) {
+    } catch {
       return d;
     }
   };
@@ -46,7 +47,11 @@
   // dropped (had one re-registered after the runtime, it became frameCb, and a restart scheduled only it, so the game
   // never ran another frame). The page no longer starts them under the harness; this is for builds from before that.
   const OWN_LOOPS = new Set(['touch_pin', 'pad_poll']);
-  window.requestAnimationFrame = (cb) => (OWN_LOOPS.has(cb.name) ? 0 : (raf.push((frameCb = cb)), raf.length));
+  window.requestAnimationFrame = (cb) => {
+    if (OWN_LOOPS.has(cb.name)) return 0;
+    frameCb = cb;
+    return raf.push(cb);
+  };
   window.webkitRequestAnimationFrame = undefined;
   window.setTimeout = function (fn, ms, ...args) {
     if (!inFrame) return nativeSetTimeout(fn, ms, ...args); // asset loading
@@ -57,7 +62,7 @@
   Math.random = () => {
     seed = (seed + 0x6d2b79f5) | 0; // mulberry32
     let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
   window.alert = (m) => F.alerts.push(String(m));
@@ -128,7 +133,10 @@
       fnNames.push(fn.name);
       const w = {
         [fn.name]: function () {
-          if (!seg[id]) ((seg[id] = 1), segList.push(id));
+          if (!seg[id]) {
+            seg[id] = 1;
+            segList.push(id);
+          }
           return fn.apply(this, arguments);
         },
       }[fn.name];
@@ -158,7 +166,7 @@
   const ev = (k) => ({
     which: KEYS[k],
     keyCode: KEYS[k],
-    key: k.length === 1 ? k : 'Arrow' + k[0].toUpperCase() + k.slice(1),
+    key: k.length === 1 ? k : `Arrow${k[0].toUpperCase()}${k.slice(1)}`,
     preventDefault() {},
   });
   const setKeys = (keys) => {
@@ -208,7 +216,10 @@
         window.gml_Script_resume_save = realSave;
       }
     };
-    window.game_end = () => void (F.ended = true); // Quit Vidcon, Esc
+    // Quit Vidcon, Esc
+    window.game_end = () => {
+      F.ended = true;
+    };
     // Game Start makes global.path with path_add, ten more on every restart: every restart gets the first ten back, so
     // every page numbers them alike whatever it ran before (instances' saved path_index are those numbers)
     paths0 = [...(gml().gmlpath ?? [])];
@@ -295,7 +306,7 @@
     const s = window[N.state];
     const rng = { state: s.map(Number), b: window[N.b], c: window[N.c] };
     // keys latched by key_clear, which resume_save leaves out (a reload starts with every key up)
-    const latch = [...(gml().gmlkey_latch ?? [])].flatMap((v, k) => (v == 1 ? [k] : []));
+    const latch = [...(gml().gmlkey_latch ?? [])].flatMap((v, k) => (Number(v) === 1 ? [k] : []));
     // exact direction and speed of what moves: resume_restore sets hspeed and vspeed, and the runtime derives both
     // from them truncated to 6 decimals, so smog that keeps its own direction drifted
     const motion = GetWithArray(-3).flatMap((i) => (i.speed ? [[Number(i.id), i.direction, i.speed]] : []));
@@ -373,12 +384,15 @@
       try {
         step();
       } catch (e) {
-        return (F.crash = { kind: 'restore', ...errText(e) });
+        F.crash = { kind: 'restore', ...errText(e) };
+        return F.crash;
       }
       seen = Math.max(seen, g.gmlresume_phase);
     }
-    if (!done())
-      return (F.crash = { kind: 'restore', message: `restore did not finish (phase ${g.gmlresume_phase})`, stack: '' });
+    if (!done()) {
+      F.crash = { kind: 'restore', message: `restore did not finish (phase ${g.gmlresume_phase})`, stack: '' };
+      return F.crash;
+    }
     F.frame = d.frame ?? 0;
     if (rep) return null;
     // The restore's frame also ran a whole step on the rebuilt game (Begin Step to Draw, alarms, animation) with a
@@ -392,7 +406,8 @@
       g.gmlresume_data = json_parse(c, d.resume); // (self, string)
       gml_Script_resume_restore(c, c);
     } catch (e) {
-      return (F.crash = { kind: 'restore', ...errText(e) });
+      F.crash = { kind: 'restore', ...errText(e) };
+      return F.crash;
     }
     // It sets what was saved but keeps variables that step created (a follower blocked for that frame set o, zx, zy)
     const vars = new Map(res.instances.map((e) => [e.iid, e.vars]));
@@ -406,17 +421,18 @@
     const byId = new Map(GetWithArray(-3).map((i) => [Number(i.id), i]));
     for (const [id, dir, spd] of d.motion ?? []) {
       const i = byId.get(id);
-      if (i) ((i[field(i, 'direction')] = dir), (i[field(i, 'speed')] = spd));
+      if (i) {
+        i[field(i, 'direction')] = dir;
+        i[field(i, 'speed')] = spd;
+      }
     }
     // Instances destroyed outside a frame (what that step created, the restore's mark for the next id) stay in the
     // runtime's id map until the end of the next frame, and removing one then clears the entry for its id even when a
     // new instance has that id by then, as it would after the counter goes back below: remove them now
-    if (!N.sweep)
-      return (F.crash = {
-        kind: 'restore',
-        message: "the runtime's sweep of destroyed instances wasn't found",
-        stack: '',
-      });
+    if (!N.sweep) {
+      F.crash = { kind: 'restore', message: "the runtime's sweep of destroyed instances wasn't found", stack: '' };
+      return F.crash;
+    }
     window[N.room][N.sweep]();
     // Instance ids go on from the saved counter (that step and the mark used some up), and keys latched
     // when the snapshot was taken stay latched, as in continuous play when the next step holds them again (the
@@ -462,7 +478,10 @@
     talked: new Set(),
     graph: new Map(),
   };
-  const covOf = (r) => known.cov.get(r) ?? (known.cov.set(r, new Uint8Array(fnNames.length)), known.cov.get(r));
+  const covOf = (r) => {
+    if (!known.cov.has(r)) known.cov.set(r, new Uint8Array(fnNames.length));
+    return known.cov.get(r);
+  };
   const sync = (s) => {
     if (!s) return;
     for (const c of s.cells ?? []) known.cells.add(c);
@@ -552,7 +571,7 @@
   const seeded = (seed) => () => {
     seed = (seed + 0x6d2b79f5) | 0;
     let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
   const choose = (a) => a[Math.floor(rng() * a.length)];
@@ -562,7 +581,7 @@
   const isA = (name, anc) => {
     if (!objParent) {
       objParent = new Map();
-      JSON_game.GMObjects.forEach((o) => o && objParent.set(o.pName, JSON_game.GMObjects[o.parent]?.pName));
+      for (const o of JSON_game.GMObjects) if (o) objParent.set(o.pName, JSON_game.GMObjects[o.parent]?.pName);
     }
     for (let n = name, k = 0; n && k < 20; n = objParent.get(n), k++) if (n === anc) return true;
     return false;
@@ -576,7 +595,9 @@
   const exists = (name) => safe(() => GetWithArray(asset_get_index(name)).length > 0, false);
   const busy = () => {
     const g = gml();
-    return g.gmlcinema == 1 || g.gmlfreeze == 1 || g.gmlmovefreeze == 1 || exists('oDialog') || exists('oStartmenu');
+    // a GML flag is true or 1
+    const on = (v) => Number(v) === 1;
+    return on(g.gmlcinema) || on(g.gmlfreeze) || on(g.gmlmovefreeze) || exists('oDialog') || exists('oStartmenu');
   };
   const bbox = (i) => [i.bbox_left, i.bbox_top, i.bbox_right, i.bbox_bottom];
   const EXIT = /^(oExit\d+|oLDoor\d+|oSubwaydoor)$/;
@@ -622,9 +643,9 @@
     const prev = new Int32Array(W * H).fill(-1);
     const q = [sy * W + sx];
     prev[q[0]] = q[0];
-    for (let h = 0; h < q.length; h++) {
-      const c = q[h],
-        cx = c % W,
+    // q grows as it goes: an array's iterator reads its length on every step
+    for (const c of q) {
+      const cx = c % W,
         cy = (c / W) | 0;
       const px = cx * CELL + ox,
         py = cy * CELL + oy;
@@ -694,7 +715,7 @@
   // Positions next to an instance's box, facing it
   const beside = (i) => {
     const [l, t, r, b] = bbox(i);
-    return (px, py, [pl, pt, pr, pb]) => {
+    return (_px, _py, [pl, pt, pr, pb]) => {
       const xo = pl <= r && pr >= l,
         yo = pt <= b && pb >= t;
       // within a grid cell (routes are on an 8 px grid aligned to the player; act() closes the gap)
@@ -708,7 +729,7 @@
   // Within a few pixels of an instance's box (on it, or where the grid gets closest)
   const near = (i) => {
     const [l, t, r, b] = bbox(i);
-    return (px, py, [pl, pt, pr, pb]) =>
+    return (_px, _py, [pl, pt, pr, pb]) =>
       Math.max(0, l - pr, pl - r) + Math.max(0, t - pb, pt - b) <= 6 ? 'near' : null;
   };
   // Walks into an instance's box (a walk-on exit): toward its centre until the room changes
@@ -780,11 +801,12 @@
       // exit taken is the one nearest to where the player last was
       let box = null;
       const track = function* (gen) {
-        let r;
-        while (!(r = gen.next()).done) {
+        let r = gen.next();
+        while (!r.done) {
           const p = roomName() === room && inst('oBarkley');
           if (p) box = bbox(p);
           yield r.value;
+          r = gen.next();
         }
         return r.value;
       };
@@ -828,7 +850,10 @@
       if ((yield* follow(beside(e), new Set([e]), a.n, rng() < 0.3)) !== 'arrived') return;
       const r = route(beside(e), new Set([e]));
       yield* act(r?.goal ?? 'up');
-      if (busy()) (episodeOut.talked.push(key(e)), known.talked.add(key(e)));
+      if (busy()) {
+        episodeOut.talked.push(key(e));
+        known.talked.add(key(e));
+      }
       yield* G.dialog({ n: 900 });
     },
     // Walks to a reachable spot the fuzzer hasn't been to
@@ -844,14 +869,18 @@
     *travel(a) {
       const start = F.frame;
       let avoid0 = null;
-      for (let hops = 0, fails = 0; hops < 8 && fails < 3 && F.frame - start < a.n && roomName() !== a.to;) {
+      for (let hops = 0, fails = 0; hops < 8 && fails < 3 && F.frame - start < a.n && roomName() !== a.to; ) {
         const room = roomName();
         // after a failed try, another exit (the route's may be out of reach)
-        const avoid = fails ? avoid0 : (avoid0 = new Set());
+        if (!fails) avoid0 = new Set();
+        const avoid = avoid0;
         const via = a.to && !fails ? nextHop(room, a.to) : null;
         yield* G.exit({ ...a, n: Math.min(900, a.n - (F.frame - start)), via, avoid });
         if (roomName() === room) fails++;
-        else (hops++, (fails = 0));
+        else {
+          hops++;
+          fails = 0;
+        }
       }
     },
     // In a battle: action, cancel and the arrows, with the rhythm menus and combos take
@@ -870,10 +899,10 @@
   const nextHop = (from, to) => {
     const prev = new Map([[from, null]]);
     const q = [from];
-    for (let h = 0; h < q.length; h++) {
-      for (const [via, dest] of known.graph.get(q[h]) ?? []) {
+    for (const r of q) {
+      for (const [via, dest] of known.graph.get(r) ?? []) {
         if (prev.has(dest)) continue;
-        prev.set(dest, [q[h], via]);
+        prev.set(dest, [r, via]);
         if (dest === to) {
           let hop = null;
           for (let r = to; prev.get(r); r = prev.get(r)[0]) hop = prev.get(r)[1];
@@ -904,11 +933,17 @@
         if (!obj) continue;
         const id = JSON_game.GMObjects.indexOf(obj);
         for (const r of JSON_game.GMRooms)
-          if (r?.pInstances?.some((i) => i.index === id)) (out[m[1]] ??= []).push(r.pName);
+          if (r?.pInstances?.some((i) => i.index === id)) {
+            out[m[1]] ??= [];
+            out[m[1]].push(r.pName);
+          }
         for (const [name, f] of byObj)
           if (name.startsWith(`gml_Object_${obj.pName}_`))
             for (const c of f.toString().matchAll(CMP))
-              if (c[2] !== 'plot') (conds[m[1]] ??= []).push([c[2], c[3] === undefined ? null : +c[3], c[1], +c[4]]);
+              if (c[2] !== 'plot') {
+                conds[m[1]] ??= [];
+                conds[m[1]].push([c[2], c[3] === undefined ? null : +c[3], c[1], +c[4]]);
+              }
       }
     }
     for (const k in out) out[k] = [...new Set(out[k])];
@@ -959,7 +994,7 @@
     // script_execute of a number that is no script (GM6 script ids were small numbers; here they index the runtime's
     // own functions): does nothing
     const se = window.script_execute;
-    window.script_execute = function (inst, other, fn) {
+    window.script_execute = function (_inst, _other, fn) {
       'use strict';
       if (typeof fn === 'number' && fn < 100000) {
         patched(new Error(`script_execute(${fn}): not a script`));
@@ -980,7 +1015,7 @@
     hook();
     sync(req.sync);
     if (req.goals) goalConds = req.goals;
-    const out = (episodeOut = {
+    const out = {
       finds: [],
       rec: [],
       segs: 0,
@@ -991,7 +1026,8 @@
       talked: [],
       genFrames: {},
       patched: [],
-    });
+    };
+    episodeOut = out;
     rng = seeded(req.seed ?? 1);
     if (req.snap) {
       const e = F.load(req.snap);
@@ -1022,7 +1058,10 @@
         out.crash = { ...F.crash, probe: safe(F.probe), gen };
         return false;
       }
-      if (F.ended) return !(out.ended = true);
+      if (F.ended) {
+        out.ended = true;
+        return false;
+      }
       unchecked += n;
       out.genFrames[gen ?? 'macro'] = (out.genFrames[gen ?? 'macro'] ?? 0) + n;
       const room = roomName();
@@ -1032,15 +1071,25 @@
       const probe = F.probe();
       const find = { seg: out.segs, probe, cell: null, cov: [], flags: [], gen };
       const cell = cellOf(probe);
-      if (!known.cells.has(cell)) known.cells.add((find.cell = cell));
+      if (!known.cells.has(cell)) {
+        find.cell = cell;
+        known.cells.add(cell);
+      }
       const rc = covOf(probe.room);
       for (const id of segList) {
         seg[id] = 0;
-        if (!rc[id]) ((rc[id] = 1), find.cov.push(id));
+        if (!rc[id]) {
+          rc[id] = 1;
+          find.cov.push(id);
+        }
       }
       segList = [];
       if (req.flags !== false)
-        for (const f of flagsNow([])) if (!known.flags.has(f)) (known.flags.add(f), find.flags.push(f));
+        for (const f of flagsNow([]))
+          if (!known.flags.has(f)) {
+            known.flags.add(f);
+            find.flags.push(f);
+          }
       if (find.cell || find.cov.length || find.flags.length) {
         if (out.finds.length < (req.maxSnaps ?? Infinity)) {
           find.snap = F.save();
@@ -1058,10 +1107,13 @@
       }
       let ok = true;
       try {
-        for (const [keys, n] of G[item.g](item)) if (!(ok = run(keys, n, item.g))) break;
+        for (const [keys, n] of G[item.g](item)) {
+          ok = run(keys, n, item.g);
+          if (!ok) break;
+        }
       } catch (e) {
         // a generator's own bug, not the game's: note it and go on
-        out.genError = `${item.g}: ${e && e.stack}`;
+        out.genError = `${item.g}: ${e?.stack}`;
       }
       if (!ok) break;
     }
@@ -1138,7 +1190,7 @@
     const norm = (v) => {
       if (v === true) return 1;
       if (v === false) return 0;
-      if (v === null || v === '~u') return undefined;
+      if (v === null || v === '~u') return;
       if (Array.isArray(v)) return v.map(norm);
       if (typeof v !== 'string') return v;
       const m = /^~ref (\w+) (\S+)$/.exec(v);

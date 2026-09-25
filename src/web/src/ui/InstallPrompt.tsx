@@ -71,12 +71,12 @@ export function InstallPrompt() {
       <div class="ui-foot">
         <Show when={installPrompt()}>
           {(e) => (
-            <button class="ui-btn primary" id="install-now" onClick={() => install(e())}>
+            <button type="button" class="ui-btn primary" id="install-now" onClick={() => install(e())}>
               Install
             </button>
           )}
         </Show>
-        <button class="ui-btn" id="install-skip" onClick={() => setInstallOpen(false)}>
+        <button type="button" class="ui-btn" id="install-skip" onClick={() => setInstallOpen(false)}>
           Continue in browser
         </button>
       </div>

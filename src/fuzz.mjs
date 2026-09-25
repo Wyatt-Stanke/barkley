@@ -51,25 +51,25 @@
 // for with BUG, what the game state differs in. The build should be the one the report came from.
 //
 // fuzz-page.js is the in-page side (virtual clock, coverage, snapshots, restores).
-import { spawn, spawnSync, execSync } from 'node:child_process';
-import { createServer } from 'node:http';
+import { execSync, spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
-  existsSync,
-  statSync,
   appendFileSync,
   cpSync,
-  rmSync,
+  existsSync,
+  mkdirSync,
   mkdtempSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
 } from 'node:fs';
-import { gzipSync, gunzipSync } from 'node:zlib';
-import { createHash } from 'node:crypto';
-import { renameSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { writeBuild } from './offline.mjs';
 import { chrome, igor } from './toolchain.mjs';
 
@@ -133,7 +133,7 @@ function harness(root) {
     throw new Error('RNG state, instance id counter or surface stack not found in the runtime');
   const names = { state: 'state', b: rng[1], c: rng[2], ids: ids[1], surfaces: surfaces[1], mouse: mouse?.[1] };
   Object.assign(names, { sweep: sweep?.[1], room: room?.[1], pace: pace?.[2] });
-  return `window.__fuzzNames=${JSON.stringify(names)};\n` + readFileSync(path.join(HERE, 'fuzz-page.js'), 'utf8');
+  return `window.__fuzzNames=${JSON.stringify(names)};\n${readFileSync(path.join(HERE, 'fuzz-page.js'), 'utf8')}`;
 }
 
 // Identifies a build: snapshots and function numbers only carry over to a run on the same one.
@@ -186,7 +186,10 @@ class Browser {
     }
     if (!page) throw new Error(`browser ${this.id} did not start`);
     this.ws = new WebSocket(page.webSocketDebuggerUrl);
-    await new Promise((r, j) => (this.ws.addEventListener('open', r), this.ws.addEventListener('error', j)));
+    await new Promise((r, j) => {
+      this.ws.addEventListener('open', r);
+      this.ws.addEventListener('error', j);
+    });
     this.pending = new Map();
     this.seq = 0;
     this.ws.addEventListener('message', ({ data }) => {
@@ -194,7 +197,8 @@ class Browser {
       if (!m.id) return;
       const p = this.pending.get(m.id);
       this.pending.delete(m.id);
-      m.error ? p?.[1](new Error(m.error.message)) : p?.[0](m.result);
+      if (m.error) p?.[1](new Error(m.error.message));
+      else p?.[0](m.result);
     });
     this.ws.addEventListener('close', () => {
       for (const [, p] of this.pending) p[1](new Error('browser connection closed'));
@@ -207,8 +211,15 @@ class Browser {
   send(method, params = {}, timeout = 120000) {
     return new Promise((r, j) => {
       const id = ++this.seq;
-      const t = setTimeout(() => (this.pending.delete(id), j(new Error(`timeout: ${method}`))), timeout);
-      this.pending.set(id, [(v) => (clearTimeout(t), r(v)), (e) => (clearTimeout(t), j(e))]);
+      const t = setTimeout(() => {
+        this.pending.delete(id);
+        j(new Error(`timeout: ${method}`));
+      }, timeout);
+      const settle = (f) => (v) => {
+        clearTimeout(t);
+        f(v);
+      };
+      this.pending.set(id, [settle(r), settle(j)]);
       this.ws.send(JSON.stringify({ id, method, params }));
     });
   }
@@ -286,9 +297,16 @@ const MACROS = [
 const MACRO_TOTAL = MACROS.reduce((a, [w]) => a + w, 0);
 function randomProgram(frames) {
   const p = [];
-  for (let n = 0; n < frames;) {
+  for (let n = 0; n < frames; ) {
     let r = Math.random() * MACRO_TOTAL;
-    for (const s of MACROS.find(([w]) => (r -= w) < 0)[1]()) (p.push(s), (n += s[1]));
+    const macro = MACROS.find(([w]) => {
+      r -= w;
+      return r < 0;
+    });
+    for (const s of macro[1]()) {
+      p.push(s);
+      n += s[1];
+    }
   }
   return p;
 }
@@ -356,9 +374,9 @@ function storyFlags(globals) {
     if (!STORY.test(name)) continue;
     if (!Array.isArray(v)) out.set(name, v);
     else
-      v.forEach((x, i) =>
-        Array.isArray(x) ? x.forEach((y, j) => out.set(`${name}[${i}][${j}]`, y)) : out.set(`${name}[${i}]`, x),
-      );
+      for (const [i, x] of v.entries())
+        if (Array.isArray(x)) for (const [j, y] of x.entries()) out.set(`${name}[${i}][${j}]`, y);
+        else out.set(`${name}[${i}]`, x);
   }
   return out;
 }
@@ -411,7 +429,7 @@ class Fuzzer {
     if (snap) this.addSnap(n, snap);
     this.nodes.set(n.id, n);
     const { snap: _, ...meta } = n;
-    appendFileSync(path.join(this.work, 'nodes.jsonl'), JSON.stringify(meta) + '\n');
+    appendFileSync(path.join(this.work, 'nodes.jsonl'), `${JSON.stringify(meta)}\n`);
     return n;
   }
 
@@ -424,8 +442,14 @@ class Fuzzer {
     if (!dir || !this.boot) return;
     mkdirSync(path.join(dir, 'nodes'), { recursive: true });
     for (const n of this.candidates)
-      if (!n.inCorpus) (writeFileSync(path.join(dir, 'nodes', `${n.id}.json.gz`), n.snap), (n.inCorpus = true));
-    const write = (f, v) => (writeFileSync(`${f}.tmp`, JSON.stringify(v)), renameSync(`${f}.tmp`, f));
+      if (!n.inCorpus) {
+        writeFileSync(path.join(dir, 'nodes', `${n.id}.json.gz`), n.snap);
+        n.inCorpus = true;
+      }
+    const write = (f, v) => {
+      writeFileSync(`${f}.tmp`, JSON.stringify(v));
+      renameSync(`${f}.tmp`, f);
+    };
     write(
       path.join(dir, 'nodes.json'),
       [...this.nodes.values()].map(({ snap, inCorpus, ...m }) => m),
@@ -475,7 +499,10 @@ class Fuzzer {
         n.snap = gz;
         n.inCorpus = true;
         this.candidates.push(n);
-      } else if (gz) (rmSync(f), delete n.progress);
+      } else if (gz) {
+        rmSync(f);
+        delete n.progress;
+      }
       this.nodes.set(n.id, n);
     }
     this.nextId = st.nextId;
@@ -576,7 +603,7 @@ class Fuzzer {
       made = 0;
     await Promise.all(
       this.workers.map(async (w) => {
-        for (let n; (n = jobs.shift());) {
+        for (let n = jobs.shift(); n; n = jobs.shift()) {
           try {
             const chain = this.chain(n)
               .slice(1)
@@ -690,7 +717,13 @@ class Fuzzer {
         (MENU_ROOMS.has(n.probe.room) ? 0.03 : 1),
     );
     let x = Math.random() * w.reduce((a, b) => a + b, 0);
-    const n = pool[w.findIndex((v) => (x -= v) < 0)] ?? pool[0];
+    const n =
+      pool[
+        w.findIndex((v) => {
+          x -= v;
+          return x < 0;
+        })
+      ] ?? pool[0];
     n.chosen++;
     return n;
   }
@@ -721,7 +754,11 @@ class Fuzzer {
       return [g, base * (0.5 + Math.min(3, (s.found + 1) / (s.frames / 10000 + 1)))];
     });
     let x = Math.random() * w.reduce((a, [, v]) => a + v, 0);
-    return (w.find(([, v]) => (x -= v) < 0) ?? w[0])[0];
+    const pick = w.find(([, v]) => {
+      x -= v;
+      return x < 0;
+    });
+    return (pick ?? w[0])[0];
   }
 
   // The next plot's conditions on story state: array elements (scheme[0]) and story globals, not cinema/freeze flags
@@ -757,13 +794,22 @@ class Fuzzer {
     const program = res.rec; // what actually ran (generators recorded as plain input)
     this.stats.episodes++;
     this.stats.frames += res.frames;
-    for (const [g, f] of Object.entries(res.genFrames ?? {}))
-      (this.genStats[g] ??= { found: 0, frames: 0 }).frames += f;
+    for (const [g, f] of Object.entries(res.genFrames ?? {})) {
+      this.genStats[g] ??= { found: 0, frames: 0 };
+      this.genStats[g].frames += f;
+    }
     for (const e of res.exits ?? []) {
       const k = e.join('|');
-      if (!this.exits.has(k)) (this.exits.add(k), this.log.push(['exits', e]));
+      if (!this.exits.has(k)) {
+        this.exits.add(k);
+        this.log.push(['exits', e]);
+      }
     }
-    for (const t of res.talked ?? []) if (!this.talked.has(t)) (this.talked.add(t), this.log.push(['talked', t]));
+    for (const t of res.talked ?? [])
+      if (!this.talked.has(t)) {
+        this.talked.add(t);
+        this.log.push(['talked', t]);
+      }
     const news = { cells: [], fns: [], flags: [], milestones: [], crash: null };
     let parent = from.id,
       loaded = true,
@@ -781,14 +827,24 @@ class Fuzzer {
       const room = find.probe.room;
       this.rooms.add(room);
       const keys = [];
-      if (find.cell) (keys.push(`c:${find.cell}`), this.log.push(['cells', find.cell]));
-      for (const fid of find.cov) (keys.push(`v:${room}:${fid}`), this.log.push(['cov', [room, fid]]));
+      if (find.cell) {
+        keys.push(`c:${find.cell}`);
+        this.log.push(['cells', find.cell]);
+      }
+      for (const fid of find.cov) {
+        keys.push(`v:${room}:${fid}`);
+        this.log.push(['cov', [room, fid]]);
+      }
       for (const f of find.flags) {
         this.log.push(['flags', f]);
         if (this.learnValue(f)) keys.push(`f:${f}`);
       }
       const fresh = keys.filter((k) => !this.features.has(k));
-      if (fresh.length) (this.genStats[find.gen ?? 'macro'] ??= { found: 0, frames: 0 }).found += fresh.length;
+      if (fresh.length) {
+        const g = find.gen ?? 'macro';
+        this.genStats[g] ??= { found: 0, frames: 0 };
+        this.genStats[g].found += fresh.length;
+      }
       for (const k of fresh) {
         if (k[0] === 'c') news.cells.push(k.slice(2));
         else if (k[0] === 'v') news.fns.push(this.fnNames[+k.split(':')[2]]);
@@ -828,7 +884,10 @@ class Fuzzer {
         program: c.kind === 'restore' ? [] : program.slice(prevSeg, res.segs),
         probe: c.probe ?? from.probe,
       };
-      if (c.kind === 'restore' && (from.restoreFails = (from.restoreFails ?? 0) + 1) >= 2) from.bad = true;
+      if (c.kind === 'restore') {
+        from.restoreFails = (from.restoreFails ?? 0) + 1;
+        if (from.restoreFails >= 2) from.bad = true;
+      }
       news.crash = this.crash(c, leaf);
     }
     return news;
@@ -889,7 +948,7 @@ class Fuzzer {
   }
 
   // A line per episode for --verbose
-  episodeLine(w, from, program, res, news) {
+  episodeLine(w, from, _program, res, news) {
     const p = from.probe;
     const bars = '▁▂▃▄▅▆▇█';
     const bar = bars[Math.min(7, Math.floor((res.frames / 1250) * 8))];
@@ -904,7 +963,7 @@ class Fuzzer {
       parts.push(
         green(`◆${news.cells.length}`) +
           ' ' +
-          green(list(news.cells, (c) => c.split('|').slice(0, 2).join('·') + '@' + c.split('|')[3], 1)),
+          green(list(news.cells, (c) => `${c.split('|').slice(0, 2).join('·')}@${c.split('|')[3]}`, 1)),
       );
     if (news.fns.length) parts.push(magenta(`ƒ ${list(news.fns, shortFn, 3)}`));
     if (news.flags.length) parts.push(blue(`⚑ ${list(news.flags, (f) => f, 3)}`));
@@ -939,7 +998,7 @@ class Fuzzer {
       `crashes ${this.crashes.size}${[...this.crashes.values()].map((e) => `\n  #${e.n} x${e.count} ${e.sig}  [${e.verify ?? 'replaying'}]`).join('')}`,
       `findings: ${this.out}`,
     ];
-    writeFileSync(path.join(this.out, 'status.txt'), lines.join('\n') + '\n');
+    writeFileSync(path.join(this.out, 'status.txt'), `${lines.join('\n')}\n`);
     this.summary(t, lines);
     return lines;
   }
@@ -974,7 +1033,7 @@ class Fuzzer {
       '',
       'Replay a finding with screenshots: `node src/fuzz.mjs replay <build dir> <finding dir>`',
     ];
-    writeFileSync(path.join(this.out, 'summary.md'), md.join('\n') + '\n');
+    writeFileSync(path.join(this.out, 'summary.md'), `${md.join('\n')}\n`);
   }
 
   async worker(w) {
@@ -982,6 +1041,7 @@ class Fuzzer {
       const from = this.choose();
       const program = this.program(from);
       try {
+        this.pageGoals ??= Object.fromEntries(Object.keys(this.goals?.conds ?? {}).map((p) => [p, this.goalConds(p)]));
         const res = await w.b.call(
           (req) => __fuzz.episode(req),
           {
@@ -989,9 +1049,7 @@ class Fuzzer {
             program,
             sync: this.syncFor(w),
             seed: rnd(1, 2 ** 30),
-            goals: (this.pageGoals ??= Object.fromEntries(
-              Object.keys(this.goals?.conds ?? {}).map((p) => [p, this.goalConds(p)]),
-            )),
+            goals: this.pageGoals,
           },
           120000,
         );
@@ -1163,7 +1221,7 @@ class Fuzzer {
       '',
       `Replay with screenshots: \`node src/fuzz.mjs replay ${this.root} ${e.dir}\``,
     ];
-    writeFileSync(path.join(e.dir, 'report.md'), md.join('\n') + '\n');
+    writeFileSync(path.join(e.dir, 'report.md'), `${md.join('\n')}\n`);
   }
 
   async verifyPath(v, m) {
@@ -1197,7 +1255,7 @@ class Fuzzer {
       '',
       `Replay with screenshots: \`node src/fuzz.mjs replay ${this.root} ${m.dir}\``,
     ];
-    writeFileSync(path.join(m.dir, 'report.md'), md.join('\n') + '\n');
+    writeFileSync(path.join(m.dir, 'report.md'), `${md.join('\n')}\n`);
   }
 
   async verifier(i) {
@@ -1296,13 +1354,18 @@ class Fuzzer {
     const timer = setInterval(() => console.log(box(this.status())), every);
     const end = this.opts.minutes ? Date.now() + this.opts.minutes * 60000 : Infinity;
     await new Promise((r) => {
-      const check = setInterval(() => (Date.now() > end || this.stop) && (clearInterval(check), r()), 500);
+      const check = setInterval(() => {
+        if (Date.now() > end || this.stop) {
+          clearInterval(check);
+          r();
+        }
+      }, 500);
     });
     this.stopping = true;
     clearInterval(timer);
     clearInterval(saver);
     this.saveCorpus();
-    this.children.forEach((b) => b.kill());
+    for (const b of this.children) b.kill();
     await Promise.allSettled(loops);
     console.log(box(this.status()));
     this.server.close();
@@ -1327,7 +1390,10 @@ async function replay(root, dir, every, through) {
   const steps = [boot, ...chain.slice(1).map((s) => s.program)];
   const program = steps.flat();
   const saveAt = [];
-  for (let i = 0, at = 0; i < steps.length - 1; i++) saveAt.push((at += steps[i].length));
+  for (let i = 0, at = 0; i < steps.length - 1; i++) {
+    at += steps[i].length;
+    saveAt.push(at);
+  }
   let frame = 0,
     shot = 0,
     seg = 0,
@@ -1500,7 +1566,9 @@ function build(yyp, outDir, minify = false) {
     for (const name of existsSync(extensions) ? readdirSync(extensions) : [])
       for (const f of readdirSync(path.join(extensions, name)).filter((f) => f.endsWith('.js')))
         if (!readFileSync(path.join(extensions, name, f), 'utf8').includes('barkley.extension('))
-          throw new Error(`${yyp}: extensions/${name}/${f} isn't a page stub; import the project again (src/import.mjs)`);
+          throw new Error(
+            `${yyp}: extensions/${name}/${f} isn't a page stub; import the project again (src/import.mjs)`,
+          );
     // the custom index.html, at an absolute path: always the current src/web/index.html, so a page change needs no
     // re-import (and an earlier Igor build may have deleted the project's copy); writeBuild adds the page app it loads
     const index = path.join(proj, 'options', 'html5', 'index.html');
@@ -1564,6 +1632,7 @@ function build(yyp, outDir, minify = false) {
 
 // setPort: for probe scripts, like --port
 const setPort = (n) => (HTTP_PORT = n);
+
 export { Browser, Fuzzer, harness, serve, setPort };
 
 // ---- command line ----
@@ -1597,10 +1666,14 @@ if (import.meta.main) {
           ? undefined
           : path.resolve(save === true ? path.join(HERE, '..', 'build', 'fuzz', stamp()) : save),
     });
-    process.on('exit', () => f.children.forEach((b) => b.kill()));
-    process.on('SIGINT', () =>
-      f.stop ? process.exit(1) : ((f.stop = true), console.log('\nstopping (Ctrl-C again to quit at once)')),
-    );
+    process.on('exit', () => {
+      for (const b of f.children) b.kill();
+    });
+    process.on('SIGINT', () => {
+      if (f.stop) process.exit(1);
+      f.stop = true;
+      console.log('\nstopping (Ctrl-C again to quit at once)');
+    });
     process.on('SIGTERM', () => process.exit(1));
     await f.run();
     process.exit(0);

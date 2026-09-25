@@ -18,10 +18,10 @@ export const CONTROLS: [Control, string][] = [
   ['cancel', 'Cancel'],
   ['start', 'Menu'],
 ];
-export const label = (c: Control) => CONTROLS.find((r) => r[0] === c)![1];
+export const label = (c: Control) => CONTROLS.find((r) => r[0] === c)?.[1] ?? c;
 // key_doset's aliases: these act as the control they name unless the player has bound them to something else.
 const ALIAS: Record<number, Control> = { 87: 'up', 65: 'left', 83: 'down', 68: 'right', 74: 'action', 75: 'cancel' };
-// prettier-ignore
+// biome-ignore format: laid out by hand
 const NAMES: Record<number, string> = {
   8: 'Backspace', 9: 'Tab', 13: 'Enter', 16: 'Shift', 17: 'Ctrl', 18: 'Alt', 19: 'Pause', 20: 'Caps Lock',
   27: 'Esc', 32: 'Space', 33: 'Page Up', 34: 'Page Down', 35: 'End', 36: 'Home',
@@ -32,12 +32,12 @@ const NAMES: Record<number, string> = {
 };
 
 export function keyName(code: number) {
-  code = code | 0;
+  code |= 0;
   if (NAMES[code]) return NAMES[code];
   if ((code >= 48 && code <= 57) || (code >= 65 && code <= 90)) return String.fromCharCode(code);
-  if (code >= 96 && code <= 105) return 'Numpad ' + (code - 96);
-  if (code >= 112 && code <= 123) return 'F' + (code - 111);
-  return 'Key ' + code;
+  if (code >= 96 && code <= 105) return `Numpad ${code - 96}`;
+  if (code >= 112 && code <= 123) return `F${code - 111}`;
+  return `Key ${code}`;
 }
 
 // The panel, and the keys it shows: the player's own when the game has ever saved them

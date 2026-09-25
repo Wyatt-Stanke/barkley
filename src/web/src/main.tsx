@@ -8,7 +8,7 @@ import { exposeToGame, extension } from './extensions/index';
 import { resumeState } from './extensions/resume';
 import { offerInstall } from './install';
 import { saveOffline } from './offline';
-import { fuzz, started, type Api } from './page';
+import { type Api, fuzz, started } from './page';
 import { installAudio, reportNoOgg } from './runtime/audio';
 import { installHold } from './runtime/hold';
 import { installTextureProgress } from './runtime/loading';
@@ -42,4 +42,4 @@ if (!fuzz) {
 }
 exposeToGame();
 offerInstall();
-render(() => <App />, document.getElementById('page')!);
+render(() => <App />, document.getElementById('page') as HTMLElement);

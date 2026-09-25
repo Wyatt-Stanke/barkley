@@ -9,11 +9,11 @@
 
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
-import { mkdir, rename, stat, readFile, unlink } from 'node:fs/promises';
+import { mkdir, readFile, rename, stat, unlink } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { fileURLToPath } from 'node:url';
 
 const VIRT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE = join(VIRT, 'cache');

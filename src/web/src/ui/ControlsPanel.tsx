@@ -77,10 +77,10 @@ export function ControlsPanel() {
       setRaw('');
       return;
     }
-    setStatus(live.length === 1 ? 'Controller: ' + (g.id || 'connected') : live.length + ' controllers connected');
+    setStatus(live.length === 1 ? `Controller: ${g.id || 'connected'}` : `${live.length} controllers connected`);
     const down = [...g.buttons].flatMap((x, i) => (pressed(x) ? [i] : []));
     const axes = [...g.axes].slice(0, 4).map((a) => a.toFixed(2));
-    setRaw('Buttons down: ' + (down.length ? down.join(' ') : 'none') + '  ·  Sticks: ' + axes.join(' '));
+    setRaw(`Buttons down: ${down.length ? down.join(' ') : 'none'}  ·  Sticks: ${axes.join(' ')}`);
   };
   let timer = 0;
   onMount(() => {
@@ -104,7 +104,7 @@ export function ControlsPanel() {
         const code = e.which || e.keyCode;
         keyHeld.add(code);
         const c = controlOf(b.keys, code);
-        setLast(keyName(code) + (c ? ' → ' + label(c) : ' → not bound to anything; the game ignores it'));
+        setLast(keyName(code) + (c ? ` → ${label(c)}` : ' → not bound to anything; the game ignores it'));
       }}
       onKeyUp={(e) => keyHeld.delete(e.which || e.keyCode)}
     >

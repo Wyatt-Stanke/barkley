@@ -10,14 +10,14 @@ import { fuzz, isApp } from './page';
 
 // What the worker says (sw.js, tell): the build it serves (version, id, complete), the one on the server (latest,
 // when the check reached it), and a download under way or an error.
-type Said = {
+interface Said {
   version?: string | null;
   id?: string | null;
   complete?: boolean;
   latest?: { version: string; id: string } | null;
   downloading?: { version: string; done: number; total: number; core: boolean } | null;
   error?: string | null;
-};
+}
 
 const [said, setSaid] = createSignal<Said | null>(null); // what the worker said last, which knows more than version.json
 const [want, setWant] = createSignal(false); // download on a check: an installed app always, a tab once asked to
@@ -28,7 +28,7 @@ export function registerOffline() {
   if (fuzz || /(^|[?&])nosw\b/.test(location.search) || !navigator.serviceWorker) return;
   setWant(isApp());
   navigator.serviceWorker.addEventListener('message', (e) => {
-    if (!e.data || e.data.type !== 'offline') return;
+    if (e.data?.type !== 'offline') return;
     batch(() => {
       // a download that failed in a tab offers its link again, to try again
       if (e.data.error && !isApp()) setWant(false);
@@ -82,19 +82,19 @@ export function offlineLine(): { text: string; link: string } {
     d = s.downloading,
     n = s.latest;
   const v = s.version || n?.version || version();
-  const parts = v ? ['v' + v] : [];
+  const parts = v ? [`v${v}`] : [];
   let link = '';
   // the server has what this browser doesn't: a whole build, the rest of one, or a newer one
   const behind = !!n && (s.id !== n.id || !s.complete);
-  const to = n && n.version !== s.version ? ' to v' + n.version : '';
+  const to = n && n.version !== s.version ? ` to v${n.version}` : '';
   if (d || (behind && want() && !s.error)) {
-    const pct = d ? ' ' + Math.floor((100 * d.done) / Math.max(1, d.total)) + '%' : '';
-    if (n && s.id && s.id !== n.id) parts.push('Updating' + to + pct);
+    const pct = d ? ` ${Math.floor((100 * d.done) / Math.max(1, d.total))}%` : '';
+    if (n && s.id && s.id !== n.id) parts.push(`Updating${to}${pct}`);
     else parts.push((d && !d.core ? 'Saving the music' : 'Saving for offline play') + pct);
   } else {
     if (s.complete) parts.push('Ready to play offline');
     if (behind && !want())
-      link = !s.id ? 'Save for offline play' : s.id === n!.id ? 'Finish saving for offline play' : 'Update' + to;
+      link = !s.id ? 'Save for offline play' : s.id === n?.id ? 'Finish saving for offline play' : `Update${to}`;
   }
   return { text: parts.join(' · '), link };
 }

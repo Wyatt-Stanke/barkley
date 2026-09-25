@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Migrates the decompiled Barkley GMX (GameMaker: Studio 1.4) so it runs without the
 // removed legacy APIs and can be imported into GameMaker LTS.
 //
@@ -8,21 +9,22 @@
 // to the web (it fills the browser window). The original game dir is the distribution folder holding Music/,
 // Voice/ and BG/.
 // The unpacked, migrated code is left next to the output as <output>.code for review.
+
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { unpack, pack } from './lib/gmx.mjs';
-import { tokenize } from './lib/gml.mjs';
-import { transforms } from './transforms.mjs';
 import {
-  soundReplacements,
-  importSounds,
-  markStereoSounds,
   importBackgrounds,
   importBattleBackdrops,
   importFonts,
+  importSounds,
+  markStereoSounds,
+  soundReplacements,
 } from './assets.mjs';
+import { tokenize } from './lib/gml.mjs';
+import { pack, unpack } from './lib/gmx.mjs';
+import { transforms } from './transforms.mjs';
 
 const args = process.argv.slice(2);
 const mode = args.find((a) => a.startsWith('--mode='))?.slice('--mode='.length) ?? 'modernized';
@@ -170,7 +172,10 @@ step('audit', () => {
   for (const f of files()) {
     for (const t of tokenize(read(path.join(code, f)))) {
       const words = t.type === 'id' ? [t.value] : t.type === 'str' ? (t.value.match(/\w+/g) ?? []) : [];
-      for (const w of words.filter((w) => REMOVED.test(w))) (hits[w] ??= new Set()).add(f);
+      for (const w of words.filter((w) => REMOVED.test(w))) {
+        hits[w] ??= new Set();
+        hits[w].add(f);
+      }
     }
   }
   for (const [w, fs_] of Object.entries(hits))

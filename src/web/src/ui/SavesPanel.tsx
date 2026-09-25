@@ -10,7 +10,7 @@ export function SavesPanel() {
   const download = () => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([saves.code], { type: 'text/plain' }));
-    a.download = 'barkley-saves-' + new Date().toISOString().slice(0, 10) + '.txt';
+    a.download = `barkley-saves-${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   };
@@ -19,7 +19,7 @@ export function SavesPanel() {
     if (f)
       f.text().then((t) => {
         inp.value = t;
-        setSaves('status', 'Opened ' + f.name + '. Press Import to write it into this browser.');
+        setSaves('status', `Opened ${f.name}. Press Import to write it into this browser.`);
       });
   };
   return (

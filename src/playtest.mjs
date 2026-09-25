@@ -14,9 +14,9 @@
 // (default 1024x768). DEVICE=<w>x<h>[@<dpr>] emulates a phone instead (touch events, mobile viewport), which is what
 // the touch overlay of patch modernized/09 needs. The browser is muted unless AUDIO=1.
 import { spawn } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { chrome as browserPath } from './toolchain.mjs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { chrome as browserPath } from './toolchain.mjs';
 
 const [root, out, steps = 'wait:14000,shot:title'] = process.argv.slice(2);
 if (!out) {
@@ -44,7 +44,10 @@ const chrome = spawn(
   ],
   { stdio: 'ignore' },
 );
-process.on('exit', () => (chrome.kill(), server.kill()));
+process.on('exit', () => {
+  chrome.kill();
+  server.kill();
+});
 for (const s of ['SIGTERM', 'SIGINT', 'SIGALRM']) process.on(s, () => process.exit(1)); // still runs the exit cleanup
 
 const poll = async (fn) => {
@@ -68,10 +71,17 @@ const note = (kind, text) => log.push(`${((Date.now() - t0) / 1000).toFixed(1)}s
 const pending = new Map();
 let id = 0;
 const send = (method, params = {}) =>
-  new Promise((r) => (pending.set(++id, r), ws.send(JSON.stringify({ id, method, params }))));
+  new Promise((r) => {
+    pending.set(++id, r);
+    ws.send(JSON.stringify({ id, method, params }));
+  });
 ws.addEventListener('message', ({ data }) => {
   const m = JSON.parse(data);
-  if (m.id) return (pending.get(m.id)?.(m), pending.delete(m.id));
+  if (m.id) {
+    pending.get(m.id)?.(m);
+    pending.delete(m.id);
+    return;
+  }
   if (m.method === 'Runtime.consoleAPICalled') {
     const text = m.params.args.map((a) => a.value ?? a.description ?? '').join(' ');
     // Skip asset loading chatter. (A 404 for BarkleyLTS.js in the log is its missing source map.)
@@ -168,7 +178,7 @@ for (const step of steps.split(',')) {
     const r = result.exceptionDetails?.exception?.description ?? result.result.value ?? result.result.description;
     note('js', `${arg}: ${typeof r === 'string' ? r : JSON.stringify(r)}`);
   } else throw new Error(`unknown step ${step}`);
-  writeFileSync(path.join(out, 'console.txt'), log.join('\n') + '\n'); // after every step, in case a later one hangs
+  writeFileSync(path.join(out, 'console.txt'), `${log.join('\n')}\n`); // after every step, in case a later one hangs
 }
 console.log(log.join('\n'));
 process.exit(log.some((l) => /EXCEPTION|Unhandled Exception/.test(l)) ? 1 : 0);

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Finds the GameMaker tools and the browser the pipeline runs, and installs whatever is missing into build/tools/:
 //
 //   node src/toolchain.mjs    # installs what is missing and prints where everything is
@@ -13,10 +14,11 @@
 //
 // Each can be pointed elsewhere instead: BARKLEY_PROJECTTOOL (the ProjectTool binary), BARKLEY_RUNTIME (a runtime
 // dir), BARKLEY_USER_DIR (a user folder holding licence.plist and local_settings.json), CHROME (the browser).
+
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 
 export const RUNTIME_VERSION = '2026.0.0.23';
 const RUNTIME_FEED = 'https://gms.yoyogames.com/Zeus-Runtime-LTS2026.rss';
@@ -188,7 +190,8 @@ export function igor() {
 
 let browser;
 export function chrome() {
-  return (browser ??= findChrome());
+  browser ??= findChrome();
+  return browser;
 }
 
 function findChrome() {

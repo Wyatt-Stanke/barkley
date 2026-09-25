@@ -14,12 +14,12 @@
 //
 // Paths are resolved inside their root; anything that escapes is a 403.
 
-import { createServer } from 'node:http';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, readdir, rename, stat } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { dirname, join, normalize, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
+import { fileURLToPath } from 'node:url';
 
 const VIRT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -124,7 +124,7 @@ const server = createServer(async (req, res) => {
       const file = resolveRequest(url.pathname, '/files/');
       if (!file) return send(403, 'no such root');
       const info = await stat(file).catch(() => null);
-      if (!info || !info.isFile()) return send(404, 'not found');
+      if (!info?.isFile()) return send(404, 'not found');
       res.writeHead(200, {
         'content-type': 'application/octet-stream',
         'content-length': info.size,

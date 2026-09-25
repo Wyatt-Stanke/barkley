@@ -17,7 +17,7 @@
 }
 .ctl-key {
   padding: 1px 7px;
-  font: 12px/1.6 var(--mono);
+  font: 12px / 1.6 var(--mono);
   border: 1px solid var(--ink);
 }
 .ctl-or,
@@ -48,13 +48,13 @@
   font-weight: 700;
 }
 .ctl-lamp-key {
-  font: 12px/1.4 var(--mono);
+  font: 12px / 1.4 var(--mono);
   color: var(--mute);
 }
 .ctl-lamp.on .ctl-lamp-key {
   color: var(--paper);
 }
 .ctl-raw {
-  font: 12px/1.5 var(--mono);
+  font: 12px / 1.5 var(--mono);
   color: var(--mute);
 }

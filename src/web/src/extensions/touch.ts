@@ -9,9 +9,21 @@ import { createStore } from 'solid-js/store';
 import { fuzz, storage } from '../page';
 import { type Control, DEFAULT_KEYS, keysFrom, sendKey } from '../runtime/keys';
 
-export type Rect = { x: number; y: number; w: number; h: number };
-export type Button = { k: Control; label: string; x: number; y: number; r: number; pill?: boolean };
-export type Layout = {
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+export interface Button {
+  k: Control;
+  label: string;
+  x: number;
+  y: number;
+  r: number;
+  pill?: boolean;
+}
+export interface Layout {
   W: number;
   H: number;
   game: Rect;
@@ -22,9 +34,13 @@ export type Layout = {
   gear: { x: number; y: number; r: number };
   buttons: Button[];
   safe: Rect;
-};
+}
 type Sector = 'right' | 'upright' | 'up' | 'upleft' | 'left' | 'downleft' | 'down' | 'downright';
-type Pointer = { role: 'btn' | 'screen' | 'dir'; k?: Control | null; up?: boolean };
+interface Pointer {
+  role: 'btn' | 'screen' | 'dir';
+  k?: Control | null;
+  up?: boolean;
+}
 
 export const BASE_R = 56,
   KNOB_R = 24,
@@ -34,7 +50,7 @@ const HYST = 7,
   GW = 320,
   GH = 240;
 // Cardinal-biased sectors: walking straight is the common case, so cardinals get 50 deg, diagonals 40.
-// prettier-ignore
+// biome-ignore format: laid out by hand
 const S8: [Sector, number, number][] = [
   ['right', 0, 25], ['upright', 45, 20], ['up', 90, 25], ['upleft', 135, 20],
   ['left', 180, 25], ['downleft', 225, 20], ['down', 270, 25], ['downright', 315, 20],
@@ -45,7 +61,7 @@ const S4: [Sector, number, number][] = [
   ['left', 180, 45],
   ['down', 270, 45],
 ];
-// prettier-ignore
+// biome-ignore format: laid out by hand
 const PAIR: Record<Sector, Control[]> = {
   up: ['up'], down: ['down'], left: ['left'], right: ['right'],
   upright: ['up', 'right'], upleft: ['up', 'left'], downright: ['down', 'right'], downleft: ['down', 'left'],
@@ -92,7 +108,7 @@ export function touch_keys(...codes: number[]) {
 }
 
 export function touch_context(n: number) {
-  n = n | 0;
+  n |= 0;
   if (n === ctx()) return 0;
   setCtx(n);
   if (n === 4) releaseAll(); // SET KEYS: never let a synthetic press bind itself
@@ -100,12 +116,12 @@ export function touch_context(n: number) {
 }
 
 export const touch_active = () => (live() ? 1 : 0);
-export const touch_view_x = () => (live() && layout() ? Math.round(layout()!.game.x * px()) : 0);
-export const touch_view_y = () => (live() && layout() ? Math.round(layout()!.game.y * px()) : 0);
-export const touch_view_w = () =>
-  live() && layout() ? Math.round(layout()!.game.w * px()) : Math.round(innerWidth * px());
-export const touch_view_h = () =>
-  live() && layout() ? Math.round(layout()!.game.h * px()) : Math.round(innerHeight * px());
+// the picture's rectangle in device pixels, while the overlay lays it out
+const gameRect = () => (live() ? layout()?.game : undefined);
+export const touch_view_x = () => Math.round((gameRect()?.x ?? 0) * px());
+export const touch_view_y = () => Math.round((gameRect()?.y ?? 0) * px());
+export const touch_view_w = () => Math.round((gameRect()?.w ?? innerWidth) * px());
+export const touch_view_h = () => Math.round((gameRect()?.h ?? innerHeight) * px());
 
 // The runtime ignores devicePixelRatio, so the canvas is backed by CSS pixels and the browser upscales it.
 // oScreenFill sizes the canvas to browser_* times this, and touch_pin puts the CSS size back.
@@ -118,7 +134,11 @@ const px = touch_dpr;
 // ---- key injection
 
 function down(k: Control) {
-  if (pending[k]) (clearTimeout(pending[k]), (pending[k] = 0)); // sliding back cancels the release
+  // sliding back cancels the release
+  if (pending[k]) {
+    clearTimeout(pending[k]);
+    pending[k] = 0;
+  }
   if (held[k]) return;
   setHeld(k, true);
   downAt[k] = Date.now();
@@ -145,10 +165,17 @@ function up(k: Control) {
 // minimum hold, so a fast A->B roll still sends a real A press and then a real B press.
 function swap(r: Pointer, k: Control | null) {
   let wait = 0;
-  if (r.k) ((wait = owed(r.k)), up(r.k));
+  if (r.k) {
+    wait = owed(r.k);
+    up(r.k);
+  }
   r.k = k;
   if (!k) return;
-  if (wait <= 0) return void (down(k), buzz(8));
+  if (wait <= 0) {
+    down(k);
+    buzz(8);
+    return;
+  }
   setTimeout(() => {
     if (r.k !== k) return; // the finger moved on again while the press was waiting
     down(k);
@@ -158,8 +185,16 @@ function swap(r: Pointer, k: Control | null) {
 }
 export function releaseAll() {
   batch(() => {
-    for (const t of Object.keys(pending) as Control[]) if (pending[t]) (clearTimeout(pending[t]), (pending[t] = 0));
-    for (const k of Object.keys(held) as Control[]) if (held[k]) (setHeld(k, false), sendKey(key[k], false));
+    for (const t of Object.keys(pending) as Control[])
+      if (pending[t]) {
+        clearTimeout(pending[t]);
+        pending[t] = 0;
+      }
+    for (const k of Object.keys(held) as Control[])
+      if (held[k]) {
+        setHeld(k, false);
+        sendKey(key[k], false);
+      }
     setDir({ active: false, sector: null });
     ptr = {};
   });
@@ -174,7 +209,11 @@ function sector(next: Sector | null) {
   if (dir.sector === next) return;
   const was = dir.sector ? PAIR[dir.sector] : [],
     now = next ? PAIR[next] : [];
-  for (const k of was) if (!now.includes(k)) (setHeld(k, false), sendKey(key[k], false));
+  for (const k of was)
+    if (!now.includes(k)) {
+      setHeld(k, false);
+      sendKey(key[k], false);
+    }
   for (const k of now) down(k);
   setDir('sector', next);
 }
@@ -222,7 +261,7 @@ function apply() {
 // ---- layout
 
 function inset(name: string) {
-  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--touch-' + name)) || 0;
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(`--touch-${name}`)) || 0;
 }
 // Everything drawn stays inside the safe area (clear of the Dynamic Island or notch, the rounded corners and the home
 // indicator), but the direction control's hit zone (dirHit) runs out to the screen edge, so a thumb that lands in the
@@ -240,7 +279,7 @@ function relayout() {
   if (!live()) {
     // no controls: the picture uses the whole window
     const none = { x: 0, y: 0, w: 0, h: 0 };
-    // prettier-ignore
+    // biome-ignore format: laid out by hand
     setLayout({
       W, H, safe, buttons: [], dpadR: 0,
       game: { x: 0, y: 0, w: W, h: H }, dirZone: none, dirHit: none, dirCenter: { x: 0, y: 0 },
@@ -287,7 +326,7 @@ function relayout() {
       ay = H - 104 - ib;
     buttons.push({ k: 'action', label: 'A', x: ax, y: ay, r: 34 });
     buttons.push({ k: 'cancel', label: 'B', x: ax - 54, y: ay - 46, r: 30 });
-    // prettier-ignore
+    // biome-ignore format: laid out by hand
     buttons.push({
       k: 'start', label: 'START', r: 20, pill: true,
       x: Math.min(maxAx, Math.max(gameR + 6 + 34, rEdge - rw * 0.5)), y: 42 + it,
@@ -328,7 +367,7 @@ function over(p: { x: number; y: number }, b: Button, f: number) {
     : dx * dx + dy * dy <= b.r * f * (b.r * f);
 }
 function buttonAt(p: { x: number; y: number }, cur: Control | null | undefined) {
-  const bs = layout()!.buttons;
+  const bs = layout()?.buttons ?? [];
   // hysteresis: hold the current button until well outside it before acquiring another
   if (cur) for (const b of bs) if (b.k === cur && over(p, b, 1.32)) return cur;
   for (const b of bs) if (over(p, b, 1.1)) return b.k;
@@ -411,9 +450,13 @@ export function onPointerUp(e: PointerEvent) {
   delete ptr[e.pointerId];
   r.up = true; // a press still waiting on the minimum hold becomes a tap
   batch(() => {
-    if (r.role === 'btn') r.k && up(r.k);
-    else if (r.role === 'screen') up('action');
-    else (sector(null), setDir('active', false));
+    if (r.role === 'btn') {
+      if (r.k) up(r.k);
+    } else if (r.role === 'screen') up('action');
+    else {
+      sector(null);
+      setDir('active', false);
+    }
   });
 }
 
@@ -448,8 +491,8 @@ export function restoreDefaultKeys() {
 function touch_pin() {
   const c = document.getElementById('canvas') || document.querySelector('canvas');
   if (c) {
-    const w = innerWidth + 'px',
-      h = innerHeight + 'px';
+    const w = `${innerWidth}px`,
+      h = `${innerHeight}px`;
     if (c.style.width !== w) c.style.width = w;
     if (c.style.height !== h) c.style.height = h;
   }
@@ -459,7 +502,10 @@ function touch_pin() {
 export function enableTouch() {
   if (ready()) return;
   load();
-  const reset = () => (releaseAll(), relayout());
+  const reset = () => {
+    releaseAll();
+    relayout();
+  };
   addEventListener('resize', reset);
   addEventListener('orientationchange', reset);
   addEventListener('blur', releaseAll);

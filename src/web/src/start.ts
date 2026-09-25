@@ -36,7 +36,10 @@ export function start(fresh?: boolean) {
     setControlsOpen(false);
   });
   resumeAudio(); // the runtime unlocks audio on a pointer press only, and a key can start too
-  if (!inited) ((inited = true), GameMaker_Init());
+  if (!inited) {
+    inited = true;
+    GameMaker_Init();
+  }
   setTimeout(giveUpEarlyMusic, 60000);
   release();
 }

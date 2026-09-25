@@ -1,7 +1,7 @@
 // AST transforms over the unpacked code tree, applied in order. Each is (src, file) => src.
 // Extraction transforms (cinema, objectAdd) run first so the code they pull out of
 // strings also goes through the rewrites that follow.
-import { parse, walk, applyEdits, isCall } from './lib/gml.mjs';
+import { applyEdits, isCall, parse, walk } from './lib/gml.mjs';
 
 const at = (n, text) => ({ start: n.start, end: n.end, text });
 const inBlock = (p) => p.type === 'Block' || p.type === 'Switch';
@@ -55,7 +55,8 @@ export function transforms(ctx) {
       const EVENT = { ev_create: 0, ev_destroy: 1, ev_alarm: 2, ev_step: 3, ev_draw: 8 };
       return rewrite(src, (n, p) => {
         if (n.type === 'Assign' && isCall(n.value, 'object_add')) {
-          const name = `${owner}Fx${(fxCount[owner] = (fxCount[owner] ?? -1) + 1)}`;
+          fxCount[owner] = (fxCount[owner] ?? -1) + 1;
+          const name = `${owner}Fx${fxCount[owner]}`;
           created.set(src.slice(n.target.start, n.target.end), name);
           return at(n.value, name);
         }
@@ -64,7 +65,7 @@ export function transforms(ctx) {
         const name = created.get(src.slice(obj.start, obj.end));
         if (!name || !(ev.name in EVENT) || num.type !== 'Number' || code.type !== 'String')
           return ctx.warn(`${file}: unhandled ${src.slice(n.start, n.end)}`);
-        ctx.addFile(`objects/${name}/${EVENT[ev.name]}_${num.value}.gml`, code.value.trim() + '\n');
+        ctx.addFile(`objects/${name}/${EVENT[ev.name]}_${num.value}.gml`, `${code.value.trim()}\n`);
         return remove(src, n, p);
       });
     },
@@ -207,7 +208,7 @@ export function transforms(ctx) {
     noInstanceAssign(src) {
       return rewrite(src, (n, p) => {
         const o = n.type === 'Assign' && n.target.type === 'Member' && n.target.object;
-        if (!o || o.type !== 'Identifier' || !ctx.objects.has(o.name)) return;
+        if (o?.type !== 'Identifier' || !ctx.objects.has(o.name)) return;
         if (!(inBlock(p) || [p.consequent, p.alternate, p.body].includes(n))) return; // not a for header
         // the statement's own ; (inside the node or right after it) goes inside the braces: `if (a) {…}; else` is wrong
         const semi = src[n.end - 1] === ';' ? 0 : (/^[ \t]*;/.exec(src.slice(n.end))?.[0].length ?? -1);

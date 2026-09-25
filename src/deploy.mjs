@@ -101,7 +101,7 @@ if (!git('status', '--porcelain')) {
   console.log('the live site already has this build; nothing to deploy');
   process.exit(0);
 }
-console.log(git('diff', '--cached', '--stat').split('\n').slice(-1)[0]);
+console.log(git('diff', '--cached', '--stat').split('\n').at(-1));
 const author = git('log', '-1', '--format=%an <%ae>');
 run('git', ['-C', CLONE, 'commit', '-q', '--author', author, '-F', '-'], {
   input: message,

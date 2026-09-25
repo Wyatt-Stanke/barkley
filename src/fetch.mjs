@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Fetches the pipeline's inputs into game/original/, skipping whatever is already there:
 //
 //   node src/fetch.mjs
@@ -9,10 +10,11 @@
 //   virt/decompile.sh compiles.
 //
 // Needs curl, unzip and git on PATH.
+
+import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 
 const ZIP_URL = 'https://archive.org/download/BarkleyShutUpAndJamGaiden/BarkleyV120.zip';
 const ZIP_MD5 = '28f07c58d08b47979fdab7a6c571200f';

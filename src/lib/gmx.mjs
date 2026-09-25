@@ -51,7 +51,7 @@ const swap = (raw, key, fn, attr) => {
 };
 
 function mapObject(xml, fn) {
-  return xml.replace(EVENT, (all, open, attrs, body, close) => {
+  return xml.replace(EVENT, (_all, open, attrs, body, close) => {
     const type = attr(attrs, 'eventtype'),
       num = attr(attrs, 'enumb') ?? attr(attrs, 'ename');
     let j = 0;
@@ -59,19 +59,19 @@ function mapObject(xml, fn) {
       if (!action.includes('<id>603</id>')) return action;
       const key = `${type}_${num}${j ? `_${j}` : ''}`;
       j++;
-      return action.replace(CODE_STRING, (m, a, code, b) => a + swap(code, key, fn) + b);
+      return action.replace(CODE_STRING, (_m, a, code, b) => a + swap(code, key, fn) + b);
     });
     return open + body + close;
   });
 }
 
 function mapRoom(xml, fn) {
-  xml = xml.replace(ROOM_CODE, (m, a, code, b) => a + swap(code, 'creation', fn) + b);
+  xml = xml.replace(ROOM_CODE, (_m, a, code, b) => a + swap(code, 'creation', fn) + b);
   // (an instance with no code has no file when unpacked; packing gives it the code of a file a transform added)
   return xml.replace(INSTANCE, (tag) => {
     const name = attr(tag, 'name');
     if (name === undefined) return tag;
-    return tag.replace(INSTANCE_CODE, (m, a, code, b) => a + swap(code, name, fn, true) + b);
+    return tag.replace(INSTANCE_CODE, (_m, a, code, b) => a + swap(code, name, fn, true) + b);
   });
 }
 

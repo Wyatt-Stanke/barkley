@@ -13,7 +13,9 @@ export function reportNoOgg() {
 // Every AudioContext the runtime makes, so Start can resume them: the runtime unlocks audio on a pointer press only,
 // and a key can start the game too.
 const contexts: AudioContext[] = [];
-export const resumeAudio = () => contexts.forEach((c) => c.resume().catch(() => {}));
+export const resumeAudio = () => {
+  for (const c of contexts) c.resume().catch(() => {});
+};
 
 // The music is streamed: the runtime downloads and decodes a track only when it first plays, so the intro (mSpace,
 // 6 MB) was silent for several seconds after Start. Once the game has loaded, the page decodes it while the Start
@@ -27,8 +29,13 @@ export const giveUpEarlyMusic = () => (early = null); // never asked for (a game
 // So music switched away from in its first seconds (the intro's, when it is skipped at once) played on, under the
 // next track or in its place, beyond the game's reach. Each play and stop now counts a generation on the sound object;
 // the download a play starts carries that generation, and a decode whose sound has moved on is never handed back.
-type Voice = { barkleyGen?: number };
-type Tag = { voice: Voice; gen: number };
+interface Voice {
+  barkleyGen?: number;
+}
+interface Tag {
+  voice: Voice;
+  gen: number;
+}
 let playing: Tag | null = null; // while a play runs
 let decoding: Tag | null = null; // the same, from a finished download until its decode begins
 
@@ -63,6 +70,7 @@ export function installAudio() {
   }
   const AC = window.AudioContext || window.webkitAudioContext;
   if (AC) {
+    // biome-ignore lint/complexity/useArrowFunction: the runtime calls it with new, which an arrow function can't take
     const Recorded = function (options?: AudioContextOptions) {
       const c = new AC(options);
       contexts.push(c);
@@ -99,7 +107,7 @@ export function fixStreamedSounds() {
       try {
         return (window as unknown as Record<string, unknown>)[n];
       } catch {
-        return undefined;
+        return null;
       }
     })
     .find((f): f is { prototype: Record<string, (...a: unknown[]) => unknown> } => {

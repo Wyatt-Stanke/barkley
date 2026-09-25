@@ -4,8 +4,8 @@ import { For, type JSX, Show } from 'solid-js';
 import {
   BASE_R,
   type Button,
-  cfg,
   CONTEXTS,
+  cfg,
   ctx,
   dir,
   held,
@@ -26,6 +26,10 @@ import {
 import './TouchOverlay.css';
 
 export function TouchOverlay() {
+  const viewBox = () => {
+    const L = layout();
+    return L ? `0 0 ${L.W} ${L.H}` : undefined;
+  };
   return (
     <Show when={shown()}>
       <div id="gmtouch">
@@ -36,7 +40,8 @@ export function TouchOverlay() {
           on:pointerup={onPointerUp}
           on:pointercancel={onPointerUp}
         />
-        <svg viewBox={layout() ? `0 0 ${layout()!.W} ${layout()!.H}` : undefined}>
+        {/* A picture of the controls; the hit layer above takes the input */}
+        <svg viewBox={viewBox()} aria-hidden="true">
           <Show when={ctx() !== 4 && layout()}>
             {(L) => (
               <Show
@@ -129,7 +134,10 @@ function Stick(props: { L: Layout }) {
     let dx = dir.tx - dir.bx,
       dy = dir.ty - dir.by;
     const len = Math.hypot(dx, dy);
-    if (len > THROW) ((dx = (dx / len) * THROW), (dy = (dy / len) * THROW));
+    if (len > THROW) {
+      dx = (dx / len) * THROW;
+      dy = (dy / len) * THROW;
+    }
     return { x: base().x + dx, y: base().y + dy };
   };
   return (
@@ -146,7 +154,7 @@ function Stick(props: { L: Layout }) {
 // One rounded 12-gon. Two overlapping translucent rects would composite where they cross and show a lighter square
 // in the middle.
 function cross(cx: number, cy: number, L: number, w2: number, r: number) {
-  // prettier-ignore
+  // biome-ignore format: laid out by hand
   const V = [[-w2,-L],[w2,-L],[w2,-w2],[L,-w2],[L,w2],[w2,w2],[w2,L],[-w2,L],[-w2,w2],[-L,w2],[-L,-w2],[-w2,-w2]];
   let d = '';
   for (let i = 0; i < 12; i++) {
@@ -161,10 +169,10 @@ function cross(cx: number, cy: number, L: number, w2: number, r: number) {
     const a = [cx + v[0] + d1[0] * rr, cy + v[1] + d1[1] * rr],
       b = [cx + v[0] + d2[0] * rr, cy + v[1] + d2[1] * rr];
     const sweep = d1[0] * d2[1] - d1[1] * d2[0] < 0 ? 1 : 0; // convex corners bulge outward
-    d += (i === 0 ? 'M' : 'L') + a[0].toFixed(2) + ' ' + a[1].toFixed(2);
-    d += 'A' + rr.toFixed(2) + ' ' + rr.toFixed(2) + ' 0 0 ' + sweep + ' ' + b[0].toFixed(2) + ' ' + b[1].toFixed(2);
+    d += `${i === 0 ? 'M' : 'L'}${a[0].toFixed(2)} ${a[1].toFixed(2)}`;
+    d += `A${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 ${sweep} ${b[0].toFixed(2)} ${b[1].toFixed(2)}`;
   }
-  return d + 'Z';
+  return `${d}Z`;
 }
 
 function Dpad(props: { L: Layout }) {
@@ -273,7 +281,7 @@ function Sheet() {
       />
       <Choice
         label="Show controls"
-        hint={'Auto hides them for a gamepad. Off keeps the ≡ button, to bring them back.'}
+        hint="Auto hides them for a gamepad. Off keeps the ≡ button, to bring them back."
         options={[
           ['Auto', 2],
           ['On', 1],

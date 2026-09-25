@@ -8,7 +8,12 @@ import { folder, storage } from '../page';
 import { base64 } from './saves';
 
 type Event = [type: number, which: number, key: string]; // type: 0 up, 1 down, 2 blur, 3 focus
-type Checkpoint = { step: number; state: string; latch: string; held: number[] };
+interface Checkpoint {
+  step: number;
+  state: string;
+  latch: string;
+  held: number[];
+}
 
 let steps: number[] = [], // frame times of steps base..n-1
   events: [number, ...Event][] = [],
@@ -85,7 +90,10 @@ function record(type: number, e: KeyboardEvent | null) {
     if (Date.now() - typedAt > 3000) typed = '';
     typed = (typed + e.key).slice(-3);
     typedAt = Date.now();
-    if (typed === 'BUG') ((want = 1), (typed = ''));
+    if (typed === 'BUG') {
+      want = 1;
+      typed = '';
+    }
   } else if (e.key && e.key.length === 1) typed = '';
 }
 
@@ -152,5 +160,5 @@ function files() {
 
 async function encode(json: string) {
   const gz = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
-  return 'BARKLEY-CRASH-1:' + base64(new Uint8Array(await new Response(gz).arrayBuffer()));
+  return `BARKLEY-CRASH-1:${base64(new Uint8Array(await new Response(gz).arrayBuffer()))}`;
 }

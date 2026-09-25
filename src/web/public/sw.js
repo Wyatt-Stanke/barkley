@@ -52,24 +52,26 @@ function check(download) {
   const run = Promise.resolve(syncing)
     .then(() => sync(download))
     .catch((error) => tell({ error }))
-    .finally(() => syncing === run && (syncing = null));
+    .finally(() => {
+      if (syncing === run) syncing = null;
+    });
   run.download = download;
-  return (syncing = run);
+  syncing = run;
+  return run;
 }
 
 async function sync(download) {
   latest = null;
-  const r = await fetch(at('version.json') + '?t=' + Date.now(), { cache: 'no-store' });
-  if (!r.ok) throw new Error('version.json: HTTP ' + r.status);
+  const r = await fetch(`${at('version.json')}?t=${Date.now()}`, { cache: 'no-store' });
+  if (!r.ok) throw new Error(`version.json: HTTP ${r.status}`);
   const next = await r.json();
   latest = { version: next.version, id: next.id };
   const now = await state();
   if ((now && now.id === next.id && now.complete) || !download) return tell();
   const cache = await caches.open(BUILD + next.id);
   // a build that is neither the one in use nor the one arriving is a check that was cut off before this one
-  const keep = [BUILD + next.id, BUILD + (now && now.id)];
-  for (const name of await caches.keys())
-    if (name.startsWith(BUILD) && !keep.includes(name)) await caches.delete(name);
+  const keep = [BUILD + next.id, BUILD + now?.id];
+  for (const name of await caches.keys()) if (name.startsWith(BUILD) && !keep.includes(name)) await caches.delete(name);
   // every file already here, from a check that stopped halfway
   const have = new Set((await cache.keys()).map((q) => q.url));
   // and the files the build in use holds unchanged, which are copied rather than downloaded again
@@ -84,7 +86,10 @@ async function sync(download) {
   // the files the game needs to start come first, so it can be played before the music has finished arriving
   const want = next.files.slice().sort((a, b) => b[3] - a[3]);
   const total = { core: 0, all: 0 };
-  for (const [, , bytes, core] of want) (total.all += bytes), (total.core += core ? bytes : 0);
+  for (const [, , bytes, core] of want) {
+    total.all += bytes;
+    if (core) total.core += bytes;
+  }
   let left = want.filter((f) => f[3]).length;
   const done = { core: 0, all: 0 };
   let i = 0,
@@ -103,11 +108,14 @@ async function sync(download) {
       try {
         if (!have.has(url)) {
           let res = null;
-          for (const [c, index] of from)
-            if (index.get(p) === hash && (res = await c.match(url, { ignoreSearch: true }))) break;
+          for (const [c, index] of from) {
+            if (index.get(p) !== hash) continue;
+            res = await c.match(url, { ignoreSearch: true });
+            if (res) break;
+          }
           // cache: reload, so the browser's own copy of a file whose name didn't change is never the one stored
           if (!res) res = await fetch(url, { cache: 'reload' });
-          if (!res.ok) throw new Error(p + ': HTTP ' + res.status);
+          if (!res.ok) throw new Error(`${p}: HTTP ${res.status}`);
           await cache.put(url, res);
         }
         done.all += bytes;
@@ -152,7 +160,7 @@ async function tell({ downloading = null, error = null } = {}) {
     type: 'offline',
     version: now ? now.version : null,
     id: now ? now.id : null,
-    complete: !!(now && now.complete),
+    complete: !!now?.complete,
     latest,
     downloading,
     error: error ? String(error.message || error) : null,
@@ -180,7 +188,10 @@ async function serve(req, client, navigating) {
   if (navigating) pinned.set(client, id);
   else if (pinned.has(client)) id = pinned.get(client);
   // caches.open makes a cache that isn't there, so never ask it for a build that has since been dropped
-  if (id !== now.id && !(await caches.keys()).includes(BUILD + id)) (id = now.id), pinned.delete(client);
+  if (id !== now.id && !(await caches.keys()).includes(BUILD + id)) {
+    id = now.id;
+    pinned.delete(client);
+  }
 
   const cache = await caches.open(BUILD + id);
   let hit = await cache.match(req, { ignoreSearch: true });
@@ -218,8 +229,8 @@ async function ranged(req, res) {
   const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
   if (!m) return res;
   const body = await res.arrayBuffer();
-  let start = m[1] ? +m[1] : body.byteLength - +m[2];
-  let end = m[1] ? (m[2] ? Math.min(+m[2], body.byteLength - 1) : body.byteLength - 1) : body.byteLength - 1;
+  const start = m[1] ? +m[1] : body.byteLength - +m[2];
+  const end = m[1] ? (m[2] ? Math.min(+m[2], body.byteLength - 1) : body.byteLength - 1) : body.byteLength - 1;
   if (!(start >= 0) || start > end) return new Response(null, { status: 416, statusText: 'Range Not Satisfiable' });
   const part = body.slice(start, end + 1);
   return new Response(part, {

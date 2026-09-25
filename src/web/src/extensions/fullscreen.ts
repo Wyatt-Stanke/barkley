@@ -14,7 +14,7 @@ export function fullscreen_set(on: number) {
   wanted = on >= 0.5;
   if (+wanted === fullscreen_get()) return 0;
   if (!wanted) {
-    (d.exitFullscreen || d.webkitExitFullscreen)!.call(d);
+    (d.exitFullscreen ?? d.webkitExitFullscreen)?.call(d);
     return 0;
   }
   const request = el.requestFullscreen || el.webkitRequestFullscreen;

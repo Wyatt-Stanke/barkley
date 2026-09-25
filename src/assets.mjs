@@ -1,11 +1,12 @@
 // Imports the assets the original game loaded from its install folder at runtime
 // (Music, Voice, BG) as ordinary project resources, plus the fonts' original glyph bitmaps from the exe.
 // Requires ffmpeg on PATH for GIF -> PNG, and ffprobe for sound channel counts.
+
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { execFileSync } from 'node:child_process';
-import { parse, walk, isCall } from './lib/gml.mjs';
+import { isCall, parse, walk } from './lib/gml.mjs';
 
 const read = (f) => fs.readFileSync(f, 'utf8');
 const pngSize = (f) => {
@@ -112,8 +113,15 @@ export function importBattleBackdrops(projectDir, gameDir) {
 export function importFonts(projectDir, gameDir, log) {
   const exe = fs.readFileSync(path.join(gameDir, 'BarkleyV120.exe'));
   let p = exe.indexOf(Buffer.from([0x91, 0xd5, 0x12, 0, 0x58, 0x02, 0, 0])) + 8; // 1234321, 600
-  const int = (b = exe) => ((p += 4), b.readInt32LE(p - 4));
-  const str = (b = exe) => b.toString('latin1', p + 4, (p += 4 + b.readInt32LE(p)));
+  const int = (b = exe) => {
+    p += 4;
+    return b.readInt32LE(p - 4);
+  };
+  const str = (b = exe) => {
+    const n = b.readInt32LE(p);
+    p += 4 + n;
+    return b.toString('latin1', p - n, p);
+  };
   p += 12; // include count, remove at end, don't overwrite
   for (let name = str(); name !== 'READY'; name = str()) p += 4 + int();
   const data = zlib.inflateSync(exe.subarray(p + 4, p + 4 + exe.readInt32LE(p)));
@@ -143,7 +151,9 @@ export function importFonts(projectDir, gameDir, log) {
     const sites = [];
     for (let i = data.indexOf(sig(name)); i >= 0; i = data.indexOf(sig(name), i + 1)) {
       p = i + 4 + name.length + 4;
-      if (str(data) === face && ((p += 12), int(data) === 32) && int(data) === 127) sites.push(p);
+      if (str(data) !== face) continue;
+      p += 12;
+      if (int(data) === 32 && int(data) === 127) sites.push(p);
     }
     if (sites.length !== 1) {
       log(`font ${name}: found ${sites.length} entries in the exe`);

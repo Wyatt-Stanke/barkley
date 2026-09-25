@@ -1,6 +1,6 @@
 // The functions the game calls (the GameMaker extensions' functions, which import.mjs declares, and the loading bar it
 // names), as page globals, and what turns each extension on.
-import { addExtension, has, type Extension } from '../page';
+import { addExtension, type Extension, has } from '../page';
 import { barkley_loading } from '../runtime/loading';
 import { controls_show } from './controls';
 import { crash_end, crash_put, crash_step, crash_wanted, enableCrash } from './crash';

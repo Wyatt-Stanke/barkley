@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // The whole port in one command, from the original executable to a playable HTML5 site:
 //
 //   node src/pipeline.mjs [--out=<dir>] [--mode=modernized|faithful] [--from=exe|pristine] [--no-playtest]
@@ -16,9 +17,10 @@
 // that has them, otherwise downloads into build/tools/ (which need GAMEMAKER_ACCESS_KEY for the licence).
 //
 // Needs Node 24+ and npm, curl, unzip, git, patch, ffmpeg/ffprobe, python3, and podman or docker (step 2).
+
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { fetchInputs } from './fetch.mjs';
 import { VERSION } from './offline.mjs';
 

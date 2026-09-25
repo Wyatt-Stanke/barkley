@@ -35,7 +35,7 @@ export function saves_open(probe: string) {
     );
     return 0;
   }
-  const files = read(),
+  const files = read(prefix),
     names = Object.keys(files);
   if (!names.length)
     setSaves('status', 'No save slots in this browser yet. Save in the game first, then come back here.');
@@ -43,8 +43,8 @@ export function saves_open(probe: string) {
     encode(files).then(
       (code) =>
         savesOpen() === open &&
-        setSaves({ code, slots: names.length, status: slotCount(names.length) + ' in this browser.' }),
-      (e) => savesOpen() === open && setSaves('status', 'Could not read the saves: ' + e),
+        setSaves({ code, slots: names.length, status: `${slotCount(names.length)} in this browser.` }),
+      (e) => savesOpen() === open && setSaves('status', `Could not read the saves: ${e}`),
     );
   return 0;
 }
@@ -56,11 +56,11 @@ function find(probe: string) {
   return null;
 }
 
-function read() {
+// The slot files stored under the runtime's key prefix p
+function read(p: string) {
   const files: Record<string, string> = {};
   for (const k of storage.keys())
-    if (k.indexOf(prefix!) === 0 && SLOT.test(k.slice(prefix!.length)))
-      files[k.slice(prefix!.length)] = storage.get(k) ?? '';
+    if (k.indexOf(p) === 0 && SLOT.test(k.slice(p.length))) files[k.slice(p.length)] = storage.get(k) ?? '';
   return files;
 }
 
@@ -83,25 +83,27 @@ async function decode(text: string) {
   text = text.replace(/\s+/g, '');
   const plain = text.indexOf(TAG_PLAIN) === 0;
   const tag = plain ? TAG_PLAIN : TAG;
-  if (text.indexOf(tag) !== 0) throw 'this is not a Barkley save code (it should start with ' + tag + ')';
+  if (text.indexOf(tag) !== 0) throw new Error(`this is not a Barkley save code (it should start with ${tag})`);
   const raw = atob(text.slice(tag.length));
   const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
   if (plain) return new TextDecoder().decode(bytes);
-  if (typeof DecompressionStream === 'undefined') throw 'this browser cannot unpack the save code';
+  if (typeof DecompressionStream === 'undefined') throw new Error('this browser cannot unpack the save code');
   const un = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-  return new Response(un).text().catch(() => {
-    throw 'the save code is damaged or incomplete (copy the whole thing, including the first line)';
-  });
+  try {
+    return await new Response(un).text();
+  } catch {
+    throw new Error('the save code is damaged or incomplete (copy the whole thing, including the first line)');
+  }
 }
 
 // Writes the slots the code holds, and returns how many. Only slot files are written, whatever the code contains.
 function write(json: string) {
   const report = JSON.parse(json);
-  if (!report || report.game !== 'bsuajg' || !report.files) throw 'this save code is not from this game';
+  if (report?.game !== 'bsuajg' || !report.files) throw new Error('this save code is not from this game');
   const names = Object.keys(report.files).filter(
     (n) => SLOT.test(n) && typeof report.files[n] === 'string' && report.files[n].length < LIMIT,
   );
-  if (!names.length) throw 'this save code holds no save slots';
+  if (!names.length) throw new Error('this save code holds no save slots');
   for (const n of names) localStorage.setItem(prefix + n, report.files[n]);
   return names.length;
 }
@@ -114,8 +116,8 @@ export function importSaves(text: string) {
       (n) =>
         setSaves(
           'status',
-          'Imported ' + slotCount(n) + '. Close this, leave Configuration and open Load Datafile to see them.',
+          `Imported ${slotCount(n)}. Close this, leave Configuration and open Load Datafile to see them.`,
         ),
-      (e) => setSaves('status', 'Could not import: ' + (e && e.message ? e.message : e)),
+      (e) => setSaves('status', `Could not import: ${e?.message || e}`),
     );
 }

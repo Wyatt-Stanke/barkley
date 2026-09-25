@@ -56,7 +56,7 @@ export function pad_keys(...codes: number[]) {
 // The same context sTouchContext gives the touch overlay. 4 is SET KEYS, where a synthetic press would bind a control
 // to the key it already has.
 export function pad_context(n: number) {
-  n = n | 0;
+  n |= 0;
   if (n === ctx) return 0;
   ctx = n;
   if (n === 4) releaseAll();
@@ -79,11 +79,18 @@ export const padMuted = () => mute;
 const send = (code: number, down: boolean) => mute || sendKey(code, down);
 
 function down(k: Control) {
-  if (pending[k]) (clearTimeout(pending[k]), (pending[k] = 0)); // pressed again mid-release
+  // pressed again mid-release
+  if (pending[k]) {
+    clearTimeout(pending[k]);
+    pending[k] = 0;
+  }
   if (held[k]) {
     if (!DIRECTION[k]) return;
     const now = Date.now(); // a held direction repeats, as the keyboard's does
-    if (now >= repeatAt[k]!) ((repeatAt[k] = now + REPEAT_RATE), send(key[k], true));
+    if (now >= (repeatAt[k] ?? Infinity)) {
+      repeatAt[k] = now + REPEAT_RATE;
+      send(key[k], true);
+    }
     return;
   }
   held[k] = true;
@@ -110,8 +117,14 @@ function up(k: Control) {
 
 function releaseAll() {
   for (const k of Object.keys(held) as Control[]) {
-    if (pending[k]) (clearTimeout(pending[k]), (pending[k] = 0));
-    if (held[k]) ((held[k] = false), send(key[k], false));
+    if (pending[k]) {
+      clearTimeout(pending[k]);
+      pending[k] = 0;
+    }
+    if (held[k]) {
+      held[k] = false;
+      send(key[k], false);
+    }
   }
 }
 

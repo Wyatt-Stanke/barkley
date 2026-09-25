@@ -1,13 +1,15 @@
 #!/usr/bin/env node
+
 // Imports a migrated GMX into a GameMaker LTS project without the IDE, using the IDE's ProjectTool (the installed
 // IDE's, or one toolchain.mjs downloads), and fails if the importer reports GML it could not convert (it leaves such
 // files as 1.4 code).
 //
 //   node src/import.mjs <migrated GMX dir> <output .yyp path> [ProjectTool path]
+
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { VERSION } from './offline.mjs';
 import { projectTool } from './toolchain.mjs';
 
