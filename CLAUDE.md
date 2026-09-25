@@ -461,8 +461,15 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   were the timestamped codes in the text boxes); the hold kept the game at 0 frames until Start, `?nosw`, the offline
   link and its download and a faithful build's page (no Controls link, overlay or crash panel) matched too; under
   `__fuzz` Start runs `GameMaker_Init` and the page starts no frame loop of its own; `playtest.mjs` still starts the
-  game. **Not
-  yet built with the real runtime.** The first build needs `barkley-1.3.1` imported again (the extension stubs).
+  game. **Then with the real runtime:** the workflow, run by hand on the branch (`36089020872`, no deploy),
+  built v1.4.0 from the exe with the stubs (ProjectTool and Igor took them; the runtime logged seven
+  `ExtensionLoaded`) and its play-test started the game with no exception. On that build's site, in headless
+  Chromium: the game ran 0 steps until Start; the Controls panel lit Action for a real Z, let no key through and gave
+  focus back to Start; a BUG report carried the game script as `bundle`, its steps, events and end state; the Saves
+  panel exported a slot; a reload in a game room offered "Continues where you left off" and resumed the same dialog;
+  an uncaught error showed "The game stopped"; on a 390x844@3 phone the GML turned the touch overlay on, the canvas
+  was backed at 1170x2532 with its CSS pinned to 390 px, and a tap on A skipped the intro. Not seen yet on a real
+  device or by a player. `barkley-1.3.1` has to be imported again before a local build (the extension stubs).
 - **v1.4.0 (`src/version.json`; not built or deployed yet): a browser tab no longer downloads the offline copy by
   itself.** The Start screen's version line offers it as a link that turns into the progress (see Offline play under
   "The page"); an installed app still downloads and updates on its own. The same change fixes the Start screen's foot, where
