@@ -136,7 +136,8 @@ leaves it in.
 
 ## Offline play (`src/offline.mjs`, `src/web/sw.js`)
 
-The installed app plays with no network, and a new build reaches a player whole or not at all.
+The installed app plays with no network, and a new build reaches a player whole or not at all. A browser tab
+downloads nothing until its player asks, from a link on the Start screen.
 
 `writeBuild(dir)`, which `fuzz.mjs build` and `deploy.mjs` both run over the finished build, puts
 `sw.js` at its root — a service worker only controls pages under its own path, so it can't ship from
@@ -151,10 +152,14 @@ The worker has no version of its own; it does what the manifest it fetches tells
 - **Caches.** One per build, `barkley-build-<id>`, plus `barkley-meta` holding which build is served.
   Each build's cache carries its own manifest, so the worker can tell what any cache on disk holds.
 - **A check** (on load, on coming back to the tab, on coming back online — at most once a minute)
-  fetches `version.json` past the browser's cache. A different id means a new build: it downloads into
-  that build's own cache, four files at a time, **copying from the caches already on disk every file
-  whose hash hasn't changed** — across the usual rebuild that is all the sound and all the textures, so
-  an update moves a few megabytes, not a hundred.
+  fetches `version.json` past the browser's cache. The page says whether it may download (`download`
+  in its message): an installed app always, a browser tab only once its player has clicked the link.
+  A check that may not only reports what the server has (`latest`). A message with no `download` at
+  all downloads, which is what every page sent before there was a choice: an installed app loads the
+  build it has until the newer one is in, so its old page must still bring the newer one in. A
+  different id means a new build: it downloads into that build's own cache, four files at a time,
+  **copying from the caches already on disk every file whose hash hasn't changed** — across the usual
+  rebuild that is all the sound and all the textures, so an update moves a few megabytes, not a hundred.
 - **The switch.** The files the game needs to start come first, and once they are all in, that build is
   the one served. The build it replaces is deleted **only once every last file of the new one is in**,
   so a download cut off halfway leaves the player exactly what they had, and the next check picks up
@@ -164,17 +169,26 @@ The worker has no version of its own; it does what the manifest it fetches tells
   id), so a build that finishes arriving mid-session never mixes into a running game; it is in use at
   the next load. Range requests are answered from the whole cached file, which is what Safari needs to
   play audio from an `<audio>` element.
-It caches unconditionally — no Save-Data or metered-connection check — because a player who opens the
-game at all downloads 41 MB to reach the title screen. If that ever has to change, the check belongs
-in `barkley_offline()` in `index.html`, not in the worker.
-
 - **The page** (`index.html`) registers the worker only once the game has loaded, so it never competes
-  with the first visit's own download, and never under the fuzz harness or with `?nosw` in the URL. The
-  Start screen carries the one line it has to say, under the Start word in the hint's grey:
-  `v1.0.0 · Saving for offline play 42%`, then `v1.0.0 · Ready to play offline`.
+  with the first visit's own download, and never under the fuzz harness or with `?nosw` in the URL.
+  It registers it in a browser tab too, with nothing to download: that is how a tab finds out what the
+  server has, and how it serves a copy it saved before. `barkley_app()` (a `display-mode` of
+  standalone, fullscreen or minimal-ui, or iOS's `navigator.standalone`) tells an installed app from a
+  tab; the install prompt uses the same test. The Start screen carries the one line it has to say,
+  under the Start word in the hint's grey: `v1.0.0 · Saving for offline play 42%`, then
+  `v1.0.0 · Ready to play offline`.
   The version alone (`v1.0.0`) is shown by `barkley_version()`, which reads the build's own `version.json`
   and so works with no worker at all — a browser without service workers, or a page opened with `?nosw`.
   Whatever the worker has said stands: it knows more, and it knows the version offline too.
+- **The link**, in a browser tab: `#offline-go`, beside Controls at the foot of the Start screen, grey
+  and underlined. It says what there is to download: **Save for offline play** (no copy yet),
+  **Finish saving for offline play** (a download that stopped after the files the game needs to
+  start), or **Update the offline copy to v1.4.1** (the server has a newer build than the copy,
+  which is what the tab keeps playing until then). A click hides it and downloads, with the progress
+  in the line under Start; a download that fails brings it back. The click also asks for persistent
+  storage (`navigator.storage.persist()`; Firefox asks the player), so the browser keeps the copy
+  when space runs low. A tab that has clicked downloads for the rest of that page's life; the next
+  visit asks again.
 
 ## Fuzzing (HTML5)
 

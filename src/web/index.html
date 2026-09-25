@@ -220,9 +220,9 @@
                     display: none;
                 }
             }
-            /* Under the Start screen when a resume state is waiting (resume.js): a way to begin at the title screen
-               instead. Flush with the words above it, at the foot of the page. */
-            #ctlbar {
+            /* The foot of the Start screen, flush with the words above it: its links, then (when a resume state is
+               waiting, resume.js) a way to begin at the title screen instead. The rows stack, however they wrap. */
+            #foot {
                 position: fixed;
                 z-index: 11;
                 left: max(calc(var(--g) + var(--touch-left)), calc((100vw - 100vh * 4 / 3) / 2 + var(--g)));
@@ -230,25 +230,31 @@
                 bottom: calc(var(--g) / 2 + var(--touch-bottom));
                 font: 15px/1.3 var(--font);
             }
-            /* the resume line takes the bottom when it is up, so this sits on top of it */
-            #fresh:not([hidden]) ~ #ctlbar {
-                bottom: calc(var(--g) / 2 + var(--touch-bottom) + 28px);
-            }
+            #ctlbar,
             #fresh {
-                position: fixed;
-                z-index: 11;
-                left: max(calc(var(--g) + var(--touch-left)), calc((100vw - 100vh * 4 / 3) / 2 + var(--g)));
-                right: calc(var(--g) + var(--touch-right));
-                bottom: calc(var(--g) / 2 + var(--touch-bottom));
                 display: flex;
                 flex-wrap: wrap;
                 align-items: center;
-                column-gap: 12px;
-                color: var(--mute);
-                font: 15px/1.3 var(--font);
             }
+            #ctlbar[hidden],
             #fresh[hidden] {
                 display: none;
+            }
+            #ctlbar {
+                column-gap: 24px;
+            }
+            /* the offline copy's link (a browser tab downloads one only when asked): quieter than Controls */
+            #ctlbar #offline-go {
+                color: var(--mute);
+                text-decoration: underline;
+                text-underline-offset: 3px;
+            }
+            #ctlbar #offline-go:hover {
+                color: var(--ink);
+            }
+            #fresh {
+                column-gap: 12px;
+                color: var(--mute);
             }
             #fresh .ui-link {
                 text-decoration: underline;
@@ -657,14 +663,18 @@
             <span class="hint touch">Tap anywhere</span>
             <span class="hint" id="offline" hidden></span>
         </button>
-        <!-- What the game listens to, and a test for it, before the game runs: controls.js, enabled with Start. -->
-        <div id="ctlbar" hidden>
-            <button class="ui-link" id="controls-go" disabled onclick="barkley.controls(event)">Controls</button>
-        </div>
-        <!-- Start resumes where the last session left off, if resume.js kept its state; this starts at the title screen instead. -->
-        <div id="fresh" hidden>
-            <span>Continues where you left off.</span>
-            <button class="ui-link" id="fresh-go" disabled onclick="barkley.start(true)">Start from the title screen</button>
+        <!-- What the game listens to, and a test for it, before the game runs: controls.js, shown with Start. Then, in a
+             browser tab, the offline copy: save one, finish one, or update it (barkley_offline_say names it). -->
+        <div id="foot">
+            <div id="ctlbar" hidden>
+                <button class="ui-link" id="controls-go" hidden onclick="barkley.controls(event)">Controls</button>
+                <button class="ui-link" id="offline-go" hidden onclick="barkley_offline_save(event)"></button>
+            </div>
+            <!-- Start resumes where the last session left off, if resume.js kept its state; this starts at the title screen instead. -->
+            <div id="fresh" hidden>
+                <span>Continues where you left off.</span>
+                <button class="ui-link" id="fresh-go" disabled onclick="barkley.start(true)">Start from the title screen</button>
+            </div>
         </div>
         <script>
             (() => {
@@ -675,6 +685,12 @@
         </script>
 
         <!-- On the first visit from a phone or tablet in the browser, suggest installing the game as an app, which opens full screen. -->
+        <script>
+            // Opened as an installed app, not in a browser tab
+            function barkley_app() {
+                return matchMedia("(display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui)").matches || !!navigator.standalone;
+            }
+        </script>
         <div id="install" class="ui-panel" hidden role="dialog" aria-labelledby="install-title">
             <div class="ui-head"><h2 id="install-title">Play full screen</h2></div>
             <p>Barkley plays best as an app: full screen, without the address bar, from your home screen.</p>
@@ -688,7 +704,7 @@
         <script>
             (() => {
                 const box = document.getElementById("install");
-                const app = matchMedia("(display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui)").matches || navigator.standalone;
+                const app = barkley_app();
                 const touch = navigator.maxTouchPoints > 0 && matchMedia("(pointer: coarse)").matches;
                 let seen = false;
                 try { seen = localStorage.getItem("barkley.install") !== null; } catch (e) {}
@@ -760,10 +776,8 @@
                     var fresh = document.getElementById("fresh-go");
                     if (fresh) fresh.disabled = false;
                     var ctl = document.getElementById("controls-go");
-                    if (ctl && typeof controls_show === "function") {
-                        ctl.disabled = false;
-                        document.getElementById("ctlbar").hidden = false;
-                    }
+                    if (ctl && typeof controls_show === "function") ctl.hidden = false;
+                    document.getElementById("ctlbar").hidden = false;
                     if (!window.__fuzz) barkley_early_music();
                     barkley_version();
                     barkley_offline();
@@ -782,7 +796,7 @@
                         try {
                             localStorage.removeItem("barkley.resume");
                         } catch (e) {}
-                    ["install", "start", "fresh", "ctlbar", "controls-panel"].forEach(function (id) {
+                    ["install", "start", "foot", "controls-panel"].forEach(function (id) {
                         var e = document.getElementById(id);
                         if (e) e.remove();
                     });
@@ -933,30 +947,47 @@
             // Offline play: sw.js keeps a whole build in the browser's storage and downloads a newer one in full before
             // it takes over from the one in use. It is registered once the game has loaded, so it never shares the
             // first visit's bandwidth, and it asks for a check then, whenever the tab comes back, and when the machine
-            // comes back online. Never under the fuzz harness or with ?nosw in the URL: the tooling's own servers
-            // would be handing out a hundred megabytes a run, and the fuzzer needs each build served fresh.
+            // comes back online. An installed app downloads on every check; a browser tab only looks, and offers the
+            // download as a link on the Start screen (barkley_offline_save), since a hundred megabytes is a lot to
+            // take from someone just trying the game. Never under the fuzz harness or with ?nosw in the URL: the
+            // tooling's own servers would be handing out a hundred megabytes a run, and the fuzzer needs each build
+            // served fresh.
             var barkley_offline_at = 0, // the last check, so coming back to the tab doesn't ask over and over
-                barkley_offline_heard = false; // the worker has spoken, and knows more than version.json does
+                barkley_offline_last = null, // what the worker said last, which knows more than version.json does
+                barkley_offline_want = false, // download on a check: an installed app always, a tab once asked to
+                barkley_offline_v = ""; // the version in version.json, until the worker says
             function barkley_offline() {
                 if (window.__fuzz || /(^|[?&])nosw\b/.test(location.search) || !navigator.serviceWorker) return;
+                barkley_offline_want = barkley_app();
                 navigator.serviceWorker.addEventListener("message", function (e) {
                     if (!e.data || e.data.type !== "offline") return;
-                    barkley_offline_heard = true;
-                    barkley_offline_say(e.data);
+                    // a download that failed in a tab offers its link again, to try again
+                    if (e.data.error && !barkley_app()) barkley_offline_want = false;
+                    barkley_offline_say((barkley_offline_last = e.data));
                 });
                 navigator.serviceWorker.register("sw.js").then(function () {
-                    navigator.serviceWorker.ready.then(function (reg) {
-                        var check = function () {
-                            var w = reg.active || navigator.serviceWorker.controller;
-                            if (!w || document.visibilityState !== "visible" || Date.now() - barkley_offline_at < 60000) return;
-                            barkley_offline_at = Date.now();
-                            w.postMessage({ type: "check" });
-                        };
-                        addEventListener("online", check);
-                        addEventListener("visibilitychange", check);
-                        check();
-                    });
+                    addEventListener("online", barkley_offline_check);
+                    addEventListener("visibilitychange", barkley_offline_check);
+                    barkley_offline_check();
                 }, function () {});
+            }
+            function barkley_offline_check(now) {
+                navigator.serviceWorker.ready.then(function (reg) {
+                    var w = reg.active || navigator.serviceWorker.controller;
+                    if (!w || document.visibilityState !== "visible") return;
+                    if (now !== true && Date.now() - barkley_offline_at < 60000) return;
+                    barkley_offline_at = Date.now();
+                    w.postMessage({ type: "check", download: barkley_offline_want });
+                });
+            }
+            // The Start screen's offline link, in a browser tab: download the build (or the rest of it, or a newer one)
+            function barkley_offline_save(e) {
+                if (e) e.stopPropagation();
+                barkley_offline_want = true;
+                // the player asked for this copy, so ask the browser to keep it when storage runs low (Firefox asks them)
+                if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
+                barkley_offline_check(true);
+                if (barkley_offline_last) barkley_offline_say(barkley_offline_last);
             }
             // The version, under the Start word, in the same grey as the hint above it: which build of the port this
             // is, without anyone having to look for it. Every build carries version.json, so this works whether or not
@@ -967,22 +998,43 @@
                 if (window.__fuzz) return;
                 fetch("version.json", { cache: "no-store" })
                     .then(function (r) { return r.json(); })
-                    .then(function (v) { if (!barkley_offline_heard) barkley_offline_say({ version: v.version }); })
+                    .then(function (v) {
+                        barkley_offline_v = v.version;
+                        barkley_offline_say(barkley_offline_last || {});
+                    })
                     .catch(function () {});
             }
+            // s is what the worker said (sw.js, tell): the build it serves (version, id, complete), the one on the
+            // server (latest, when the check reached it), and a download under way or an error.
             function barkley_offline_say(s) {
-                var e = document.getElementById("offline");
+                var e = document.getElementById("offline"),
+                    go = document.getElementById("offline-go");
                 if (!e) return; // the Start screen is gone: the download carries on without anywhere to show it
-                var text = s.version ? "v" + s.version : "";
-                if (s.downloading) {
-                    var d = s.downloading;
+                var d = s.downloading,
+                    n = s.latest,
+                    v = s.version || (n && n.version) || barkley_offline_v,
+                    text = v ? "v" + v : "",
+                    link = "";
+                // the server has what this browser doesn't: a whole build, the rest of one, or a newer one
+                var behind = n && (s.id !== n.id || !s.complete);
+                if (d)
                     text =
                         "v" + d.version +
                         (d.core ? " · Saving for offline play " : " · Saving the music ") +
                         Math.floor((100 * d.done) / Math.max(1, d.total)) + "%";
-                } else if (s.complete) text += " · Ready to play offline";
+                else if (behind && barkley_offline_want && !s.error) text = "v" + n.version + " · Saving for offline play";
+                else {
+                    if (s.complete) text += " · Ready to play offline";
+                    if (behind && !barkley_offline_want)
+                        link = !s.id
+                            ? "Save for offline play"
+                            : s.id === n.id
+                              ? "Finish saving for offline play"
+                              : "Update the offline copy" + (n.version !== s.version ? " to v" + n.version : "");
+                }
                 e.textContent = text;
                 e.hidden = !text;
+                if (go) (go.textContent = link), (go.hidden = !link);
             }
             // The runtime plays a streamed sound (all the music) by downloading and decoding it, and then starts the
             // sound object that asked, even if the game stopped it meanwhile; by then the runtime may have reused that
@@ -1095,6 +1147,11 @@
                     if (e.target.id === "controls-go" && (e.key === "Enter" || e.key === " ")) {
                         e.preventDefault();
                         return barkley.controls();
+                    }
+                    // and on the offline link, saves the offline copy
+                    if (e.target.id === "offline-go" && (e.key === "Enter" || e.key === " ")) {
+                        e.preventDefault();
+                        return barkley_offline_save();
                     }
                     e.preventDefault();
                     // Enter or Space on the focused "Start from the title screen" link does what clicking it does

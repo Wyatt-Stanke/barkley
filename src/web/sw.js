@@ -5,10 +5,12 @@
 // with its hash, its size, and whether the game needs it before the first frame (the music is streamed on demand, so
 // it doesn't). Each build lives in its own cache, barkley-build-<id>; which one is served is kept in barkley-meta.
 //
-// A check downloads the files of a newer build into that build's own cache, taking from the caches already on disk
-// every file whose hash hasn't changed. That build starts being served once the files the game needs to start are in,
-// and the build it replaces is deleted only once every one of its files is in, so a download cut off halfway leaves
-// what the player already had untouched and picks up where it stopped next time.
+// A check fetches the server's version.json. A page in a browser tab only looks (download: false) until its player asks
+// for an offline copy; an installed app downloads on every check. A download fetches the files of a newer build into
+// that build's own cache, taking from the caches already on disk every file whose hash hasn't changed. That build
+// starts being served once the files the game needs to start are in, and the build it replaces is deleted only once
+// every one of its files is in, so a download cut off halfway leaves what the player already had untouched and picks
+// up where it stopped next time.
 
 const META = 'barkley-meta';
 const BUILD = 'barkley-build-';
@@ -20,12 +22,15 @@ const STATE = at('.state'); // in META: the build being served
 const MANIFEST = at('.manifest'); // in each build's cache: that build's version.json
 
 let syncing = null; // the running check, so two of them never download the same build twice
+let latest = null; // the build on the server, { version, id }, from the last check that reached it
 const pinned = new Map(); // client id -> the build id the page loaded with, so one page never mixes two builds
 
 self.addEventListener('install', (e) => e.waitUntil(self.skipWaiting()));
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+// download: false only looks. Anything else downloads, as every check did before a page could say which, so a page from
+// an older build (which an installed app loads until the newer build is in) still brings the newer one in.
 self.addEventListener('message', (e) => {
-  if (e.data && e.data.type === 'check') e.waitUntil(check());
+  if (e.data && e.data.type === 'check') e.waitUntil(check(e.data.download !== false));
 });
 
 // ---- what is being served
@@ -41,17 +46,25 @@ const hashes = (m) => new Map(m.files.map((f) => [f[0], f[1]]));
 
 // ---- the check: download a newer build, then serve it
 
-function check() {
-  if (!syncing) syncing = sync().catch(tell).finally(() => (syncing = null));
-  return syncing;
+function check(download) {
+  // a download asked for while a look is running starts once the look is done
+  if (syncing && (syncing.download || !download)) return syncing;
+  const run = Promise.resolve(syncing)
+    .then(() => sync(download))
+    .catch((error) => tell({ error }))
+    .finally(() => syncing === run && (syncing = null));
+  run.download = download;
+  return (syncing = run);
 }
 
-async function sync() {
+async function sync(download) {
+  latest = null;
   const r = await fetch(at('version.json') + '?t=' + Date.now(), { cache: 'no-store' });
   if (!r.ok) throw new Error('version.json: HTTP ' + r.status);
   const next = await r.json();
+  latest = { version: next.version, id: next.id };
   const now = await state();
-  if (now && now.id === next.id && now.complete) return tell();
+  if ((now && now.id === next.id && now.complete) || !download) return tell();
   const cache = await caches.open(BUILD + next.id);
   // a build that is neither the one in use nor the one arriving is a check that was cut off before this one
   const keep = [BUILD + next.id, BUILD + (now && now.id)];
@@ -80,7 +93,7 @@ async function sync() {
   const report = () => {
     if (Date.now() - said < 400) return;
     said = Date.now();
-    tell({ version: next.version, done: done.all, total: total.all, core: left > 0 });
+    tell({ downloading: { version: next.version, done: done.all, total: total.all, core: left > 0 } });
   };
 
   const worker = async () => {
@@ -132,15 +145,17 @@ async function use(next, complete) {
   tell();
 }
 
-// What the Start screen shows: the version being played, and how far a download has got.
-async function tell(downloading) {
+// What the Start screen shows: the build being served, the one on the server, and how far a download has got.
+async function tell({ downloading = null, error = null } = {}) {
   const now = await state();
   const msg = {
     type: 'offline',
     version: now ? now.version : null,
+    id: now ? now.id : null,
     complete: !!(now && now.complete),
-    downloading: downloading instanceof Error || !downloading ? null : downloading,
-    error: downloading instanceof Error ? String(downloading.message || downloading) : null,
+    latest,
+    downloading,
+    error: error ? String(error.message || error) : null,
   };
   for (const c of await self.clients.matchAll({ includeUncontrolled: true })) c.postMessage(msg);
 }
