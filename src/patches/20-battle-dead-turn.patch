@@ -1,0 +1,13 @@
+diff -ruN a/objects/oBattleMenu/3_0.gml b/objects/oBattleMenu/3_0.gml
+--- a/objects/oBattleMenu/3_0.gml
++++ b/objects/oBattleMenu/3_0.gml
+@@ -29,7 +29,8 @@
+ 
+ if (state="postattack") { 
+ ddesc=1; dname=1; dene=0;
+-if (global.turn.prefin=-1 && global.turn.enemy=0 && global.turn.attack=1) {
++//A foe killed on its own turn (by a counter) is destroyed while global.turn still names it, until oBCamera picks the next
++if (instance_exists(global.turn) && global.turn.prefin=-1 && global.turn.enemy=0 && global.turn.attack=1) {
+ if (sKey(global.key_left) && mash=0) { mash=1; sP(); inf-=1; if (inf<0) inf=global.turn.infomax; }
+ if (sKey(global.key_right) && mash=0) { mash=1; sP(); inf+=1; if (global.turn.info[inf]="") inf=0; }
+ if (sKey(global.key_right)=0 && sKey(global.key_left)=0) mash=0;

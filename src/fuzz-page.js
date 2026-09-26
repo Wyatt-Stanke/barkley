@@ -496,19 +496,47 @@
 		}
 		for (const t of s.talked ?? []) known.talked.add(t);
 	};
+	// In a battle: the first enemy, the eighths of the enemies' vitality left and the party members standing, e.g.
+	// 'oBBallmonster:3:2'. As part of the cell it gives a battle somewhere to go: a state that got a boss lower is new.
+	// Undefined outside a fight. (Not global.battlers: that counts the monsters roaming a map room, so it stays set in a
+	// fight that began there and is 0 in a boss fight a cutscene starts.)
+	const foes = () => {
+		let n = 0,
+			name = '',
+			vp = 0,
+			max = 0,
+			up = 0;
+		for (const i of GetWithArray(asset_get_index('oBattler'))) {
+			if (!i || i.marked) continue;
+			n++;
+			const v = Math.max(0, Number(i.gml_vp) || 0);
+			if (Number(i.gmlenemy) !== 1) up += v > 0 ? 1 : 0;
+			else {
+				name ||= objName(i);
+				vp += v;
+				max += Math.max(v, Number(i.gml_rvp) || 0);
+			}
+		}
+		// The last eighth in eighths of its own ('1.3'), so the search still sees a boss brought lower near the end
+		const e = max ? Math.ceil((8 * vp) / max) : 0;
+		const left = e === 1 ? `1.${Math.ceil((64 * vp) / max)}` : e;
+		return n ? `${name}:${left}:${up}` : undefined;
+	};
 	F.probe = () => {
 		const g = gml();
 		const p = safe(() => inst('oBarkley'));
+		const battle = g.gmlbattlers > 0 ? 1 : 0;
 		return {
 			room: safe(roomName),
 			plot: g.gmlplot ?? null,
-			battle: g.gmlbattlers > 0 ? 1 : 0,
+			battle,
 			x: p ? Math.round(p.x) : null,
 			y: p ? Math.round(p.y) : null,
 			frame: F.frame,
+			foes: safe(foes, undefined),
 		};
 	};
-	const cellOf = (p) => `${p.room}|${p.plot}|${p.battle}|${p.x == null ? '-' : `${p.x >> 5},${p.y >> 5}`}`;
+	const cellOf = (p) => `${p.room}|${p.plot}|${p.battle}|${p.foes ?? (p.x == null ? '-' : `${p.x >> 5},${p.y >> 5}`)}`;
 	// The globals' values as flags: 'name=value', 'name[i]=value', 'name[i][j]=value'
 	const flagsNow = (out) => {
 		const g = gml();
@@ -679,6 +707,9 @@
 			lastY = null,
 			still = 0,
 			lost = 0;
+		// Entering a room freezes the player for a moment (global.freeze, about 20 frames), and a snapshot is often taken
+		// right there, where a new room's first cell is: wait that out rather than give up on the walk
+		for (let t = 0; t < 90 && busy() && !exists('oDialog') && !exists('oStartmenu'); t += 4) yield [[], 4];
 		for (let t = 0; t < budget; t += 4) {
 			if (busy()) return 'busy';
 			if (roomName() !== room) return 'room';
@@ -755,6 +786,41 @@
 		yield [['z'], 2];
 		yield [[], 6];
 	}
+	// A dialog that offers a choice (oDialog's option[], cursor cho): one of the options at random, the cursor moved to
+	// it. Pressing on through takes the first one, and some choices end the game (a wrong answer in a cutscene).
+	const chosen = new WeakMap();
+	function* pickOption() {
+		const d = safe(() => inst('oDialog'));
+		const opts = d?.gmloption;
+		if (!Array.isArray(opts) || opts[0] === '0' || opts[0] === undefined) return;
+		if (!chosen.has(d)) {
+			let k = 0;
+			while (k < opts.length && opts[k] !== '0' && opts[k] !== undefined) k++;
+			chosen.set(d, Math.floor(rng() * k));
+		}
+		const want = chosen.get(d);
+		for (let i = 0; i < 12 && Number(d.gmlcho) !== want; i++) {
+			yield [[Number(d.gmlcho) < want ? 'down' : 'up'], 2];
+			yield [[], 6];
+		}
+	}
+	// A quick-time event (oQuicker: press the key it shows, key 0-5, within about 20 frames, or lose a life): the
+	// right key, but now and then a wrong one, so both ways are played.
+	const QUICK = ['right', 'up', 'left', 'down', 'z', 'x'];
+	// a battle's attack moves (oBBarkley's quick reference: free throw, pass, the three jumpers)
+	const ATTACKS = [['z'], ['x'], ['up'], ['up'], ['left', 'up'], ['right', 'up']];
+	function* quick() {
+		for (let i = 0; i < 30; i++) {
+			const q = safe(() => inst('oQuicker'));
+			if (!q) return;
+			if (Number(q.gmlgot) > 0 || !(Number(q.gmltime) > 0)) {
+				yield [[], 2];
+				continue;
+			}
+			yield [[rng() < 0.9 ? QUICK[Number(q.gmlkey)] : choose(QUICK)], 2];
+			yield [[], 2];
+		}
+	}
 	const G = {
 		// Presses action through dialog and cutscenes until the player can move again
 		*dialog(a) {
@@ -778,6 +844,11 @@
 					yield [[], 10];
 					continue;
 				}
+				if (exists('oQuicker')) {
+					yield* quick();
+					continue;
+				}
+				yield* pickOption();
 				if (rng() < 0.08) yield [[choose(['up', 'down'])], 2];
 				yield [['z'], 2];
 				yield [[], 8];
@@ -883,8 +954,60 @@
 				}
 			}
 		},
-		// In a battle: action, cancel and the arrows, with the rhythm menus and combos take
+		// In a battle: action, cancel and the arrows, with the rhythm menus and combos take. Half the time it fights instead,
+		// reading the battle menu: attack and the first target, then an attack move (they are timing moves: hold a key and
+		// release it when the indicator lines up, so a tap barely ever hits), held for a random time.
 		*battle(a) {
+			if (rng() < 0.5) {
+				for (let t = 0; t < a.n; ) {
+					const st = safe(() => inst('oBattleMenu')?.gmlstate);
+					if (st === 'names') {
+						// the menu is a cross: action alone attacks; with left held it opens skills, right items, up defends
+						const r = rng();
+						yield [r < 0.2 ? ['right', 'z'] : r < 0.3 ? ['left', 'z'] : r < 0.35 ? ['up', 'z'] : ['z'], 2];
+						yield [[], 6];
+						t += 8;
+					} else if (st === 'items' || st === 'skills') {
+						for (let k = Math.floor(rng() * 3); k > 0; k--)
+							yield* [
+								[['down'], 2],
+								[[], 4],
+							];
+						yield [['z'], 2];
+						yield [[], 6];
+						t += 20;
+					} else if (st === 'target' || st === undefined) {
+						yield [['z'], 2];
+						yield [[], 6];
+						t += 8;
+					} else if (st === 'postattack') {
+						// Barkley's attacks score on the release: a pass is strongest when oBTimer's side meter is at its end
+						// (zy 4) as the throw reads it, one step after the release, so it lets go while the meter's next move
+						// (5 + |zy-50|/5, downwards) lands there. A jump shot is best at the top of the jump (up held ~25
+						// frames). Otherwise any move, held a while.
+						const r = rng();
+						let hold = 0;
+						if (r < 0.45) {
+							for (; hold < 90; hold++) {
+								const tm = safe(() => inst('oBTimer'));
+								const zy = Number(tm?.gmlzy);
+								if (hold > 6 && tm?.gmllr === 1 && Number(tm.gmlzdir) === 0 && zy - (5 + Math.abs(zy - 50) / 5) <= 4)
+									break;
+								yield [['x'], 1];
+							}
+						} else {
+							hold = r < 0.65 ? 24 + Math.floor(rng() * 4) : 6 + Math.floor(rng() * 50);
+							yield [r < 0.65 ? ['up'] : choose(ATTACKS), hold];
+						}
+						yield [[], 30];
+						t += hold + 30;
+					} else {
+						yield [[], 6];
+						t += 6;
+					}
+				}
+				return;
+			}
 			for (let t = 0; t < a.n; t += 12) {
 				const r = rng();
 				if (r < 0.55) yield [['z'], 2];
@@ -1106,14 +1229,17 @@
 				continue;
 			}
 			let ok = true;
+			// A fight that began on the way (walking into an oColliderGuy, the end of a cutscene) is fought, whatever was
+			// planned: a walking generator in a battle has no player to walk and would give the rest of the episode up.
+			const g = item.g !== 'dialog' && safe(roomName) === 'RomInter' ? 'battle' : item.g;
 			try {
-				for (const [keys, n] of G[item.g](item)) {
-					ok = run(keys, n, item.g);
+				for (const [keys, n] of G[g](item)) {
+					ok = run(keys, n, g);
 					if (!ok) break;
 				}
 			} catch (e) {
 				// a generator's own bug, not the game's: note it and go on
-				out.genError = `${item.g}: ${e?.stack}`;
+				out.genError = `${g}: ${e?.stack}`;
 			}
 			if (!ok) break;
 		}
