@@ -149,13 +149,14 @@ leaves it in.
 The installed app plays with no network, and a new build reaches a player whole or not at all. A browser tab
 downloads nothing until its player asks, from a link on the Start screen.
 
-`writeBuild(dir)`, which `fuzz.mjs build` and `deploy.mjs` both run over the finished build, puts
+`writeBuild(dir)`, which `fuzz.mjs build` and `deploy.mjs` both run over the finished build, first
+deletes the `.ogg` copy Igor writes of every sound (57 MB; the page reports no Ogg support, so the
+runtime only ever asks for the MP3s, and a sound with no MP3 stops the build). Then it puts
 `sw.js` at its root — a service worker only controls pages under its own path, so it can't ship from
 `html5game/` the way the other page files do — and writes `version.json` beside it: the semver version,
 an **id** that is the hash of the whole file list, and every file with its hash, its size and whether
-the game needs it before the first frame. Of a 157 MB build it lists 101 MB in 260 files: the `.ogg`
-copies are left out (the page reports no Ogg support, so the runtime only ever asks for the MP3s), and
-the 51 MB of streamed music is marked as not needed to start.
+the game needs it before the first frame. Of the ~100 MB build it lists all of it, 260 files, with
+the 51 MB of streamed music marked as not needed to start.
 
 The worker has no version of its own; it does what the manifest it fetches tells it to.
 

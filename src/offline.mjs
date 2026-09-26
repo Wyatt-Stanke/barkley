@@ -7,16 +7,14 @@
 // its hash, its size, and whether the game needs it before the first frame. The id is what the worker compares to
 // decide a build is new; the hashes are what lets it keep the files a new build didn't change.
 import { createHash } from 'node:crypto';
-import { cpSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { buildPage } from './page.mjs';
 
 export const VERSION = JSON.parse(readFileSync(path.join(import.meta.dirname, 'version.json'), 'utf8')).version;
 
-// The page reports no Ogg support so the runtime loads the MP3 of every sound (Safari's Vorbis decoder clips them),
-// which leaves the .ogg copies — 57 MB of a 157 MB build — never asked for, so they are never cached either.
 // sw.js and version.json answer from the network: the worker can't be served by itself, and the manifest is the check.
-const SKIP = /^\.|\/\.|\.ogg$|^sw\.js$|^version\.json$/;
+const SKIP = /^\.|\/\.|^sw\.js$|^version\.json$/;
 // The music is streamed: the runtime downloads a track the first time it plays it. Everything else — the code, the
 // texture pages and the ~190 small sounds — the game loads before its first frame, so it is what offline play needs
 // first. Nothing else in a build comes near half a megabyte.
@@ -24,7 +22,20 @@ const streamed = (p, bytes) => /\.mp3$/.test(p) && bytes > 512 * 1024;
 
 const hash = (buf) => createHash('sha256').update(buf).digest('hex').slice(0, 16);
 
+// Igor writes every sound as both .ogg and .mp3. The page reports no Ogg support so the runtime loads the MP3s
+// (Safari's Vorbis decoder clips them), which leaves the .ogg copies, 57 MB of a 157 MB build, never asked for: they
+// are deleted, so they are never deployed. A sound with no MP3 beside it could not play at all, so that stops the build.
+function dropOgg(dir) {
+	for (const f of readdirSync(dir, { recursive: true })) {
+		if (!f.endsWith('.ogg')) continue;
+		const mp3 = path.join(dir, f.replace(/\.ogg$/, '.mp3'));
+		if (!existsSync(mp3)) throw new Error(`${f} has no MP3 beside it, and the page never loads Ogg`);
+		rmSync(path.join(dir, f));
+	}
+}
+
 export function writeBuild(dir) {
+	dropOgg(dir);
 	cpSync(buildPage(), dir, { recursive: true });
 	const files = [];
 	(function walk(rel) {
