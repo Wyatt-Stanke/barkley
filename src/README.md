@@ -297,7 +297,9 @@ How it works:
   moves the cursor to a random option when a dialog offers a choice (pressing straight through takes the first), and
   answers quick-time events (`oQuicker`, a cinema command: the key it shows within about 20 frames, or a life lost; the
   right key 9 times in 10) - the way from NeoYork1 to the catacombs at plot 3 is a run of them, which random presses
-  almost never passed; `exit` walks to an exit
+  almost never passed; the walking generators wait out the moment a room freezes the player on entry
+  (`global.freeze`, about 20 frames), since a new room's first snapshot is taken right there and they used to give up
+  on it at once; `exit` walks to an exit
   not taken from this room yet (a breadth-first route on an 8 px grid around solid instances) and takes it, by
   walking into it (`oExitPar` children and exits with their own collision event with `oBarkley`) or pressing action
   beside it; the exit recorded is the one nearest the player's last position, since the way to one exit can cross
@@ -306,7 +308,14 @@ How it works:
   not visited yet; `travel` heads for a story goal room through the known room graph (several hops; after a failed hop it tries
   other exits) (goal rooms place objects whose
   code sets `global.plot` to the next value, read from the build); `battle` presses action, cancel and arrows in a
-  battle's rhythm, or half the time only action (attack, the first target, the hits). Programs are either random macros or a few generators with macro bits between them; each
+  battle's rhythm, or half the time fights: it reads the battle menu's state, mostly attacks the first target
+  (sometimes it uses an item, a skill or defends instead), and in `postattack` attacks. Barkley's attacks are timing moves scored on the release, so taps barely ever
+  hit: most of the time it passes (holds cancel and lets go so that `oBTimer`'s side meter is at its end, `zy` 4, one
+  step later, when the throw reads it: the most damage, about twice his power) or takes a jump shot (up held about 25 frames, to the top of the jump), and
+  otherwise holds any move for a random time. A fight that begins during an episode (an enemy walked
+  into, the end of a cutscene) is fought by `battle` whatever generator was planned next; otherwise a walking generator
+  in `RomInter` has no player to walk and gives up the rest of the episode, which in the catacombs, where every walk
+  ends in a fight, was nearly every episode. Programs are either random macros or a few generators with macro bits between them; each
   generator's pick weight grows with what it found per frame lately.
 - **Crashes** are grouped by message and GML function. The first of each is replayed on a separate browser from its
   nearest snapshot (the same restores: a determinism check) and from a fresh page with no restores at all (fresh pages start alike: the loading pump stops at Game Start
@@ -390,6 +399,7 @@ Pipeline order:
    - `17-battle-alarm-order`: `oBCamera`'s Alarm 11 first runs the Alarm 10 of any battler whose Alarm 10 is due this step. Both are set to 2 in the same step; LTS ran the camera's first, and `sVerifyStats` read the battlers' `_h*` stat floors before Alarm 10 set them, so every battle crashed.
    - `18-battle-target-range`: the battle menu's target cursor steps back while it is past the end of the target list (and Down checks the length first). Right and Down in one step moved it two past the last target; GM6 read `target[]` past its end as 0, LTS stopped the game ("index out of range").
    - `19-battle-hud-view`: a new object `oBView`, created by `oBCamera`, renders the battle field (view 0) into a surface the size of the application surface and draws that surface across view 1 before the HUD. The battle is the only room with two visible views: GM6 drew each view onto the window in turn, but LTS clears a viewport before it draws, so view 1 (the HUD, which never draws the field) wiped view 0 and the whole battle showed as the runtime's blank `#FFFFF7`. `oBView` sits at depth 16000 so it draws first in both views; in view 0 it clears the surface to black, and its Room End frees the surface and puts `view_surface_id[0]` back to -1. The field keeps its own zooming camera, so the opening zoom-in still plays while the HUD stays at 1:1. Its End Step floors both views' positions: `sViewFollow`'s shake and the opening zoom leave the camera on a fraction, and while the view projection uses that fraction the surface drawn across view 1 lands on a whole pixel, so a fraction over half a pixel left the picture's last column unpainted - a white bar down the right of the battle (GM6 kept view positions whole).
+   - `20-battle-dead-turn`: the battle menu's `postattack` block reads `global.turn`'s fields only while that instance exists. A foe killed on its own turn (by Balthios's counter, after he defended) fades out and is destroyed while `global.turn` still names it, until `oBCamera`'s Alarm 1 picks the next turn about 21 frames later; LTS stopped the game ("Cannot read properties of undefined (reading 'gmlprefin')"). Found by the fuzzer.
    - Then, in modernized mode only (the default), `patches/modernized/*.patch`:
      - `01-scaling-options`: replaces the Configuration menu's `SCALING x1 x2 x3` with `Integer / Sharp fit` (still `global.sat[0]`, saved in `config.txt`; the default 1 is Sharp fit, and an old saved 2 is clamped to 1). Sharp fit draws the game nearest-neighbour onto a surface at the next whole scale, then bilinear down to the exact fit, so it fills the window with evenly sized pixels.
      - `02-wasd-jk-keys`: W/A/S/D and J/K also work as Up/Left/Down/Right, Action and Cancel. `key_doset` maps them with `keyboard_set_map` onto whatever those controls are bound to, so they follow rebinding, and it skips a letter that is itself bound to a control. The rebinding screen clears the maps while it waits for a key.

@@ -865,7 +865,9 @@ class Fuzzer {
 
 	pickGenerator(node) {
 		const w = Object.entries(GENERATORS).map(([g, base]) => {
-			if (node.probe.battle) base = g === 'battle' ? 10 : g === 'dialog' ? 1 : 0;
+			// a fight (global.battlers is also set in some map rooms, the catacombs', where walking is what's needed)
+			if (node.probe.foes !== undefined || node.probe.room === 'RomInter')
+				base = g === 'battle' ? 10 : g === 'dialog' ? 1 : 0;
 			if (g === 'travel' && !this.goalRoom(node)) base = 0;
 			const s = this.genStats[g] ?? { found: 0, frames: 0 };
 			return [g, base * (0.5 + Math.min(3, (s.found + 1) / (s.frames / 10000 + 1)))];
@@ -1113,7 +1115,15 @@ class Fuzzer {
 			`found per 10k frames: ${Object.entries(this.genStats)
 				.map(([g, v]) => `${g} ${((v.found * 10000) / Math.max(1, v.frames)).toFixed(1)}`)
 				.join(', ')}`,
-			`crashes ${this.crashes.size}${[...this.crashes.values()].map((e) => `\n  #${e.n} x${e.count}${e.old ? ` (${e.now ?? 0} this run)` : ''} ${e.sig}  [${e.verify ?? 'replaying'}]`).join('')}`,
+			// known crashes from earlier runs only when they came back
+			`crashes ${this.crashes.size} (${[...this.crashes.values()].filter((e) => e.old).length} from earlier runs)${[
+				...this.crashes.values(),
+			]
+				.filter((e) => !e.old || e.now)
+				.map(
+					(e) => `\n  #${e.n} x${e.count}${e.old ? ` (${e.now} this run)` : ''} ${e.sig}  [${e.verify ?? 'replaying'}]`,
+				)
+				.join('')}`,
 			`findings: ${this.out}`,
 		];
 		writeFileSync(path.join(this.out, 'status.txt'), `${lines.join('\n')}\n`);
