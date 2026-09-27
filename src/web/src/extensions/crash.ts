@@ -1,10 +1,12 @@
 // Crash reports (patch modernized/07). The game hands over a checkpoint (its resume state) every 30 steps and each
-// step's frame time; this records the key events between steps. After an uncaught error, or when the player types BUG
-// (in capitals), the page shows a report (CrashPanel): the checkpoint about 10 s back, the frame times and key events
+// step's frame time; this records the key events between steps, the touch overlay's and a game controller's too.
+// After an uncaught error, or when the player types BUG (in capitals) or asks from the touch controls' sheet, the page
+// shows a report (CrashPanel): the checkpoint about 10 s back, the frame times and key events
 // since, and the error or the state the game has now, gzipped and Base64-encoded. `node src/fuzz.mjs replay <build>
 // <report file>` replays it, so the report's format is fixed: change it only with the replay.
 import { createSignal } from 'solid-js';
 import { folder, storage } from '../page';
+import { hearKeys } from '../runtime/keys';
 import { base64 } from './saves';
 
 type Event = [type: number, which: number, key: string]; // type: 0 up, 1 down, 2 blur, 3 focus
@@ -81,28 +83,35 @@ export function crash_end(state: string) {
 	return 0;
 }
 
-function record(type: number, e: KeyboardEvent | null) {
+// A report asked for from the page, as typing BUG asks: the game's next step hands over its state (crash_end).
+export function askReport() {
+	if (!done && !crashReport()) want = 1;
+}
+
+function record(type: number, which = 0, key = '') {
 	if (done || crashReport()) return;
-	const which = e ? e.which || e.keyCode || 0 : 0;
-	pending.push([type, which, e?.key || '']);
-	if (type !== 1 || !e) return;
-	if (e.key && e.key.length === 1 && e.key >= 'A' && e.key <= 'Z') {
+	pending.push([type, which, key]);
+	if (type !== 1) return;
+	if (key.length === 1 && key >= 'A' && key <= 'Z') {
 		if (Date.now() - typedAt > 3000) typed = '';
-		typed = (typed + e.key).slice(-3);
+		typed = (typed + key).slice(-3);
 		typedAt = Date.now();
 		if (typed === 'BUG') {
 			want = 1;
 			typed = '';
 		}
-	} else if (e.key && e.key.length === 1) typed = '';
+	} else if (key.length === 1) typed = '';
 }
+const recordKey = (type: number, e: KeyboardEvent) => record(type, e.which || e.keyCode || 0, e.key || '');
 
 export function enableCrash() {
-	addEventListener('keydown', (e) => record(1, e), true);
-	addEventListener('keyup', (e) => record(0, e), true);
+	addEventListener('keydown', (e) => recordKey(1, e), true);
+	addEventListener('keyup', (e) => recordKey(0, e), true);
+	// the touch overlay's and a game controller's presses, which reach the game with no key name
+	hearKeys((code, down) => record(down ? 1 : 0, code));
 	// the window's own (the runtime clears its keys on blur), not an element's
-	addEventListener('blur', (e) => e.target === window && record(2, null), true);
-	addEventListener('focus', (e) => e.target === window && record(3, null), true);
+	addEventListener('blur', (e) => e.target === window && record(2), true);
+	addEventListener('focus', (e) => e.target === window && record(3), true);
 	addEventListener('error', (e) => {
 		if (done) return;
 		const x = e.error;

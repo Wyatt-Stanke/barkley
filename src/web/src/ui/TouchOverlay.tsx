@@ -1,6 +1,8 @@
 // The touch overlay (extensions/touch.ts has its state and input): the direction control, A, B and START drawn in an
-// SVG over the canvas, the settings button and its sheet, and the note SET KEYS needs on a device with no keyboard.
+// SVG over the canvas, the settings button and its sheet (with a bug report, which needs a keyboard to type BUG
+// otherwise), and the note SET KEYS needs on a device with no keyboard.
 import { For, type JSX, Show } from 'solid-js';
+import { askReport } from '../extensions/crash';
 import {
 	BASE_R,
 	type Button,
@@ -23,6 +25,7 @@ import {
 	shown,
 	THROW,
 } from '../extensions/touch';
+import { has } from '../page';
 import './TouchOverlay.css';
 
 export function TouchOverlay() {
@@ -290,6 +293,26 @@ function Sheet() {
 				value={cfg.enabled}
 				set={(v) => setting('enabled', v)}
 			/>
+			<Show when={has('Crash')}>
+				<div class="gmt-row">
+					<div class="gmt-cell">
+						<div class="gmt-lab">Bug report</div>
+						<div class="gmt-hint">The last 10 seconds of play, to copy and send.</div>
+					</div>
+					<div class="gmt-seg">
+						<button
+							type="button"
+							id="gmtouch-bug"
+							onClick={() => {
+								setSheetOpen(false);
+								askReport();
+							}}
+						>
+							Report
+						</button>
+					</div>
+				</div>
+			</Show>
 		</div>
 	);
 }
