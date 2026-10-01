@@ -12,7 +12,7 @@ diff -ruN a/objects/oController/3_1.gml b/objects/oController/3_1.gml
 diff -ruN a/scripts/key_doset.gml b/scripts/key_doset.gml
 --- a/scripts/key_doset.gml
 +++ b/scripts/key_doset.gml
-@@ -17,3 +17,6 @@
+@@ -9,3 +9,6 @@
  
  //Modernized: the touch overlay sends the bound keys, so it follows SET KEYS (migrate/touch.js)
  touch_keys(global.key_up,global.key_down,global.key_left,global.key_right,global.key_action,global.key_cancel,global.key_start);

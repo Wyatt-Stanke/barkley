@@ -1,12 +1,17 @@
 /* The controls table, whose rows light up as they are pressed. The directions' controller cell spans four rows and
-   stays unlit. */
+   stays unlit. Fixed columns, so the controller's status changing width moves nothing. */
 .ctl-table {
-	border-collapse: collapse;
+	table-layout: fixed;
+	width: 100%;
 	max-width: 32em;
+	border-collapse: collapse;
+}
+.ctl-table th:first-child {
+	width: 5.5em;
 }
 .ctl-table th,
 .ctl-table td {
-	padding: 6px 24px 6px 8px;
+	padding: 6px 16px 6px 8px;
 	text-align: left;
 	vertical-align: middle;
 	border-bottom: 1px solid var(--rule);
@@ -16,13 +21,42 @@
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
+	vertical-align: top;
 	color: var(--mute);
 	border-bottom-color: var(--ink);
 }
 .ctl-table tbody th {
 	font-weight: 700;
 }
+.ctl-arrow {
+	display: inline-block;
+}
 .ctl-table tr.on > :not(.ctl-dirs) {
 	color: var(--paper);
 	background: var(--ink);
+}
+/* Under the Controller heading: a hollow dot and "Not connected", or a filled one and "Connected" */
+.ctl-conn {
+	display: block;
+	margin-top: 4px;
+	font-weight: 500;
+	letter-spacing: 0;
+	text-transform: none;
+	white-space: nowrap;
+}
+.ctl-conn::before {
+	content: '';
+	display: inline-block;
+	box-sizing: border-box;
+	width: 8px;
+	height: 8px;
+	margin-right: 6px;
+	border: 1px solid currentColor;
+	border-radius: 50%;
+}
+.ctl-conn.on {
+	color: var(--ink);
+}
+.ctl-conn.on::before {
+	background: currentColor;
 }

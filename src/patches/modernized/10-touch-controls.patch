@@ -57,8 +57,8 @@ diff -ruN a/objects/oScreenFill/8_77.gml b/objects/oScreenFill/8_77.gml
 diff -ruN a/scripts/key_doset.gml b/scripts/key_doset.gml
 --- a/scripts/key_doset.gml	2026-09-17 19:07:56
 +++ b/scripts/key_doset.gml	2026-09-17 19:07:57
-@@ -15,3 +15,5 @@
- key_alias(ord("K"),global.key_cancel);
+@@ -7,3 +7,5 @@
+ global.key_start=global.cpref[6];
  
  
 +//Modernized: the touch overlay sends the bound keys, so it follows SET KEYS (migrate/touch.js)

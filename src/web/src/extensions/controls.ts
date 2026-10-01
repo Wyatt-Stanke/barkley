@@ -18,13 +18,11 @@ export const CONTROLS: [Control, string][] = [
 	['cancel', 'Cancel'],
 	['start', 'Menu'],
 ];
-// key_doset's aliases: these act as the control they name unless the player has bound them to something else.
-const ALIAS: Record<number, Control> = { 87: 'up', 65: 'left', 83: 'down', 68: 'right', 74: 'action', 75: 'cancel' };
 // biome-ignore format: laid out by hand
 const NAMES: Record<number, string> = {
 	8: 'Backspace', 9: 'Tab', 13: 'Enter', 16: 'Shift', 17: 'Ctrl', 18: 'Alt', 19: 'Pause', 20: 'Caps Lock',
 	27: 'Esc', 32: 'Space', 33: 'Page Up', 34: 'Page Down', 35: 'End', 36: 'Home',
-	37: '←', 38: '↑', 39: '→', 40: '↓',
+	37: 'Left arrow', 38: 'Up arrow', 39: 'Right arrow', 40: 'Down arrow',
 	45: 'Insert', 46: 'Delete', 91: 'Meta', 93: 'Menu', 144: 'Num Lock', 145: 'Scroll Lock',
 	186: ';', 187: '=', 188: ',', 189: '-', 190: '.', 191: '/', 192: '`',
 	219: '[', 220: '\\', 221: ']', 222: "'",
@@ -65,23 +63,11 @@ function stored(): Keys | null {
 	return keys;
 }
 
-// The control a key presses, if any. An alias only stands for its control while no control is bound to that key,
-// exactly as key_alias decides it.
+// The control a key presses, if any
 export function controlOf(keys: Keys, code: number): Control | null {
 	for (const [c] of CONTROLS) if (keys[c] === code) return c;
-	return aliasOf(keys, code);
+	return null;
 }
-function aliasOf(keys: Keys, code: number) {
-	const name = ALIAS[code];
-	if (!name) return null;
-	for (const [c] of CONTROLS) if (keys[c] === code) return null;
-	return name;
-}
-export const aliases = (keys: Keys, c: Control) =>
-	Object.keys(ALIAS)
-		.map(Number)
-		.filter((code) => aliasOf(keys, code) === c)
-		.map(keyName);
 
 // The controls a set of pads is pressing, by the gamepad extension's own mapping, so the test cannot drift from the
 // game. (Its own held state is no use on the Start screen: it starts tracking only once the game has run key_doset.)

@@ -8,7 +8,7 @@
 // and the touch steps tap:<x>x<y>, hold:<x>x<y>@<ms> and drag:<x1>x<y1>><x2>x<y2>[@<ms>]. Steps are comma
 // separated, so touch coordinates use x and @ rather than commas.
 // Screenshots land in <output dir>/<label>.png, console output and exceptions in <output dir>/console.txt.
-// The game's keys: Z action, X cancel, arrows (a modernized build also takes W/A/S/D, J and K). The page is opened with
+// The game's keys: Z action, X cancel, arrows. The page is opened with
 // ?nosw, which keeps the service worker out of the run; SW=1 leaves it in, to test offline play. CHROME overrides the
 // browser binary; SIZE=<w>x<h> the window
 // (default 1024x768). DEVICE=<w>x<h>[@<dpr>] emulates a phone instead (touch events, mobile viewport), which is what
