@@ -1,14 +1,15 @@
-// A video of one fuzz corpus path, played from a fresh page (no restores), as fuzz.mjs replay plays a finding.
+// A video of one fuzz corpus path, played from a fresh page with the fuzzer's own restores (as fuzz.mjs replayChain).
 //
 //   node src/video.mjs <build dir> [out.mp4] [--node=<id>] [--corpus=<dir | corpus.json.gz>] [--speed=N] [--port=N]
 //
 // The build must be the unobfuscated or minified one the corpus was made on (fuzz.mjs build). --node picks the path's
-// last node; the default is the longest path in the corpus, by steps. The game runs at 30 steps a second and the video
-// at 30 frames a second, so --speed=1 (the default) is real time and --speed=N draws every Nth step. The canvas is
+// last node; the default is the longest path in the corpus, by steps. The game runs at 60 steps a second (oController
+// sets room_speed 60; a few intro rooms run slower) and the video at 60 frames a second, so --speed=1 (the default) is
+// real time and --speed=N draws every Nth step; a huge --speed only checks that the path replays. The canvas is
 // captured after each drawn step and piped to ffmpeg, scaled 2x (nearest neighbour); there's no sound (the fuzz page
 // runs the game muted). Writes <out>.txt beside it: when each room and plot is reached, in video time.
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -29,13 +30,10 @@ if (!root) {
 const speed = +flag('speed', 1);
 if (flag('port')) setPort(+flag('port'));
 
-// the corpus: the fuzzer's working copy (build/fuzz/corpus) when there is one, which has every path; else the packed
-// file in git, which keeps only the paths to nodes that own something (the longest path often ends where nothing new
-// was found, after a game over)
-const local = path.join(HERE, '..', 'build', 'fuzz', 'corpus');
-const corpusPath = path.resolve(
-	flag('corpus', existsSync(local) ? local : path.join(HERE, '..', 'fuzz', 'corpus.json.gz')),
-);
+// the corpus: by default the packed one in the repo, whose paths all replay to where they were recorded (fuzz.mjs
+// verify checks them). The working copy (build/fuzz/corpus) has more paths, but one that owns nothing at its end can
+// depend on snapshots that are gone and replay somewhere else (its longest, 122,450 steps, sticks at plot 2).
+const corpusPath = path.resolve(flag('corpus', path.join(HERE, '..', 'fuzz', 'corpus.json.gz')));
 const { state, nodes } = statSync(corpusPath).isDirectory()
 	? {
 			state: JSON.parse(readFileSync(path.join(corpusPath, 'state.json'), 'utf8')),
@@ -61,7 +59,7 @@ const steps = [state.boot, ...chain.slice(1).map((n) => n.program)];
 const total = steps.reduce((a, p) => a + frames(p), 0);
 const out = outArg ?? path.resolve(`fuzz-${leaf.id}.mp4`);
 const time = (step) => {
-	const s = Math.floor(step / 30 / speed);
+	const s = Math.floor(step / 60 / speed);
 	return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 };
 console.log(
@@ -74,7 +72,7 @@ const b = new Browser(95, path.join(tmpdir(), `barkley-video-${process.pid}`), h
 const ffmpeg = spawn(
 	'ffmpeg',
 	[
-		...['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', '30', '-c:v', 'png', '-i', '-'],
+		...['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', '60', '-c:v', 'png', '-i', '-'],
 		...['-vf', 'scale=iw*2:ih*2:flags=neighbor', '-c:v', 'libx264', '-crf', '18', '-pix_fmt', 'yuv420p'],
 		...['-movflags', '+faststart', out],
 	],
@@ -84,15 +82,21 @@ const ffmpegDone = new Promise((r) => ffmpeg.on('close', r));
 process.on('exit', () => b.kill());
 await b.start();
 
-// Calls end at every drawn step and at every step boundary. Keys are released only at a step boundary (as each
-// recorded episode ended), and after every step but the last the page snapshots as the fuzzer did (a snapshot uses up
-// an instance id, so leaving them out would change the game).
+// Played as fuzz.mjs replayChain plays a path: after every step but the last the page snapshots as the fuzzer did (a
+// snapshot uses up an instance id), and a step the fuzzer began by restoring a snapshot begins by restoring the one
+// just taken (a restore is not quite continuous play, and verify replays paths this way). Calls end at every drawn step
+// and at every step boundary; keys are released only at a step boundary, as each recorded episode ended.
 const timeline = [];
 let done = 0,
 	where = '',
+	prev,
 	res;
 const started = Date.now();
 run: for (let s = 0; s < steps.length; s++) {
+	if (s > 0 && chain[s].loaded && prev) {
+		const err = await b.call((x) => __fuzz.load(x), prev);
+		if (err) throw new Error(`restore before step ${s} failed: ${JSON.stringify(err)}`);
+	}
 	let piece = [];
 	for (const [i, [keys, n]] of steps[s].entries()) {
 		for (let left = n; left > 0; ) {
@@ -119,8 +123,9 @@ run: for (let s = 0; s < steps.length; s++) {
 				},
 				600000,
 			);
-			piece = [];
 			const p = res.crash?.probe ?? res.probe;
+			if (stepEnd) prev = res.saves[piece.length] ?? prev;
+			piece = [];
 			if (`${p.room} ${p.plot}` !== where) {
 				where = `${p.room} ${p.plot}`;
 				timeline.push(`${time(done)}  ${p.room}  plot ${p.plot}`);
@@ -144,7 +149,10 @@ server.close();
 b.kill();
 
 const p = res.crash?.probe ?? res.probe;
-const end = `ended in ${p.room} plot ${p.plot} at (${p.x},${p.y}); the corpus recorded ${leaf.probe.room} plot ${leaf.probe.plot} at (${leaf.probe.x},${leaf.probe.y})`;
+// Only the end is compared: the probes recorded on the way can be stale (a rebased path can pass through a step
+// differently and still end where it was recorded), as fuzz.mjs verify only checks where paths end.
+const same = ['room', 'plot', 'x', 'y'].every((k) => p[k] === leaf.probe[k]);
+const end = `${same ? 'replayed as recorded' : 'DRIFTED'}: ended in ${p.room} plot ${p.plot} at (${p.x},${p.y}); the corpus recorded ${leaf.probe.room} plot ${leaf.probe.plot} at (${leaf.probe.x},${leaf.probe.y})`;
 timeline.push('', res.crash ? `crash: ${res.crash.message}` : end);
 writeFileSync(`${out}.txt`, `${timeline.join('\n')}\n`);
 console.log(res.crash ? `crash at step ${done}: ${res.crash.message}` : end);

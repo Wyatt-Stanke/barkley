@@ -216,19 +216,22 @@ node src/fuzz.mjs verify build/fuzz/build --minutes=5                           
 node src/fuzz.mjs replay build/fuzz/build build/fuzz/<run>/crashes/1                    # from a fresh page, with screenshots
 ```
 
-A corpus path can be watched as a video: `video.mjs` plays one from a fresh page as `replay` does and pipes the
-canvas after each step to ffmpeg (an H.264 MP4 at 30 frames a second, the game's speed, scaled 2x; no sound), with a
-`.txt` beside it of when each room and plot comes up. The default path is the longest in `build/fuzz/corpus`, or in `fuzz/corpus.json.gz` when there's no working copy
-(packing keeps only paths to nodes that own something, so the longest local path, which ended in menus after a game
-over, isn't in it); `--node=<id>` picks
-another by its last node, `--speed=N` draws every Nth step. About 20 ms a step, so the longest path (122,450 steps,
-68 minutes of play, in the 2026-09-26 corpus) takes about 40 minutes:
+A corpus path can be watched as a video: `video.mjs` plays one from a fresh page as `verify` replays a path (the
+fuzzer's snapshot after every step, and its restores before the steps it began with one) and pipes the canvas after
+each step to ffmpeg: an H.264 MP4 at 60 frames a second, the game's speed (`oController` sets `room_speed` 60), scaled
+2x, no sound. A `.txt` beside it says when each room and plot comes up, and whether the path ended where it was
+recorded. The default path is the longest in `fuzz/corpus.json.gz`; `--node=<id>` picks another by its last node,
+`--speed=N` draws every Nth step (a huge N only checks that the path replays, ~3 min). About 20 ms a step: the longest
+path in the 2026-09-26 corpus (node 13959, 99,191 steps, 27.5 minutes of play, ending in the catacombs at plot 4) takes
+about 35 minutes.
 
 ```sh
 node src/video.mjs build/fuzz/build build/fuzz/video/longest.mp4 [--node=<id>] [--speed=N] [--corpus=<file|dir>]
 ```
 
-The fuzzer's "frames" are game steps; most rooms run at 30 a second (four at 40), not 60.
+`--corpus=build/fuzz/corpus` takes the working copy, which has more paths than the packed file (packing keeps only the
+paths to nodes that own something), but such a path can depend on snapshots that are gone: the working copy's longest,
+node 11809 (122,450 steps, recorded ending at plot 5), replays to plot 2 and wanders there for an hour.
 
 It also runs on the deployable build (`fuzz.mjs build --minify`, the pipeline's `site/`): terser keeps the `gml_*`
 names, and the harness finds the runtime's variables in both forms. Replays on the two match.
