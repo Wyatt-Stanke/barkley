@@ -8,9 +8,6 @@ build/
 # The page's npm packages (src/web; src/page.mjs installs them from its lockfile).
 node_modules/
 
-# Third-party installers (~320 MB).
-tools/
-
 # Game material: the pristine GMX export, the original distribution and the
 # other releases. Large, immutable inputs — deliberately untracked.
 # The recovered scripts are patch source, so they stay.

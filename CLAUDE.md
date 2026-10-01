@@ -189,7 +189,6 @@ barkley/
   game/          inputs: large, immutable, untracked (except recovered-scripts/)
   docs/          an earlier audit page
   fuzz/          corpus.json.gz: the fuzzer's corpus, packed (paths, not snapshots; see src/README.md "Fuzzing")
-  tools/         the GameMaker Studio 1.4.9999 installer and a how-to video (untracked)
   build/         everything generated; all of it reproducible from src/ (untracked); tools/ holds downloaded GameMaker tools,
                  web/ the page app (src/page.mjs)
   .github/       workflows/pages.yml: the whole pipeline on every push to main, deployed to GitHub Pages;
