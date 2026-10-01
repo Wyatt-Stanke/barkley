@@ -51,7 +51,7 @@ node src/pipeline.mjs [--out=<dir>] [--mode=modernized|faithful] [--from=exe|pri
 ```
 
 It runs `fetch.mjs`, `virt/run.sh`, `migrate.mjs` (and fails unless the audit prints "No items to review"),
-`import.mjs`, `fuzz.mjs build --minify` and a play-test (boot, Start, no uncaught exception), writing
+`import.mjs`, `build.mjs --minify` and a play-test (boot, Start, no uncaught exception), writing
 `<out>/BarkleyV120.gmx`, `<out>/barkley-<version>.gmx`, `<out>/barkley-<version>/BarkleyLTS.yyp`, `<out>/site/` and
 `<out>/playtest/` (`<out>` defaults to `build/pipeline`). A step whose output exists is kept, so delete that output to
 redo the step. `--from=pristine` migrates `game/BarkleyV120.gmx` instead of exporting one.
@@ -117,7 +117,7 @@ And what the extensions do, once their stubs have turned them on:
 
 ## Build and play-test (HTML5)
 
-The supported build is `node src/fuzz.mjs build <.yyp> <dir> [--minify]`: unobfuscated, from copies of the project and
+The supported build is `node src/build.mjs <.yyp> <dir> [--minify]` (or `fuzz.mjs build`, the same): unobfuscated, from copies of the project and
 the user folder, with the tools `toolchain.mjs` finds. By hand, with Igor from the runtime and the signed-in user
 folder:
 
@@ -348,7 +348,7 @@ every HTML5 build.
 | `page.mjs` | Builds `web/` into `build/web/` (`npm ci` the first time, then type-check and bundle); `offline.mjs` copies it into every build. |
 | `offline.mjs` | `writeBuild`: the page, the service worker and `version.json` (the file list the worker caches a build from) written over an HTML5 build. |
 | `playtest.mjs` | Headless-Chromium smoke test of an HTML5 build: console, exceptions, screenshots, key presses. |
-| `deploy.mjs` | Deploys a build to GitHub Pages in one command: builds a project with `fuzz.mjs build --minify` (always with the current page), play-tests it, commits it into a kept clone of the deploy repo reset to its `main`, pushes, watches the Pages workflow and checks the live files against the build. |
+| `deploy.mjs` | Deploys a build to GitHub Pages in one command: builds a project with `build.mjs --minify` (always with the current page), play-tests it, commits it into a kept clone of the deploy repo reset to its `main`, pushes, watches the Pages workflow and checks the live files against the build. |
 | `fuzz.mjs`, `fuzz-page.js` | The fuzzer (see Fuzzing): the unobfuscated build, the search, crash and path replays; and the in-page harness (virtual clock, coverage, snapshots, restores). |
 
 Pipeline order:

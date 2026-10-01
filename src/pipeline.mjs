@@ -92,7 +92,7 @@ try {
 			throw e;
 		}
 	});
-	step('build (HTML5, minified)', site, () => node('fuzz.mjs', 'build', yyp, site, '--minify'));
+	step('build (HTML5, minified)', site, () => node('build.mjs', yyp, site, '--minify'));
 	if (playtest)
 		step('play-test', null, () => {
 			const dir = path.join(out, 'playtest');

@@ -1,6 +1,6 @@
 // Deploy an HTML5 build to GitHub Pages (github.com/Wyatt-Stanke/bsuajg-test) in one command:
 //   node src/deploy.mjs <project .yyp | build dir> --message-file=<file> [--dry-run]
-// 1. build: a .yyp is built with `fuzz.mjs build --minify` (the page is the current src/web); a build dir is used as
+// 1. build: a .yyp is built with `build.mjs --minify` (the page is the current src/web); a build dir is used as
 //    it is, with the current page and offline layer written over it. 2. check: the page is the custom one, and a
 //    headless play-test boots it to the title screen with no uncaught exception. 3. commit: into the clone in
 //    build/deploy/bsuajg-test (cloned on first use), reset to origin/main first, so a deploy pushed from elsewhere is
@@ -50,7 +50,7 @@ let dir = path.resolve(src),
 if (dir.endsWith('.yyp')) {
 	step('build');
 	built = mkdtempSync(path.join(tmpdir(), 'barkley-deploy-'));
-	run('node', [path.join(import.meta.dirname, 'fuzz.mjs'), 'build', dir, path.join(built, 'build'), '--minify']);
+	run('node', [path.join(import.meta.dirname, 'build.mjs'), dir, path.join(built, 'build'), '--minify']);
 	dir = path.join(built, 'build');
 }
 const index = readFileSync(path.join(dir, 'index.html'), 'utf8');
