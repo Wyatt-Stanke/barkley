@@ -63,6 +63,7 @@ if (fs.readFileSync(path.join(gmx, 'scripts', 'key_doset.gml'), 'utf8').includes
 		['touch_view_w', [], 2],
 		['touch_view_h', [], 2],
 		['touch_dpr', [], 2],
+		['touch_fit', [2], 2],
 	]);
 // Gamepad sends the bound keys from a game controller, for patch modernized/11.
 if (fs.readFileSync(path.join(gmx, 'scripts', 'key_doset.gml'), 'utf8').includes('pad_keys'))
