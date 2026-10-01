@@ -46,7 +46,7 @@ deploy from GitHub Actions. The play-test's screenshot is kept as the run's `pla
 ## More
 
 - [`src/README.md`](src/README.md): every patch and transform, the web page (`src/web`), offline play, and the fuzzer.
-- [`virt/README.md`](virt/README.md): how the executable becomes a GMX without Windows.
+- [`virt/README.md`](virt/README.md): how the executable becomes a GMX.
 - [`CLAUDE.md`](CLAUDE.md): the working notes — commands, gotchas, current state.
 
 The original game is by Tales of Game's Studios. This repository holds only the tooling that ports it.

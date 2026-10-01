@@ -17,7 +17,7 @@ import javax.swing.JTextField;
  * updateProgress already falls back to stdout when there is no progress dialog.
  *
  * Compiled alongside the decompiler's own sources (it is in their default
- * package) by virt/decompile.sh, in a container -- this step needs no VM.
+ * package) by virt/decompile.sh, in a container.
  *
  *   java Decompile <path-to-exe>
  *

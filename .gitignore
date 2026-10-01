@@ -17,9 +17,4 @@ tools/
 game/*
 !game/recovered-scripts/
 
-# The VM's own state and its cache of pinned third-party downloads. The machine
-# is reproducible from virt/ -- see virt/README.md.
-virt/.vagrant/
-virt/cache/
-
 .DS_Store

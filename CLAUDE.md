@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a port of _Barkley, Shut Up and Jam: Gaiden_ v1.20 to **GameMaker LTS 2026**. The starting point is a **GameMaker: Studio 1.4 GMX export** decompiled from a Game Maker 6 executable, kept pristine at `game/BarkleyV120.gmx`. The work lives in `src/`: Node.js tooling that migrates that export reproducibly. The tooling has no npm dependencies; the page around the game, `src/web/`, is a Vite + SolidJS + TypeScript project whose packages `src/page.mjs` installs from its lockfile. `src/README.md` has the full pipeline description (every patch and transform, and the fuzzer's design).
 
-That export was originally made by hand. `virt/` reproduces it from the original executable without a person at the keyboard; see "Rebuilding the pristine export" below. It is a separate concern from `src/` and nothing in the port depends on it.
+`virt/` reproduces that export from the original executable; see "Rebuilding the pristine export" below. It is a separate concern from `src/` and nothing in the port depends on it.
 
 **The final export target is HTML5 (a web port).** The HTML5 target is installed; build and test against it.
 
@@ -189,7 +189,7 @@ barkley/
   game/          inputs: large, immutable, untracked (except recovered-scripts/)
   docs/          an earlier audit page
   fuzz/          corpus.json.gz: the fuzzer's corpus, packed (paths, not snapshots; see src/README.md "Fuzzing")
-  tools/         the GameMaker Studio 1.4.9999 installer and a how-to video, for virt/'s unused VM (untracked)
+  tools/         the GameMaker Studio 1.4.9999 installer and a how-to video (untracked)
   build/         everything generated; all of it reproducible from src/ (untracked); tools/ holds downloaded GameMaker tools,
                  web/ the page app (src/page.mjs)
   .github/       workflows/pages.yml: the whole pipeline on every push to main, deployed to GitHub Pages;
@@ -226,7 +226,7 @@ scratchpad dir, never in the project.
 
 It holds the contents of an HTML5 build's `out/` dir plus `README.md` and `.github/workflows/static.yml`, which deploys to GitHub Pages on every push to `main` (the origin is `wyatt-stanke.github.io`). The workflow pins `actions/checkout@v4`, `configure-pages@v5` and `upload-artifact@v4`, which target the deprecated Node 20; the runner forces them onto Node 24 and warns. They'll need bumping at some point.
 
-**Live: `3b7522f`** (2026-09-22), v1.3.1, the modernized build of `barkley-1.3.1`, deployed with `deploy.mjs`: the same game as v1.3.0, rebuilt from an export `virt/` now makes on its own. Build id `cf172539be62bdd4`, 262 files cached. `BarkleyLTS.js` md5 `0747ac35d5b8a8e4b80fe5227ac793b9`; `index.html` md5 `7769c6b48933acfb6fed259c47805939`; `sw.js` md5 `8352242ca58c04a4c488f81a8d89eef7`; `version.json` md5 `2dd8f06063a5394d51e5765325b9f6c2`; shims `tph_crash.js`, `uph_controls.js`, `vph_gamepad.js`, `wph_touch.js`, `xph_saves.js`, `yph_resume.js`, `zph_fullscreen.js`, plus `inter.woff2` and `inter-OFL.txt` (a new extension shifts every shim's prefix, so they must ship with their bundle).
+**Live: `3b7522f`** (2026-09-22), v1.3.1, the modernized build of `barkley-1.3.1`, deployed with `deploy.mjs`: the same game as v1.3.0, rebuilt from an export `virt/` makes on its own. Build id `cf172539be62bdd4`, 262 files cached. `BarkleyLTS.js` md5 `0747ac35d5b8a8e4b80fe5227ac793b9`; `index.html` md5 `7769c6b48933acfb6fed259c47805939`; `sw.js` md5 `8352242ca58c04a4c488f81a8d89eef7`; `version.json` md5 `2dd8f06063a5394d51e5765325b9f6c2`; shims `tph_crash.js`, `uph_controls.js`, `vph_gamepad.js`, `wph_touch.js`, `xph_saves.js`, `yph_resume.js`, `zph_fullscreen.js`, plus `inter.woff2` and `inter-OFL.txt` (a new extension shifts every shim's prefix, so they must ship with their bundle).
 
 **The deploy repo's history was flattened on 2026-09-22** (the user asked for it, with that deploy): its 26 commits, each a whole ~150 MB copy of the build tree, became the single orphan root commit `3b7522f`, force-pushed to `main`. The tree hash is unchanged (`2a3cee26`, 482 files) and the live site never moved, but **every earlier deploy hash is gone** — `61c0307` (v1.3.0), `7191192` (v1.2.2), `b7599e9` (v1.2.1), `0b65adb` (v1.2.0), `068a661` (v1.1.1), `58167a6` (v1.1.0) and the rest no longer resolve. This file's older entries name them only as labels. `deploy.mjs` needs no change: it resets to `origin/main` and commits on top, so the next deploy is the second commit in the new history. **Don't flatten again without being asked**; the history that is left is the record.
 
@@ -240,10 +240,9 @@ It builds with `fuzz.mjs build --minify`, writes the offline layer over whatever
 
 ## Rebuilding the pristine export (`virt/`)
 
-`game/BarkleyV120.gmx` came from running a Java GUI decompiler over
-`game/original/BarkleyV120.exe` and importing the resulting `.gm6` into GameMaker: Studio 1.4.9999
-by hand. `virt/` automates that. **It is not part of a normal day's work** — the export is pristine
-and immutable, so this only matters if it ever has to be regenerated or audited.
+`virt/` makes a GMX export from `game/original/BarkleyV120.exe`: the GM6 decompiler, then LateralGM.
+**It is not part of a normal day's work** — `game/BarkleyV120.gmx` is pristine and immutable, so this
+only matters when the export has to be regenerated or audited (the pipeline runs it from the exe).
 `virt/README.md` has the detail; what follows is what you need before opening it.
 
 ```sh
@@ -277,19 +276,11 @@ virt/convert.sh [in] [out]   # step 2 alone: the .gm6 -> the .gmx (~1 min)
   collapses each pair, which is exactly what happened to the pristine export and why
   `game/recovered-scripts/` exists.
 
-**Reading a GMX that GameMaker did not write.** `src/lib/gmx.mjs` and `src/migrate.mjs` used to
-assume GameMaker's own serialisation — attributes in a fixed order, CRLF, `&#xA;` and nothing else,
-`<caption>` and `<glyphs>` never self-closed. None of that is what the XML says, and a GMX from
-another writer parsed as an empty project. They now match attributes by name, decode numeric
-character references generally, follow the file's own line ending, and accept self-closing empty
-elements. Keep it that way; it costs nothing and the pristine path is unchanged by it.
-
-**The Windows VM is still in `virt/` and nothing uses it.** It was the plan for step 2 and never
-finished: the crack runs, the export step does not. Two things about it are worth knowing if it is
-ever picked back up — it bugchecks under `-cpu host` on HVF (fixed by `Penryn`, the default now;
-masking TSX and dropping to `-smp 1` were both dead ends), and WinRM lands in session 0, which has
-no desktop, so anything with a window goes through `Invoke-InSession` in `virt/guest/lib.ps1`.
-`virt/README.md` has the rest.
+**Reading a GMX that GameMaker did not write.** `src/lib/gmx.mjs` and `src/migrate.mjs` match
+attributes by name, decode numeric character references generally, follow the file's own line
+ending, and accept self-closing empty elements, so LateralGM's output reads the same as
+GameMaker's. Keep it that way; assuming GameMaker's serialisation parses LateralGM's GMX as an
+empty project.
 
 ## Architecture of `src/`
 
@@ -463,8 +454,7 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   PNG encoding (pixel-identical). `bsuajg-test` (below) is still live and `deploy.mjs` still targets it; the GitHub
   Pages site is now built only by the workflow.
 - **v1.3.1 is deployed (`3b7522f`, 2026-09-22): the same game as v1.3.0, rebuilt from an export `virt/` now
-  makes from the original executable on its own.** Not a line of GML or a pixel of art changed; what changed is
-  that the hand-made step in front of the pipeline is gone (see "`virt/` … is done and needs no VM" below).
+  makes from the original executable on its own.** Not a line of GML or a pixel of art changed; the export in front of the pipeline now comes from `virt/` (see below).
   `barkley-1.3.1` is the migration and import behind it, and its `.gmx` is byte-identical to `barkley-1.3.0.gmx`.
   `deploy.mjs`'s own play-test and live md5 checks passed, and the deploy repo's history was flattened in the
   same pass (see "The web deploy").
@@ -540,7 +530,7 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   - Saves panel's Copy/Download/file-picker buttons in a real browser; that the volume change is audible (playtests are muted).
   - Fullscreen appearance and a real Esc in Chrome and Safari; the room-name banner and save-slot location names (`sRoomCaption`) on screen; saving outside a pump room. A pump save records the player position as -1, as in GM6.
   - Anything against the original executable. Safari can't be automated (`safaridriver` sessions time out); don't run `Safari --version`, it hangs.
-- **`virt/` (the GMX export, automated) is done and needs no VM.** `virt/run.sh` goes from
+- **`virt/` (the GMX export, automated).** `virt/run.sh` goes from
   `game/original/BarkleyV120.exe` to a GMX in about three minutes, in two containers: the GM6
   decompiler, then LateralGM with the four patches in `virt/lateralgm/patches`. See "Rebuilding
   the pristine export" above.
@@ -559,17 +549,6 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   `clearDisplayBuffer`, the Android and iOS option lists) that LTS regenerates or ignores, and the
   `Configs/` platform templates. LateralGM also writes no font glyph PNGs or `<glyph>` entries,
   which is moot: `importFonts` writes both from the exe for every export.
-- **The Windows VM in `virt/` is unused and unfinished**, kept only in case step 2 ever has to go
-  back to the real IDE. `guest/crack.ps1` runs; `guest/export.ps1` has never completed. Its one
-  hard-won fact: **it bugchecked under `-cpu host` on HVF** — `0xA` reads of wild addresses at
-  DISPATCH_LEVEL, a `0x1E` carrying `0xc000001d` (STATUS_ILLEGAL_INSTRUCTION), i.e. the hypervisor
-  mangling guest state — and `-cpu Penryn` (UTM's own x86_64 default, and the default here now)
-  fixed it. Masking TSX and dropping to `-smp 1` were both dead ends, ten and four more bugchecks
-  respectively. Every knob is an environment variable (`BARKLEY_VM_CPU`, `BARKLEY_VM_ACCEL`,
-  `BARKLEY_VM_NET`, `BARKLEY_VM_CPUS`, `BARKLEY_VM_MEMORY`), effective on `virt/vagrant.sh reload`.
-  **Read the history, don't guess:** `Get-WinEvent -FilterHashtable @{LogName='System';Id=1001}` in
-  the guest. A bugcheck here looks exactly like a hang from the host — the VM sits at ~100% CPU
-  writing a dump — so `vagrant` just reports a WinRM timeout.
 - **Not automated yet:** see `src/README.md` ("Not automated yet": the LTS post-import stage).
 - **Play-test recipes:**
   - Skip to a new game: `'wait:44000,key:Z,wait:3000,key:Z,wait:3000,shot:game'` (the first Z at the title menu doesn't register, on v29 as well). Menu with no input: `'wait:62000,shot:menu'`. The apartment cutscene: then `key:Z,wait:5000` and about 14 × `key:Z,wait:2500`.
