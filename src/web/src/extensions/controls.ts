@@ -18,14 +18,11 @@ export const CONTROLS: [Control, string][] = [
 	['cancel', 'Cancel'],
 	['start', 'Menu'],
 ];
-export const label = (c: Control) => CONTROLS.find((r) => r[0] === c)?.[1] ?? c;
-// key_doset's aliases: these act as the control they name unless the player has bound them to something else.
-const ALIAS: Record<number, Control> = { 87: 'up', 65: 'left', 83: 'down', 68: 'right', 74: 'action', 75: 'cancel' };
 // biome-ignore format: laid out by hand
 const NAMES: Record<number, string> = {
 	8: 'Backspace', 9: 'Tab', 13: 'Enter', 16: 'Shift', 17: 'Ctrl', 18: 'Alt', 19: 'Pause', 20: 'Caps Lock',
 	27: 'Esc', 32: 'Space', 33: 'Page Up', 34: 'Page Down', 35: 'End', 36: 'Home',
-	37: '← Left', 38: '↑ Up', 39: '→ Right', 40: '↓ Down',
+	37: 'Left arrow', 38: 'Up arrow', 39: 'Right arrow', 40: 'Down arrow',
 	45: 'Insert', 46: 'Delete', 91: 'Meta', 93: 'Menu', 144: 'Num Lock', 145: 'Scroll Lock',
 	186: ';', 187: '=', 188: ',', 189: '-', 190: '.', 191: '/', 192: '`',
 	219: '[', 220: '\\', 221: ']', 222: "'",
@@ -42,12 +39,11 @@ export function keyName(code: number) {
 
 // The panel, and the keys it shows: the player's own when the game has ever saved them
 export const [controlsOpen, setControlsOpen] = createSignal(false);
-export const [bindings, setBindings] = createSignal({ keys: DEFAULT_KEYS, saved: false });
+export const [bindings, setBindings] = createSignal(DEFAULT_KEYS);
 
 // The Start screen's Controls link. (Also the Controls extension's one function, though nothing in the GML calls it.)
 export function controls_show() {
-	const saved = stored();
-	setBindings({ keys: saved || DEFAULT_KEYS, saved: !!saved });
+	setBindings(stored() || DEFAULT_KEYS);
 	setControlsOpen(true);
 	return 0;
 }
@@ -67,30 +63,10 @@ function stored(): Keys | null {
 	return keys;
 }
 
-// The control a key presses, if any. An alias only stands for its control while no control is bound to that key,
-// exactly as key_alias decides it.
+// The control a key presses, if any
 export function controlOf(keys: Keys, code: number): Control | null {
 	for (const [c] of CONTROLS) if (keys[c] === code) return c;
-	return aliasOf(keys, code);
-}
-function aliasOf(keys: Keys, code: number) {
-	const name = ALIAS[code];
-	if (!name) return null;
-	for (const [c] of CONTROLS) if (keys[c] === code) return null;
-	return name;
-}
-export const aliases = (keys: Keys, c: Control) =>
-	Object.keys(ALIAS)
-		.map(Number)
-		.filter((code) => aliasOf(keys, code) === c)
-		.map(keyName);
-
-export function defaultsLine({ keys, saved }: { keys: Keys; saved: boolean }) {
-	if (CONTROLS.every(([c]) => keys[c] === DEFAULT_KEYS[c]))
-		return saved
-			? 'These are the keys the game starts with, and yours are still those.'
-			: 'These are the keys the game starts with.';
-	return 'You have changed these; the keys the game starts with are ↑ ↓ ← →, Z, X and C.';
+	return null;
 }
 
 // The controls a set of pads is pressing, by the gamepad extension's own mapping, so the test cannot drift from the

@@ -1,7 +1,8 @@
 // The Start screen, which is itself the Start button: the whole page, so a click or tap anywhere starts. The game's
 // name, "Start" in large type, which fills from grey to white as the game loads behind it, and a hint, set on the left
-// edge of where the 4:3 picture will be; under them the version and the offline copy. At the foot, the Controls link
-// and, when a resume state is waiting, a way to begin at the title screen instead.
+// edge of where the 4:3 picture will be; under them the version and the offline copy. "Start" stays where it is
+// whatever comes and goes above or below it. At the foot, the Controls link and, when a resume state is waiting, a
+// way to begin at the title screen instead.
 import { createEffect, createMemo, Show } from 'solid-js';
 import { controlsOpen } from '../extensions/controls';
 import { RESUME_KEY } from '../extensions/resume';
@@ -35,20 +36,22 @@ export function StartScreen() {
 				<span class="word" id="face-word" style={{ '--p': `${progress()}%` }}>
 					Start
 				</span>
-				<Show when={ready()} fallback={<span class="hint">Loading</span>}>
-					<span class="hint key">Click or press any key</span>
-					<span class="hint touch">Tap anywhere</span>
-				</Show>
-				<Show when={line().text || line().link}>
-					<span class="hint" id="offline">
-						<span id="offline-text">{line().text && line().link ? `${line().text} · ` : line().text}</span>
-						<Show when={line().link}>
-							<button type="button" class="ui-link" id="offline-go" onClick={saveOffline}>
-								{line().link}
-							</button>
-						</Show>
-					</span>
-				</Show>
+				<div class="below">
+					<Show when={ready()} fallback={<span class="hint">Loading</span>}>
+						<span class="hint key">Click or press any key</span>
+						<span class="hint touch">Tap anywhere</span>
+					</Show>
+					<Show when={line().text || line().link}>
+						<span class="hint" id="offline">
+							<span id="offline-text">{line().text && line().link ? `${line().text} · ` : line().text}</span>
+							<Show when={line().link}>
+								<button type="button" class="ui-link" id="offline-go" onClick={saveOffline}>
+									{line().link}
+								</button>
+							</Show>
+						</span>
+					</Show>
+				</div>
 			</div>
 			<div id="foot">
 				<Show when={ready() && has('Controls')}>

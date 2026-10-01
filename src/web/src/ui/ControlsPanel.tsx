@@ -1,86 +1,69 @@
-// The Controls panel, which the Start screen's Controls link opens before the game runs. It says what the game
-// listens to (the keys as the player has them, the controller mapping, and where to change them) and then lets the
-// player prove it hears them: every control lights up as it is pressed, from the keyboard or from a pad, with the
-// pad's name, raw buttons and sticks beside it for a pad that maps itself oddly.
+// The Controls panel, which the Start screen's Controls link opens before the game runs: one table of the seven
+// controls, with the keys as the player has them (on a touch device, the touch controls instead) and the controller's
+// buttons, whose rows light up as they are pressed, from the keyboard or from a pad, so it is its own test. The
+// Controller heading says whether a pad is connected (a browser shows one only once a button on it has been pressed).
 //
 // Nothing pressed in it reaches the game or the Start screen: the panel keeps its key events, the Start screen's key
 // handler stands down while it is up, and the gamepad extension is asked to go quiet.
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { createStore } from 'solid-js/store';
-import {
-	aliases,
-	bindings,
-	CONTROLS,
-	controlOf,
-	defaultsLine,
-	keyName,
-	label,
-	padControls,
-	setControlsOpen,
-} from '../extensions/controls';
-import { padQuiet, pads, pressed } from '../extensions/gamepad';
+import { bindings, CONTROLS, controlOf, keyName, padControls, setControlsOpen } from '../extensions/controls';
+import { padQuiet, pads } from '../extensions/gamepad';
+import { cfg, touchDevice } from '../extensions/touch';
 import type { Control } from '../runtime/keys';
 import { Panel } from './Panel';
 import './ControlsPanel.css';
 
-// A binding row: the control on the left, what presses it on the right.
-function Binding(props: { label: string; keys: string[]; note?: string }) {
+// The controller's side, by the gamepad extension's mapping (PAD_BUTTON), and the touch overlay's
+type Column = Partial<Record<Control, string>>;
+const PAD: Column = { up: 'D-pad / stick', action: 'A', cancel: 'B', start: 'Start' };
+// A column whose directions share one cell, which spans their four rows and is never lit
+function Cell(props: { c: Control; column: Column }) {
 	return (
-		<>
-			<dt>{props.label}</dt>
-			<dd>
-				<For each={props.keys}>
-					{(k, i) => (
-						<>
-							<Show when={i()}>
-								<span class="ctl-or">or</span>
-							</Show>
-							<span class="ctl-key">{k}</span>
-						</>
-					)}
-				</For>
-				<Show when={props.note}>
-					<span class="ctl-note">{props.note}</span>
-				</Show>
-			</dd>
-		</>
+		<Show when={props.column[props.c]}>
+			<td class={props.c === 'up' ? 'ctl-dirs' : undefined} rowSpan={props.c === 'up' ? 4 : undefined}>
+				{props.column[props.c]}
+			</td>
+		</Show>
+	);
+}
+// The page's font (Inter's Latin subset) has ↑ but not ← or →, which fell back to a smaller face, so every arrow key
+// is its ↑, turned.
+const TURN: Record<number, number> = { 37: -90, 38: 0, 39: 90, 40: 180 };
+function Key(props: { code: number }) {
+	return (
+		<Show when={props.code in TURN} fallback={keyName(props.code)}>
+			<span class="ctl-arrow" role="img" aria-label={keyName(props.code)} style={{ rotate: `${TURN[props.code]}deg` }}>
+				↑
+			</span>
+		</Show>
 	);
 }
 
 export function ControlsPanel() {
-	const b = bindings();
-	const close = () => setControlsOpen(false);
-
-	// ---- the test
-	const keyHeld = new Set<number>();
+	const keys = bindings();
+	// A phone or tablet has no keyboard to speak of: it gets the touch controls, as the player has them set
+	const touch: Column | null = touchDevice()
+		? { up: cfg.mode === 'dpad' ? 'D-pad' : 'Joystick', action: 'A', cancel: 'B', start: 'Start' }
+		: null;
+	const held = new Set<number>();
 	const [on, setOn] = createStore<Partial<Record<Control, boolean>>>({});
-	const [last, setLast] = createSignal('Press something.');
-	const [status, setStatus] = createSignal('');
-	const [raw, setRaw] = createSignal('');
-	const forget = () => keyHeld.clear();
+	const [connected, setConnected] = createSignal(false);
+	const forget = () => held.clear();
 
 	// A timer, not requestAnimationFrame: the Start screen holds every frame callback back until the game starts
 	// (runtime/hold.ts), which would leave this test frozen exactly where it is most used. 20 a second is plenty to see
 	// a button go down.
 	const tick = () => {
-		const live = pads(),
-			g = live[0],
-			next: Partial<Record<Control, boolean>> = {};
-		for (const code of keyHeld) {
-			const c = controlOf(b.keys, code);
+		const next: Partial<Record<Control, boolean>> = {};
+		for (const code of held) {
+			const c = controlOf(keys, code);
 			if (c) next[c] = true;
 		}
+		const live = pads();
 		padControls(live, next);
 		for (const [c] of CONTROLS) setOn(c, !!next[c]);
-		if (!live.length) {
-			setStatus('No controller yet. Connect one and press a button on it — the keyboard works here too.');
-			setRaw('');
-			return;
-		}
-		setStatus(live.length === 1 ? `Controller: ${g.id || 'connected'}` : `${live.length} controllers connected`);
-		const down = [...g.buttons].flatMap((x, i) => (pressed(x) ? [i] : []));
-		const axes = [...g.axes].slice(0, 4).map((a) => a.toFixed(2));
-		setRaw(`Buttons down: ${down.length ? down.join(' ') : 'none'}  ·  Sticks: ${axes.join(' ')}`);
+		setConnected(live.length > 0);
 	};
 	let timer = 0;
 	onMount(() => {
@@ -99,73 +82,49 @@ export function ControlsPanel() {
 		<Panel
 			id="controls-panel"
 			title="Controls"
-			onClose={close}
-			onKeyDown={(e) => {
-				const code = e.which || e.keyCode;
-				keyHeld.add(code);
-				const c = controlOf(b.keys, code);
-				setLast(keyName(code) + (c ? ` → ${label(c)}` : ' → not bound to anything; the game ignores it'));
-			}}
-			onKeyUp={(e) => keyHeld.delete(e.which || e.keyCode)}
+			onClose={() => setControlsOpen(false)}
+			onKeyDown={(e) => held.add(e.which || e.keyCode)}
+			onKeyUp={(e) => held.delete(e.which || e.keyCode)}
 		>
-			<p class="ui-mute">
-				What the game listens to, and a test below to see that it hears you. Close this and press Start to play.
-			</p>
-			<div class="ui-cols">
-				<section class="ui-col">
-					<h3>Keyboard</h3>
-					<dl class="ctl-list">
-						<For each={CONTROLS}>
-							{([c, name]) => <Binding label={name} keys={[keyName(b.keys[c]), ...aliases(b.keys, c)]} />}
-						</For>
-					</dl>
-					<p class="ui-mute">{defaultsLine(b)} Enter also confirms in menus, and Esc leaves full screen.</p>
-					<h3>Changing them</h3>
-					<p>
-						Start the game, and on the title menu choose Configuration → SET KEYS: it then asks for the key you want for
-						each control in turn. Configuration → SETTINGS → Default puts them all back.
-					</p>
-					<p class="ui-mute">Full screen, picture size and volume are in Configuration too.</p>
-				</section>
-				<section class="ui-col">
-					<h3>Controller</h3>
-					<p>Connect a controller and press one of its buttons: a browser hides a pad until it has been used once.</p>
-					<dl class="ctl-list">
-						<Binding label="Move" keys={['Left stick', 'D-pad']} />
-						<Binding label="Action" keys={['A']} note="the bottom or left face button" />
-						<Binding label="Cancel" keys={['B']} note="the right or top face, or either shoulder" />
-						<Binding label="Menu" keys={['Start']} note="or Back" />
-					</dl>
-					<p class="ui-mute">
-						A controller sends the same keys as the keyboard, so it follows whatever you set in SET KEYS. On a phone the
-						touch controls step aside while a controller is connected.
-					</p>
-				</section>
-			</div>
-			<h3>Test</h3>
-			{/* One block, so the lamps are in view under the two columns rather than a screen below them. */}
-			<div class="ui-col">
-				<p class="ui-status" id="ctl-status">
-					{status()}
-				</p>
-				<div class="ctl-lamps">
+			<table class="ctl-table">
+				<thead>
+					<tr>
+						<th />
+						<th>{touch ? 'Touch' : 'Keyboard'}</th>
+						<th>
+							Controller
+							<span class="ctl-conn" classList={{ on: connected() }}>
+								{connected() ? 'Connected' : 'Not connected'}
+							</span>
+						</th>
+					</tr>
+				</thead>
+				<tbody>
 					<For each={CONTROLS}>
 						{([c, name]) => (
-							<div class="ctl-lamp" classList={{ on: !!on[c] }} data-control={c}>
-								<span class="ctl-lamp-name">{name}</span>
-								<span class="ctl-lamp-key">{keyName(b.keys[c])}</span>
-							</div>
+							<tr classList={{ on: !!on[c] }} data-control={c}>
+								<th>{name}</th>
+								<Show
+									when={touch}
+									fallback={
+										<td>
+											<Key code={keys[c]} />
+										</td>
+									}
+								>
+									{(t) => <Cell c={c} column={t()} />}
+								</Show>
+								<Cell c={c} column={PAD} />
+							</tr>
 						)}
 					</For>
-				</div>
-				<p class="ctl-raw" id="ctl-last">
-					{last()}
-				</p>
-				<p class="ctl-raw" id="ctl-raw">
-					{raw()}
-				</p>
-				<p class="ui-mute">Presses stay in this panel: none of them starts the game.</p>
-			</div>
+				</tbody>
+			</table>
+			<p class="ui-mute">
+				{touch
+					? 'The touch controls come up when the game starts, with a settings button to change them. Press a button on a controller to try it.'
+					: "Press a key or button to try it. To change keys, choose SET KEYS in the game's Configuration menu."}
+			</p>
 		</Panel>
 	);
 }

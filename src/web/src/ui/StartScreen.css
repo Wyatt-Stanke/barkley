@@ -6,7 +6,11 @@
 }
 /* The Start screen: the whole page is the button, so a click or tap anywhere starts. Its words are drawn over it by
    #face, which lets every click through but the offline link's (a button can't hold that link). They sit on the left
-   edge of the picture to come (4:3, centred), in the middle of the height. */
+   edge of the picture to come (4:3, centred). "Start" is the middle row of three, the other two equal, so it stays put
+   whatever the rows above and below it hold: the version and the offline line arrive once the game has loaded, and
+   wrap differently from one screen to the next. --lift raises it from the middle by as much as the lines under it
+   outweigh the name over it, which is where it sat when they were all centred as one block, and keeps them clear of
+   #foot on a phone in landscape. */
 #start {
 	position: fixed;
 	inset: 0;
@@ -28,23 +32,32 @@
 	position: fixed;
 	inset: 0;
 	z-index: 10;
-	display: flex;
-	flex-direction: column;
-	justify-content: center;
-	align-items: flex-start;
+	display: grid;
+	grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+	justify-items: start;
 	--edge: calc((100vw - 100vh * 4 / 3) / 2 + var(--g));
-	padding: var(--touch-top) max(var(--edge), calc(var(--g) + var(--touch-right))) var(--touch-bottom)
-		max(var(--edge), calc(var(--g) + var(--touch-left)));
+	--lift: 39px;
+	padding: var(--touch-top) max(var(--edge), calc(var(--g) + var(--touch-right)))
+		calc(var(--touch-bottom) + var(--lift)) max(var(--edge), calc(var(--g) + var(--touch-left)));
 	color: var(--ink);
 	font: 15px / 1.3 var(--font);
 	pointer-events: none;
 }
 #face .name {
+	align-self: end;
+	margin-bottom: 8px;
 	color: var(--mute);
+}
+#face .below {
+	align-self: start;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	margin-top: 16px;
 }
 /* While the game loads, the word fills from grey to white, left to right */
 #face .word {
-	margin: 8px 0 16px -0.04em;
+	margin-left: -0.04em;
 	font-size: clamp(56px, 14vmin, 128px);
 	font-weight: 700;
 	line-height: 0.9;

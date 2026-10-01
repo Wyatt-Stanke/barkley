@@ -237,12 +237,12 @@ function wanted() {
 	if (cfg.enabled === 0) return false;
 	if (cfg.enabled === 1) return true;
 	if (padConnected()) return false; // a real controller is plugged in
-	return capable();
+	return touchDevice();
 }
-const capable = () => navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches;
+export const touchDevice = () => navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches;
 // With the controls off (or hidden for a gamepad), a touch device still gets the settings button, alone, or turning
 // them off could never be undone.
-export const shown = () => ready() && started() && (live() || capable());
+export const shown = () => ready() && started() && (live() || touchDevice());
 function padConnected() {
 	try {
 		for (const g of navigator.getGamepads?.() ?? []) if (g) return true;
