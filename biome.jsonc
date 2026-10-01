@@ -97,8 +97,8 @@
 			}
 		},
 		{
-			// Functions that fuzz.mjs sends into the page, where fuzz-page.js has defined __fuzz
-			"includes": ["src/fuzz.mjs"],
+			// Functions that fuzz.mjs and video.mjs send into the page, where fuzz-page.js has defined __fuzz
+			"includes": ["src/fuzz.mjs", "src/video.mjs"],
 			"javascript": { "globals": ["__fuzz"] }
 		},
 		{

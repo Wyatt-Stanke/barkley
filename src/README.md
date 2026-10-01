@@ -216,6 +216,18 @@ node src/fuzz.mjs verify build/fuzz/build --minutes=5                           
 node src/fuzz.mjs replay build/fuzz/build build/fuzz/<run>/crashes/1                    # from a fresh page, with screenshots
 ```
 
+A corpus path can be watched as a video: `video.mjs` plays one from a fresh page as `replay` does and pipes the
+canvas after each step to ffmpeg (an H.264 MP4 at 30 frames a second, the game's speed, scaled 2x; no sound), with a
+`.txt` beside it of when each room and plot comes up. The default path is the corpus's longest; `--node=<id>` picks
+another by its last node, `--speed=N` draws every Nth step. About 20 ms a step, so the longest path (122,450 steps,
+68 minutes of play, in the 2026-09-26 corpus) takes about 40 minutes:
+
+```sh
+node src/video.mjs build/fuzz/build build/fuzz/video/longest.mp4 [--node=<id>] [--speed=N] [--corpus=<file|dir>]
+```
+
+The fuzzer's "frames" are game steps; most rooms run at 30 a second (four at 40), not 60.
+
 It also runs on the deployable build (`fuzz.mjs build --minify`, the pipeline's `site/`): terser keeps the `gml_*`
 names, and the harness finds the runtime's variables in both forms. Replays on the two match.
 
@@ -348,6 +360,7 @@ every HTML5 build.
 | `playtest.mjs` | Headless-Chromium smoke test of an HTML5 build: console, exceptions, screenshots, key presses. |
 | `deploy.mjs` | Deploys a build to GitHub Pages in one command: builds a project with `fuzz.mjs build --minify` (always with the current page), play-tests it, commits it into a kept clone of the deploy repo reset to its `main`, pushes, watches the Pages workflow and checks the live files against the build. |
 | `fuzz.mjs`, `fuzz-page.js` | The fuzzer (see Fuzzing): the unobfuscated build, the search, crash and path replays; and the in-page harness (virtual clock, coverage, snapshots, restores). |
+| `video.mjs` | A video of one corpus path (the longest by default), played from a fresh page (see Fuzzing). |
 
 Pipeline order:
 

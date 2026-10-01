@@ -103,6 +103,10 @@ node src/fuzz.mjs build build/pipeline/barkley-1.4.1/BarkleyLTS.yyp build/fuzz/b
 node src/fuzz.mjs run build/fuzz/build --save --corpus --through --verbose
 node src/fuzz.mjs verify build/fuzz/build --minutes=5
 node src/fuzz.mjs replay build/fuzz/build build/fuzz/<run>/crashes/1
+# A video of a corpus path from a fresh page (MP4, 30 fps = the game's speed, 2x, no sound; <out>.txt has the rooms
+# and plots by time). Default: the corpus's longest path (node 11809, 122,450 steps = 68 min, ~40 min to render).
+# --node=<id> another path's last node, --speed=N every Nth step, --corpus=<file.gz|dir>, --port as fuzz.mjs.
+node src/video.mjs build/fuzz/build build/fuzz/video/longest.mp4
 
 # The page alone (src/web): npm ci on first use, type-check (tsc), bundle (vite) into build/web. ~2 s.
 node src/page.mjs
@@ -177,7 +181,7 @@ barkley/
   CLAUDE.md      this file
   biome.jsonc    Biome's formatter and linter settings (see "Commands")
   src/           all the tooling (Node.js 22+, no npm packages but the page's)
-    *.mjs        the pipeline: pipeline (all of it), fetch, toolchain, migrate, import, playtest, fuzz, deploy, assets, transforms, offline, page
+    *.mjs        the pipeline: pipeline (all of it), fetch, toolchain, migrate, import, playtest, fuzz, video, deploy, assets, transforms, offline, page
     version.json the port's semver version, the one place it is written
     lib/         the GML grammar/parser and the GMX code (un)packer
     patches/     hand-written GML rewrites; modernized/ holds the web adaptations
@@ -214,6 +218,7 @@ scratchpad dir, never in the project.
 - `build/fuzz/`: the fuzzer's files.
   - `corpus/`: the unpacked working copy of `fuzz/corpus.json.gz` (`state.json`, `nodes.json`, `nodes/<id>.json.gz`, and `packed.md5`, the md5 of the file it came from). Its snapshots belong to one build; `--corpus` keeps it while the packed file is unchanged and unpacks afresh (a rebase) when it isn't.
   - `build/`: an unobfuscated build of `barkley-1.4.1` from `build/pipeline` (2026-09-26), which the corpus's snapshots belong to.
+  - `video/`: `video.mjs`'s videos (`longest-11809.mp4`, the longest corpus path, 2026-10-01, with its `.txt` and `.log`).
   - `run15/` (crash 10, the dead turn) and `run16/`, with their logs: `run --save` findings cited under Current state.
 - GameMaker LTS 2026 (this Mac is **x86_64**; the arm64 binaries don't run):
   - ProjectTool: `/Applications/GameMaker LTS 2026.app/Contents/MacOS/x86_64/packages/project-tool-osx-x64/ProjectTool`. It must run with that directory as cwd. Import = `SCRIPT PATH=<file>` containing `PROJECT OPEN SOURCE="<.project.gmx>"` then `PROJECT SAVE DESTINATION="<.yyp>"`.
@@ -340,6 +345,7 @@ The pipeline lives in `migrate.mjs`. It copies the project, unpacks the code, ap
   - **A battle or a death mid-walk is never an exit's destination** (`INTERRUPTS` in `fuzz-page.js`: `RomInter`, `RomGameover`); otherwise a random encounter during a door walk made that door look ambiguous and `loadCorpus` dropped it.
   - **A node keeps its snapshot only when it owns a feature no other node owns**, and `choose()` draws only from nodes with a snapshot. So if an owner loses the state it claimed features from, the search is walled out of that room for good. `rebase()` (after a build change) replays each kept path from a fresh page and now refuses to let a replay that drifted to another room/plot inherit the features; `loadCorpus()` drops any feature whose room disagrees with its owner's room (and its `log` entries). Signature of this failure: the run status's `furthest` (computed over nodes that have a snapshot) is behind the corpus's `maxPlot`.
   - When reading a corpus by hand, globals in a snapshot's `resume` JSON are stored under their plain names (`plot`, `skipper`), not the page's `gml`-prefixed names.
+  - The fuzzer's "frames" are game steps, and rooms run at 30 a second (four at 40), so its `frames / 60` "seconds of play" are half the real figure.
   - `HARNESS` in `fuzz.mjs` is folded into the corpus build id; bump it when a harness change makes recorded paths play differently. `setPort(n)` and the exported `Browser`/`Fuzzer`/`harness`/`serve` make one-off probe scripts easy (the CLI runs only under `import.meta.main`).
 - **The page (`src/web/`)** is a Vite + SolidJS + TypeScript project, the one part of the port with npm packages (`src/page.mjs` runs `npm ci` when `node_modules` is missing or older than the lockfile, then `npm run build`: `tsc --noEmit`, then `vite build` into `build/web/`). It builds **one classic IIFE script, `app/barkley.js`, plus `app/barkley.css`**, strict (Rolldown drops `"use strict"` unless `output.strict: true`) and unminified (~116 KB, ~31 KB gzipped; readable in a deployed build). `public/` is copied as it is: `sw.js` to the root and the font to `app/`. `offline.mjs`'s `writeBuild` copies `build/web/` over every HTML5 build before writing `version.json`, so **a page change never needs a re-import**. Layout:
   - `index.html`: Igor's page template (the runtime's `$RT/html5/index.html`, LF, with its `${GM_HTML5_*}` placeholders): the metas and PWA links, `app/barkley.css`, the `@font-face` and the runtime's own CSS (canvas, `#loading_screen` hidden, the `gm4html5_*` classes), `<div id="page">` and `<script src="app/barkley.js" data-folder="${GM_HTML5_GameFolder}">` **before the game's script** (the runtime captures `requestAnimationFrame` as its script runs, so the hooks must already be in; a module script would run after it), then the game's script and `window.onload = barkley.load`, as the runtime's own template has `window.onload = GameMaker_Init`. `import.mjs` copies it beside the HTML5 options; `fuzz.mjs build` copies it in fresh on every build.
