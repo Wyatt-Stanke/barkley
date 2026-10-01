@@ -1,6 +1,6 @@
 // A video of one fuzz corpus path, played from a fresh page (no restores), as fuzz.mjs replay plays a finding.
 //
-//   node src/video.mjs <build dir> [out.mp4] [--node=<id>] [--corpus=<corpus.json.gz | dir>] [--speed=N] [--port=N]
+//   node src/video.mjs <build dir> [out.mp4] [--node=<id>] [--corpus=<dir | corpus.json.gz>] [--speed=N] [--port=N]
 //
 // The build must be the unobfuscated or minified one the corpus was made on (fuzz.mjs build). --node picks the path's
 // last node; the default is the longest path in the corpus, by steps. The game runs at 30 steps a second and the video
@@ -8,7 +8,7 @@
 // captured after each drawn step and piped to ffmpeg, scaled 2x (nearest neighbour); there's no sound (the fuzz page
 // runs the game muted). Writes <out>.txt beside it: when each room and plot is reached, in video time.
 import { spawn } from 'node:child_process';
-import { readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -29,8 +29,13 @@ if (!root) {
 const speed = +flag('speed', 1);
 if (flag('port')) setPort(+flag('port'));
 
-// the corpus: the packed file in git, or an unpacked directory (build/fuzz/corpus)
-const corpusPath = path.resolve(flag('corpus', path.join(HERE, '..', 'fuzz', 'corpus.json.gz')));
+// the corpus: the fuzzer's working copy (build/fuzz/corpus) when there is one, which has every path; else the packed
+// file in git, which keeps only the paths to nodes that own something (the longest path often ends where nothing new
+// was found, after a game over)
+const local = path.join(HERE, '..', 'build', 'fuzz', 'corpus');
+const corpusPath = path.resolve(
+	flag('corpus', existsSync(local) ? local : path.join(HERE, '..', 'fuzz', 'corpus.json.gz')),
+);
 const { state, nodes } = statSync(corpusPath).isDirectory()
 	? {
 			state: JSON.parse(readFileSync(path.join(corpusPath, 'state.json'), 'utf8')),

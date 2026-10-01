@@ -104,7 +104,8 @@ node src/fuzz.mjs run build/fuzz/build --save --corpus --through --verbose
 node src/fuzz.mjs verify build/fuzz/build --minutes=5
 node src/fuzz.mjs replay build/fuzz/build build/fuzz/<run>/crashes/1
 # A video of a corpus path from a fresh page (MP4, 30 fps = the game's speed, 2x, no sound; <out>.txt has the rooms
-# and plots by time). Default: the corpus's longest path (node 11809, 122,450 steps = 68 min, ~40 min to render).
+# and plots by time). Default: the longest path in build/fuzz/corpus, else in fuzz/corpus.json.gz (which drops paths
+# that found nothing); locally that's node 11809, 122,450 steps = 68 min of play, ~40 min to render.
 # --node=<id> another path's last node, --speed=N every Nth step, --corpus=<file.gz|dir>, --port as fuzz.mjs.
 node src/video.mjs build/fuzz/build build/fuzz/video/longest.mp4
 

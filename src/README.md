@@ -218,7 +218,9 @@ node src/fuzz.mjs replay build/fuzz/build build/fuzz/<run>/crashes/1            
 
 A corpus path can be watched as a video: `video.mjs` plays one from a fresh page as `replay` does and pipes the
 canvas after each step to ffmpeg (an H.264 MP4 at 30 frames a second, the game's speed, scaled 2x; no sound), with a
-`.txt` beside it of when each room and plot comes up. The default path is the corpus's longest; `--node=<id>` picks
+`.txt` beside it of when each room and plot comes up. The default path is the longest in `build/fuzz/corpus`, or in `fuzz/corpus.json.gz` when there's no working copy
+(packing keeps only paths to nodes that own something, so the longest local path, which ended in menus after a game
+over, isn't in it); `--node=<id>` picks
 another by its last node, `--speed=N` draws every Nth step. About 20 ms a step, so the longest path (122,450 steps,
 68 minutes of play, in the 2026-09-26 corpus) takes about 40 minutes:
 
