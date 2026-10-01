@@ -1,0 +1,27 @@
+# TEMPORARY: compares fuzz verify's worker counts on the runner. To be removed before merging.
+name: Bench verify workers
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        workers: [2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+      - id: prebuilt
+        uses: ./.github/actions/prebuilt
+      - if: steps.prebuilt.outputs.found != 'true'
+        run: exit 1
+      - uses: ./.github/actions/setup
+      - run: nproc && free -g
+      - run: node src/fuzz.mjs verify build/pipeline/site --minutes=5 --workers=${{ matrix.workers }} --save=build/fuzz/verify
