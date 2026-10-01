@@ -16,6 +16,12 @@ export const keysFrom = (...codes: number[]): Keys => ({
 	start: codes[6] | 0,
 });
 
+// The crash recorder (extensions/crash.ts): a synthetic press is no DOM event, so its listeners never hear one.
+let heard: ((code: number, down: boolean) => void) | null = null;
+export const hearKeys = (f: (code: number, down: boolean) => void) => {
+	heard = f;
+};
+
 // Keys reach the game the way the fuzzer drives it: by calling the runtime's own window.onkeydown / window.onkeyup
 // with {which, keyCode}. Those are DOM properties, so the names survive obfuscation, and a synthetic press is then
 // indistinguishable from a physical key: rebinding, the key latch and menus all just work. The handler is looked up
@@ -23,6 +29,7 @@ export const keysFrom = (...codes: number[]): Keys => ({
 export function sendKey(code: number, down: boolean) {
 	const h = down ? window.onkeydown : window.onkeyup;
 	if (!h) return;
+	heard?.(code, down);
 	try {
 		(h as (e: object) => void).call(window, {
 			which: code,
