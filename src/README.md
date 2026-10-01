@@ -249,8 +249,10 @@ the run stops and leaves the corpus as it was, since that means the harness or t
 **`verify`** checks the game rather than looking for new things (the pull request workflow runs it). It reads the
 packed corpus (never writes it), plays the spine again (the furthest node of each room and plot and the nodes on its
 way, ~320 paths in about 2 minutes; `--all` for every one), explores for `--minutes` (none by default) with
-`--through`, and replays every crash the corpus doesn't know, from its snapshot and from a fresh page. It exits 1 on a
-new crash that replays either way or couldn't be replayed. Crashes that only a restore causes (`restore`, `stall`,
+`--through`, and replays every crash the corpus doesn't know, and every one it knows that comes back, from its snapshot
+and from a fresh page. It exits 1 on such a crash that replays either way or couldn't be replayed, so a fixed bug
+coming back fails as a new one does; the corpus's crash list is the record of what has been found, not a list of
+crashes to ignore. Crashes that only a restore causes (`restore`, `stall`,
 `hang`), paths that now end in another room or plot, and rooms no replayed path reached are warnings; `--strict` makes
 the last two failures. A change to the game that moves where recorded inputs lead shows up as those warnings, not as a
 failure. The verdict is `<findings>/verify.md` and goes to `$GITHUB_STEP_SUMMARY`.

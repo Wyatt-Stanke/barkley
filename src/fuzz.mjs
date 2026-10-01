@@ -1036,10 +1036,16 @@ class Fuzzer {
 			.replace(/_\w\w\b/g, '_')
 			.slice(0, 160)} @ ${fn}`;
 		let e = this.crashes.get(sig);
+		// verify: a known crash that comes back is recorded and replayed as a new one is, so a fixed bug returning fails
+		const record = !e || (e.old && this.opts.verify && !e.now);
 		if (!e) {
-			e = { n: this.crashes.size + 1, sig, count: 0, first: { ...c, leaf, at: Date.now() - this.stats.t0 } };
-			e.dir = path.join(this.out, 'crashes', String(e.n));
+			e = { n: this.crashes.size + 1, sig, count: 0 };
 			this.crashes.set(sig, e);
+		}
+		if (record) {
+			e.first = { ...c, leaf, at: Date.now() - this.stats.t0 };
+			e.verify = undefined;
+			e.dir = path.join(this.out, 'crashes', String(e.n));
 			mkdirSync(e.dir, { recursive: true });
 			const chain = this.chain(leaf);
 			// the nearest step with a snapshot that the next step started from (a restore), so replaying from it is exact
@@ -1049,7 +1055,7 @@ class Fuzzer {
 			writeFileSync(path.join(e.dir, 'crash.json'), JSON.stringify({ sig, crash: c, snapshotStep: a, chain }, null, 1));
 			writeFileSync(path.join(e.dir, 'snapshot.json.gz'), this.nodes.get(chain[a].id).snap);
 			this.queue.unshift({ type: 'crash', e });
-			this.say(`${red(`✖ new crash ${e.n}`)} ${red(sig)}\n  at ${JSON.stringify(c.probe)}`);
+			this.say(`${red(`✖ ${e.old ? 'known' : 'new'} crash ${e.n}`)} ${red(sig)}\n  at ${JSON.stringify(c.probe)}`);
 		}
 		e.count++;
 		e.now = (e.now ?? 0) + 1; // this run
@@ -1502,7 +1508,7 @@ class Fuzzer {
 			for (const w of this.workers) w.b.kill();
 			await Promise.allSettled(workers);
 			this.draining = true;
-			if (this.queue.length) this.say(`replaying ${this.queue.length} new crash(es) before the verdict`);
+			if (this.queue.length) this.say(`replaying ${this.queue.length} crash(es) before the verdict`);
 			await Promise.race([Promise.allSettled(verifiers), sleep(20 * 60000)]);
 		}
 		clearInterval(timer);
@@ -1514,23 +1520,26 @@ class Fuzzer {
 		if (this.opts.verify) return this.verdict();
 	}
 
-	// verify: whether the game still does what the corpus recorded, as markdown. It fails on a crash the corpus didn't
-	// know that replays (or couldn't be replayed); crashes that only happened after the fuzzer's restores, paths that
-	// now lead elsewhere and places no replayed path reached are warnings, unless --strict.
+	// verify: whether the game still does what the corpus recorded, as markdown. It fails on a crash that replays (or
+	// couldn't be replayed), new or one the corpus knew (a fixed bug come back); crashes that only happened after the
+	// fuzzer's restores, paths that now lead elsewhere and places no replayed path reached are warnings, unless --strict.
 	verdict() {
 		const r = this.rebased ?? { targets: 0, exact: 0, moved: 0, drifted: [], crashed: [], failed: 0, skipped: 0 };
 		const fresh = [...this.crashes.values()].filter((e) => !e.old);
 		const harness = (e) => ['restore', 'stall', 'hang'].includes(e.first.kind);
-		const failing = fresh.filter((e) => !harness(e) && (!e.verify || /reproduced|replay failed/.test(e.verify)));
+		const real = (e) => !harness(e) && (!e.verify || /reproduced|replay failed/.test(e.verify));
+		const failing = fresh.filter(real);
 		const flaky = fresh.filter((e) => !failing.includes(e));
-		const again = [...this.crashes.values()].filter((e) => e.old && e.now);
+		const back = [...this.crashes.values()].filter((e) => e.old && e.now);
+		const returned = back.filter(real);
+		const again = back.filter((e) => !returned.includes(e));
 		// rooms and plots the replayed corpus paths were recorded in that none of them reached this time
 		const where = (p) => `${p.room} plot ${p.plot}`;
 		const want = new Set(this.rebaseTargets?.filter((n) => !MENU_ROOMS.has(n.probe.room)).map((n) => where(n.probe)));
 		const got = new Set(this.candidates.map((n) => where(n.probe)));
 		const lost = [...want].filter((w) => !got.has(w));
 		const strict = this.opts.strict && (r.drifted.length || lost.length || r.failed);
-		const ok = !failing.length && !strict;
+		const ok = !failing.length && !returned.length && !strict;
 		const s = this.stats;
 		const md = [
 			`## Fuzz verification: ${ok ? 'passed' : 'failed'}`,
@@ -1553,8 +1562,21 @@ class Fuzzer {
 						...flaky.map((e) => `- \`${e.sig}\`: ${e.verify ?? 'not replayed'}`),
 					]
 				: []),
+			...(returned.length
+				? [
+						'',
+						'### Known crashes that came back',
+						'',
+						...returned.map((e) => `- \`${e.sig}\` (${e.now}×): ${e.verify ?? 'not replayed'} (${e.dir})`),
+					]
+				: []),
 			...(again.length
-				? ['', '### Known crashes seen again', '', ...again.map((e) => `- \`${e.sig}\` (${e.now}×)`)]
+				? [
+						'',
+						'### Known crashes seen again that did not replay (warnings)',
+						'',
+						...again.map((e) => `- \`${e.sig}\` (${e.now}×): ${e.verify ?? 'not replayed'}`),
+					]
 				: []),
 			...(r.drifted.length
 				? [
