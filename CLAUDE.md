@@ -94,7 +94,8 @@ cd <dir>/out && python3 -m http.server 8000 --bind 127.0.0.1   # then http://127
 #    all, while it came from that very file), packed back at every save. Commit the file after a run that found
 #    something. --through patches known crash classes and reports each patched spot instead.
 #    `verify` checks a build against the corpus (read-only): replays its spine (~2 min), explores --minutes, replays new
-#    crashes; exit 1 on a new crash that replays; drift is a warning (--strict: a failure). The PR workflow runs it.
+#    crashes and known ones that come back; exit 1 on either that replays (its "crashes N (M from earlier runs)" line
+#    counts the corpus's record of past crashes, not crashes this run); drift is a warning (--strict: a failure). The PR workflow runs it.
 #    `replay` plays a finding from a fresh page with screenshots, or a player's crash report
 #    (BARKLEY-CRASH-1: text) against the build it came from. Uses ports 8870 (server) and 9400-9499 (browsers);
 #    `--port=N` moves them to N and N+530 to N+629, so two fuzz processes can run at once.
