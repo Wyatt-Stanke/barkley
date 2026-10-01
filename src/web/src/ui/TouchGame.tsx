@@ -11,6 +11,7 @@ const SCREEN = '#000040',
 	FILL = '#000040',
 	FRAME = ['#9e9e9e', '#734b21', '#5a3818'],
 	LIT = '#ffffff',
+	ROUND = 2, // circles are drawn in cells of this many game pixels: finer, their steps read as smoothing
 	INK = '#ffffff',
 	SHADOW = '#000000';
 
@@ -51,6 +52,9 @@ function cells(g: Grid, x: number, y: number, u: number) {
 		}
 	return d;
 }
+// A framed circle of radius r CSS pixels, centred on (cx, cy), in ROUND-sized cells
+const round = (r: number, cx: number, cy: number, u: number) =>
+	place(disc(Math.max(4, Math.round(r / (ROUND * u)))), cx, cy, ROUND * u);
 const disc = (r: number) =>
 	grid(2 * r, 2 * r, (i, j) => (i + 0.5 - r) ** 2 + (j + 0.5 - r) ** 2 <= r * r - 0.5 * r + 0.3);
 // a menu box: the corner pixel is left out, as in the sprites
@@ -163,7 +167,7 @@ export function GameButton(props: { b: Button; u: number }) {
 	const on = () => !!held[b.k];
 	const shape = createMemo(() => {
 		const u = props.u;
-		if (!b.pill) return place(disc(Math.round(b.r / u)), b.x, b.y, u);
+		if (!b.pill) return round(b.r, b.x, b.y, u);
 		const k = scale(u, 15),
 			t = text(b.label);
 		return place(box(t.w * k + 14, 7 * k + 12), b.x, b.y, u);
@@ -198,8 +202,8 @@ export function GameGear(props: { L: Layout }) {
 export function GameStick(props: { L: Layout }) {
 	const u = () => props.L.unit;
 	// both shapes drawn at the origin and moved, so a drag only changes a transform
-	const base = createMemo(() => place(disc(Math.round(BASE_R / u())), 0, 0, u()));
-	const knob = createMemo(() => place(disc(Math.round(KNOB_R / u())), 0, 0, u()));
+	const base = createMemo(() => round(BASE_R, 0, 0, u()));
+	const knob = createMemo(() => round(KNOB_R, 0, 0, u()));
 	const at = () => {
 		const A = props.L.stickArea,
 			m = BASE_R + 4;
