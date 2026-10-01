@@ -6,14 +6,10 @@
 #   BarkleyV120.exe  --(the GM6 decompiler, in a container)--> BarkleyV120.gm6
 #                    --(LateralGM, in a container)-----------> BarkleyV120.gmx
 #
-# Neither half needs Windows: both are Java. decompile.sh and convert.sh each
-# explain their own half, and virt/README.md ("Why LateralGM, and not the IDE")
-# says what was checked before the IDE stopped being the way in.
+# Both halves are Java. decompile.sh and convert.sh each explain their own half,
+# and virt/README.md says what the export was checked against.
 #
 # BARKLEY_SKIP_DECOMPILE=1 keeps an existing build/virt/BarkleyV120.gm6.
-#
-# The Windows VM is still in this directory and nothing here uses it. To drive
-# it by hand: virt/vagrant.sh up --provider=qemu, then virt/winrm.sh.
 
 set -eu
 

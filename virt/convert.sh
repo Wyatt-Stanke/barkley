@@ -3,11 +3,8 @@
 #
 #   virt/convert.sh [in.gm6] [out dir]
 #
-# This is the step the Windows VM existed for: GameMaker: Studio 1.4 imports a
-# .gm6 and exports a GMX. LateralGM reads GM6 and writes GMX directly, so it
-# does the same job as plain Java, in a container, in about a minute -- no
-# Windows, no licence, no GUI automation. virt/README.md has the comparison
-# against the hand-made export that decided this.
+# LateralGM reads GM6 and writes GMX directly: plain Java, in a container, in
+# about a minute. virt/README.md has the comparison against game/BarkleyV120.gmx.
 #
 # LateralGM is cloned at the pinned commit below and the patches in
 # virt/lateralgm/patches are applied to it; virt/lateralgm/Gm6ToGmx.java is the
@@ -19,8 +16,8 @@
 #
 # NOTE ON CASE: the GMX holds scripts/sA.gml and scripts/sa.gml, and
 # bgm_Init.gml and bgm_init.gml. On a case-insensitive filesystem -- which is
-# the default on macOS, and was true of the Windows machine GameMaker made the
-# pristine export on -- each pair collapses to one file. The tar this writes
+# the default on macOS, and what the pristine export was made on -- each pair
+# collapses to one file. The tar this writes
 # keeps all four; extracting it does not. That is why the pristine export is
 # missing them, and why game/recovered-scripts/ exists.
 

@@ -3,11 +3,7 @@
 #
 #   virt/decompile.sh [out.gm6]
 #
-# This step is plain Java -- it never touches GameMaker -- so it does not need
-# the Windows VM. It runs in a container instead, which is both faster and far
-# more reliable than the guest: the decompile is the heaviest CPU load in the
-# whole pipeline, and under QEMU's HVF accelerator that load is exactly what
-# made the guest bugcheck (see virt/README.md, "The guest bugchecks").
+# This step is plain Java and runs in a container.
 #
 # The decompiler is compiled from the sources kept at
 # game/original/GMDecompilerDecompiled, together with the headless entry point
@@ -15,7 +11,7 @@
 # (that file explains why). Java 8 exactly: ProgressDialogListener calls
 # Thread.stop(), which has been gone since Java 20.
 #
-# The result is byte-identical to what the Java GUI produces, and is checked
+# The result is byte-identical to the Java GUI decompiler's, and is checked
 # against the SHA-256 below unless BARKLEY_GM6_SHA256 says otherwise.
 
 set -eu
@@ -23,7 +19,7 @@ set -eu
 VIRT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
 BARKLEY_ROOT=${BARKLEY_ROOT:-$(cd -- "$VIRT_DIR/.." && pwd)}
 
-# The .gm6 the hand-run GUI produced, and what game/BarkleyV120.gmx came from.
+# The .gm6 that game/BarkleyV120.gmx was made from.
 EXPECTED=${BARKLEY_GM6_SHA256:-4b76af44edbf8c6bd980a7693e78520646059ec6edbacf4051b336dfb30f9b32}
 
 # Temurin 8: the only JDK 8 with current multi-arch images.
