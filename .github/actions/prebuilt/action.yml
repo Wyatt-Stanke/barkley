@@ -2,7 +2,8 @@
 # artifact named after a hash of everything that goes into it (src/, virt/, the recovered scripts, the setup action),
 # holding build/pipeline/site and build/pipeline/playtest: the PR check uploads one, and the deploy after the merge
 # downloads it instead of building (and play-testing) the same sources again, so what is deployed is the build the PR
-# check fuzzed. Docs, the fuzz corpus and the workflows are left out of the hash.
+# check fuzzed. Docs, the fuzzer (src/fuzz.mjs, src/fuzz-page.js; a build is src/build.mjs), its corpus and the
+# workflows are left out of the hash.
 #
 # Only runs from this repository count, never one from a fork: a fork's pull_request run can upload any artifact under
 # any name. Needs `actions: read`.
@@ -21,7 +22,7 @@ runs:
     # Before anything writes into src/ (src/web/node_modules) or build/.
     - id: key
       shell: bash
-      run: echo "key=site-${{ hashFiles('src/**', '!src/**/*.md', '!src/web/node_modules/**', 'virt/**', '!virt/**/*.md', 'game/recovered-scripts/**', '.github/actions/**') }}" >> "$GITHUB_OUTPUT"
+      run: echo "key=site-${{ hashFiles('src/**', '!src/**/*.md', '!src/web/node_modules/**', '!src/fuzz.mjs', '!src/fuzz-page.js', 'virt/**', '!virt/**/*.md', 'game/recovered-scripts/**', '.github/actions/**') }}" >> "$GITHUB_OUTPUT"
 
     - id: find
       shell: bash

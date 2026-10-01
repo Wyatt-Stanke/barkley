@@ -27,7 +27,7 @@ Don't hand-edit the GMX resources in `game/BarkleyV120.gmx` (`objects/`, `script
 ```sh
 # 0. Everything, from the original exe to a play-tested site (~5 min on a GitHub runner; each step's output is kept, so a rerun resumes).
 #    fetch (archive.org zip, MD5-checked, + the GM6 decompiler's source at a pinned commit, into game/original/) ->
-#    virt/run.sh -> migrate (fails unless the audit is clean) -> import -> fuzz.mjs build --minify -> play-test.
+#    virt/run.sh -> migrate (fails unless the audit is clean) -> import -> build.mjs --minify -> play-test.
 #    Writes <out>/BarkleyV120.gmx, barkley-<version>.gmx, barkley-<version>/BarkleyLTS.yyp, site/, playtest/.
 #    --from=pristine migrates game/BarkleyV120.gmx instead of exporting. This is what the GitHub workflow runs.
 node src/pipeline.mjs [--out=build/pipeline] [--mode=modernized|faithful] [--from=exe|pristine] [--no-playtest]
@@ -52,8 +52,8 @@ node src/import.mjs <out>.gmx <newdir>/<Name>.yyp
 # 3. Build HTML5.
 #    Deployable build (the supported way; unobfuscated + terser --keep-fnames, so player crash reports have readable
 #    gml_* stacks). Works on copies of the project and user folder; don't run Igor and terser by hand for a deploy:
-node src/fuzz.mjs build <.yyp> <dir> --minify
-#    fuzz.mjs build always takes the page from the current src/web: index.html, then (writeBuild) the page app it builds
+node src/build.mjs <.yyp> <dir> --minify     # fuzz.mjs build <.yyp> <dir> [--minify] is the same command
+#    build.mjs always takes the page from the current src/web: index.html, then (writeBuild) the page app it builds
 #    into build/web (app/barkley.js and .css, the font, sw.js) and version.json, the file list the service worker
 #    caches the build from (src/README.md, "Offline play"). So a page change needs no re-import. It refuses a project
 #    whose extensions aren't the stubs import.mjs writes: import it again.
@@ -93,7 +93,7 @@ cd <dir>/out && python3 -m http.server 8000 --bind 127.0.0.1   # then http://127
 #    --corpus starts from the corpus in git, fuzz/corpus.json.gz: unpacked into build/fuzz/corpus (kept, snapshots and
 #    all, while it came from that very file), packed back at every save. Commit the file after a run that found
 #    something. --through patches known crash classes and reports each patched spot instead.
-#    `verify` checks a build against the corpus (read-only): replays its spine (~2 min), explores --minutes, replays new
+#    `verify` checks a build against the corpus (read-only): replays its spine (~1.5 min on CI), explores --minutes, replays new
 #    crashes and known ones that come back; exit 1 on either that replays (its "crashes N (M from earlier runs)" line
 #    counts the corpus's record of past crashes, not crashes this run); drift is a warning (--strict: a failure). The PR workflow runs it.
 #    `replay` plays a finding from a fresh page with screenshots, or a player's crash report
@@ -148,13 +148,25 @@ fuzz corpus), `game/recovered-scripts/`, `.github/`, `README.md`, `biome.jsonc`,
 ### GitHub Actions (`.github/workflows/`)
 
 Both workflows set up through `.github/actions/setup` (Node with the page's npm cache, ffmpeg, the two caches below).
+ffmpeg is BtbN's static build through `AnimMouse/setup-ffmpeg` (cached; apt once hung for 26 min), at BtbN's current
+release line (they keep only two, so a pin would break; a different ffmpeg changes PNG bytes, not pixels).
 
-**`pr.yml`, on every pull request:** `node src/pipeline.mjs` (so it builds and play-tests), then
-`node src/fuzz.mjs verify build/pipeline/site --minutes=5` on the minified site (no second Igor build). The verdict
-is in the job summary; the play-test and the fuzzer's findings are the `check` artifact. Nothing is deployed. A PR
-from a fork gets no secrets, so its build fails at the licence. The runner has 4 vCPUs, so verify runs 2 browsers.
+**A build is made once per set of sources** (`.github/actions/prebuilt`): it is kept as an artifact named
+`site-<hashFiles of src/, virt/, game/recovered-scripts/, .github/actions/>` (minus `*.md`, `src/fuzz.mjs`,
+`src/fuzz-page.js`; 30 days) holding `build/pipeline/{site,playtest}`, and a job whose hash already has one from a run
+of this repository (never a fork's) downloads it and skips the pipeline. So the deploy after a merge ships the very
+build the PR check play-tested and fuzzed (when `main` didn't move in between), and a PR push that touches only docs,
+the fuzzer or the corpus skips the build. **That is why `build()` lives in `src/build.mjs`, not in `fuzz.mjs`:**
+anything that changes what a build is must be inside the hash. Run `pages.yml` by hand with `rebuild` to build anyway.
 
-**`pages.yml`:** on every push to `main` (and on `workflow_dispatch`), an `ubuntu-24.04` runner runs `node src/pipeline.mjs` and
+**`pr.yml`, on every pull request:** `node src/pipeline.mjs` (so it builds and play-tests; or the prebuilt build),
+then `node src/fuzz.mjs verify build/pipeline/site --workers=3 --minutes=4` on the minified site (no second Igor
+build). The verdict is in the job summary; the play-test and the fuzzer's findings are the `check` artifact. Nothing is
+deployed. A PR from a fork gets no secrets, so its build fails at the licence (unless its sources were built already).
+The runner has 4 vCPUs; measured on the same build, 3 verify browsers played 1.5x the frames of 2 (4 only 1.57x) and
+replayed the corpus in 92 s instead of 121 s.
+
+**`pages.yml`:** on every push to `main` (and on `workflow_dispatch`), an `ubuntu-24.04` runner runs `node src/pipeline.mjs` (or takes the prebuilt build) and
 deploys `build/pipeline/site` to the repo's own GitHub Pages (`https://wyatt-stanke.github.io/barkley/`). The deploy
 job runs only on the default branch; Pages is set to "GitHub Actions" as its source, and the `github-pages`
 environment's deployment branch policy allows `main` only (it was created naming whatever the default branch was, so
@@ -178,7 +190,7 @@ barkley/
   CLAUDE.md      this file
   biome.jsonc    Biome's formatter and linter settings (see "Commands")
   src/           all the tooling (Node.js 22+, no npm packages but the page's)
-    *.mjs        the pipeline: pipeline (all of it), fetch, toolchain, migrate, import, playtest, fuzz, deploy, assets, transforms, offline, page
+    *.mjs        the pipeline: pipeline (all of it), fetch, toolchain, migrate, import, build, playtest, fuzz, deploy, assets, transforms, offline, page
     version.json the port's semver version, the one place it is written
     lib/         the GML grammar/parser and the GMX code (un)packer
     patches/     hand-written GML rewrites; modernized/ holds the web adaptations
@@ -193,7 +205,8 @@ barkley/
   build/         everything generated; all of it reproducible from src/ (untracked); tools/ holds downloaded GameMaker tools,
                  web/ the page app (src/page.mjs)
   .github/       workflows/pages.yml: the whole pipeline on every push to main, deployed to GitHub Pages;
-                 workflows/pr.yml: the pipeline and a fuzz verify on every pull request; actions/setup: their shared setup
+                 workflows/pr.yml: the pipeline and a fuzz verify on every pull request; actions/setup: their shared setup;
+                 actions/prebuilt: finds the build of these sources an earlier run made
   README.md      the GitHub front page: what this is and the one command
 ```
 

@@ -22,7 +22,7 @@ while it downloads the game and the tools):
 | export | `BarkleyV120.exe` → `.gm6` → a GameMaker: Studio 1.4 GMX, in Java containers | `virt/run.sh` |
 | migrate | the GMX → one that GameMaker LTS can import (patches, AST transforms, the real music and fonts) | `src/migrate.mjs` |
 | import | → a GameMaker LTS project, with the page template and its extensions | `src/import.mjs` |
-| build | Igor's HTML5 build, minified, plus the page around the game (SolidJS, built from `src/web`) and the service worker for offline play | `src/fuzz.mjs build`, `src/page.mjs` |
+| build | Igor's HTML5 build, minified, plus the page around the game (SolidJS, built from `src/web`) and the service worker for offline play | `src/build.mjs`, `src/page.mjs` |
 | play-test | boots the site in headless Chromium and starts the game; fails on an uncaught exception | `src/playtest.mjs` |
 
 The site lands in `build/pipeline/site/`; serve it with `python3 -m http.server` from there. A step whose output
