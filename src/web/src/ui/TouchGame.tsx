@@ -5,8 +5,10 @@
 import { createMemo, For, Show } from 'solid-js';
 import { BASE_R, type Button, dir, held, KNOB_R, type Layout, THROW } from '../extensions/touch';
 
-const SCREEN = '#000080', // the Configuration menu's blue
-	FILL = '#000040', // the title and save menus' navy
+// The menus' navy: the title menu, save boxes, game over and the battle HUD all fill with it (only the three
+// Configuration boxes use #000080). The controls share it and stand out by their frames, as the menus do.
+const SCREEN = '#000040',
+	FILL = '#000040',
 	FRAME = ['#9e9e9e', '#734b21', '#5a3818'],
 	LIT = '#ffffff',
 	INK = '#ffffff',
