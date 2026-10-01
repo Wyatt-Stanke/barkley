@@ -2,6 +2,10 @@
 # then the fuzzer checks the build against the corpus in git (node src/fuzz.mjs verify): the corpus's paths are played
 # again on it, it explores for a few minutes, and a crash the corpus doesn't know that replays fails the check. Nothing
 # is deployed. Needs the repository secret GAMEMAKER_ACCESS_KEY, which a pull request from a fork doesn't get.
+#
+# The build is kept as an artifact named after its sources (.github/actions/prebuilt). When one already exists (a push
+# that only touched docs or the corpus, or a branch whose sources main already built) it is downloaded instead of
+# built again, and the deploy after the merge takes it the same way.
 name: Pull request check
 
 on:
@@ -9,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  actions: read # to find an earlier run's build
 
 # A new push to the branch replaces the check still running for it.
 concurrency:
@@ -22,13 +27,29 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - id: prebuilt
+        uses: ./.github/actions/prebuilt
+
       - uses: ./.github/actions/setup
 
       - name: Build (exe -> GMX -> LTS project -> HTML5 -> play-test)
+        if: steps.prebuilt.outputs.found != 'true'
         run: node src/pipeline.mjs --out=build/pipeline
         env:
           GAMEMAKER_ACCESS_KEY: ${{ secrets.GAMEMAKER_ACCESS_KEY }}
           BARKLEY_CONTAINER: docker
+
+      # Only after a build that passed its play-test; the music is MP3s already, so there is little to gain compressing.
+      - name: Keep the build for the deploy
+        if: steps.prebuilt.outputs.found != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.prebuilt.outputs.key }}
+          path: |
+            build/pipeline/site
+            build/pipeline/playtest
+          retention-days: 30
+          compression-level: 1
 
       # The deployable build is minified but keeps its gml_* names, so the fuzzer runs on it as it is. The verdict goes
       # to the job summary.
