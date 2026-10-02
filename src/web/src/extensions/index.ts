@@ -28,6 +28,7 @@ export function exposeToGame() {
 		touch_view_w: touch.touch_view_w,
 		touch_view_h: touch.touch_view_h,
 		touch_dpr: touch.touch_dpr,
+		touch_fit: touch.touch_fit,
 		pad_keys,
 		pad_context,
 		controls_show,

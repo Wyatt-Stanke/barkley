@@ -26,6 +26,7 @@ import {
 	THROW,
 } from '../extensions/touch';
 import { has } from '../page';
+import { Backdrop, GameButton, GameDpad, GameGear, GameStick } from './TouchGame';
 import './TouchOverlay.css';
 
 export function TouchOverlay() {
@@ -56,15 +57,33 @@ export function TouchOverlay() {
 									</g>
 								}
 							>
-								<g opacity={CONTEXTS[ctx()][0]} class="gmt-fade">
-									<Show when={cfg.mode === 'dpad'} fallback={<Stick L={L()} />}>
-										<Dpad L={L()} />
-									</Show>
-								</g>
-								<g opacity={CONTEXTS[ctx()][1]} class="gmt-fade">
-									<Gear L={L()} />
-									<For each={L().buttons}>{(b) => <TouchButton b={b} />}</For>
-								</g>
+								<Show
+									when={cfg.theme === 'game'}
+									fallback={
+										<>
+											<g opacity={CONTEXTS[ctx()][0]} class="gmt-fade">
+												<Show when={cfg.mode === 'dpad'} fallback={<Stick L={L()} />}>
+													<Dpad L={L()} />
+												</Show>
+											</g>
+											<g opacity={CONTEXTS[ctx()][1]} class="gmt-fade">
+												<Gear L={L()} />
+												<For each={L().buttons}>{(b) => <TouchButton b={b} />}</For>
+											</g>
+										</>
+									}
+								>
+									<Backdrop L={L()} />
+									<g opacity={CONTEXTS[ctx()][0]} class="gmt-fade">
+										<Show when={cfg.mode === 'dpad'} fallback={<GameStick L={L()} />}>
+											<GameDpad L={L()} />
+										</Show>
+									</g>
+									<g opacity={CONTEXTS[ctx()][1]} class="gmt-fade">
+										<GameGear L={L()} />
+										<For each={L().buttons}>{(b) => <GameButton b={b} u={L().unit} />}</For>
+									</g>
+								</Show>
 							</Show>
 						)}
 					</Show>
@@ -263,6 +282,16 @@ function Sheet() {
 				]}
 				value={cfg.mode}
 				set={(v) => setting('mode', v)}
+			/>
+			<Choice
+				label="Style"
+				hint="Game draws the controls like the game's menus, around the picture."
+				options={[
+					['Plain', 'plain'],
+					['Game', 'game'],
+				]}
+				value={cfg.theme}
+				set={(v) => setting('theme', v)}
 			/>
 			<Choice
 				label="Side"
