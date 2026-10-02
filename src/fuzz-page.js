@@ -1249,7 +1249,8 @@
 	};
 
 	// For replays: the same program, a snapshot after each segment listed in saveAt (counted from 1), the game state at
-	// a crash, and with drawLast, drawing on for the last frame (for a screenshot).
+	// a crash, and with drawLast, drawing on for the last frame (for a screenshot). hold: leave the last keys down (a
+	// program cut mid-segment, as video.mjs cuts it, carries on in the next call without a release and a fresh press).
 	F.replay = function (req) {
 		'use strict';
 		hook();
@@ -1271,7 +1272,7 @@
 			if (!out.crash && req.saveAt?.includes(s + 1)) out.saves[s + 1] = F.save();
 		});
 		if (req.drawLast) F.draw(false);
-		if (!out.crash) setKeys([]);
+		if (!out.crash && !req.hold) setKeys([]);
 		out.probe = safe(F.probe);
 		return out;
 	};

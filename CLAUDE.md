@@ -95,7 +95,9 @@ cd <dir>/out && python3 -m http.server 8000 --bind 127.0.0.1   # then http://127
 #    something. --through patches known crash classes and reports each patched spot instead.
 #    `verify` checks a build against the corpus (read-only): replays its spine (~1.5 min on CI), explores --minutes, replays new
 #    crashes and known ones that come back; exit 1 on either that replays (its "crashes N (M from earlier runs)" line
-#    counts the corpus's record of past crashes, not crashes this run); drift is a warning (--strict: a failure). The PR workflow runs it.
+#    counts the corpus's record of past crashes, not crashes this run); drift is a warning (--strict: a failure). It also plays the longest
+#    spine path from a fresh page with no restores (a few minutes, alongside): another room or plot there fails.
+#    The PR workflow runs it.
 #    `replay` plays a finding from a fresh page with screenshots, or a player's crash report
 #    (BARKLEY-CRASH-1: text) against the build it came from. Uses ports 8870 (server) and 9400-9499 (browsers);
 #    `--port=N` moves them to N and N+530 to N+629, so two fuzz processes can run at once.
@@ -104,6 +106,12 @@ node src/fuzz.mjs build build/pipeline/barkley-1.4.1/BarkleyLTS.yyp build/fuzz/b
 node src/fuzz.mjs run build/fuzz/build --save --corpus --through --verbose
 node src/fuzz.mjs verify build/fuzz/build --minutes=5
 node src/fuzz.mjs replay build/fuzz/build build/fuzz/<run>/crashes/1
+# A video of a corpus path, replayed as verify replays it (MP4, 60 fps = the game's speed, 2x, no sound; <out>.txt has
+# the rooms and plots by time and whether it ended where recorded). Default: the longest path in fuzz/corpus.json.gz
+# (node 13959, 99,191 steps = 27.5 min, ~35 min to render). --node=<id> another path's last node, --speed=N every Nth
+# step (a huge N only checks the path replays), --corpus=<file.gz|dir>, --port as fuzz.mjs. Exits 1 if the path
+# didn't end where recorded. Plays with --through, as the corpus was recorded.
+node src/video.mjs build/fuzz/build build/fuzz/video/longest.mp4
 
 # The page alone (src/web): npm ci on first use, type-check (tsc), bundle (vite) into build/web. ~2 s.
 node src/page.mjs
@@ -190,7 +198,7 @@ barkley/
   CLAUDE.md      this file
   biome.jsonc    Biome's formatter and linter settings (see "Commands")
   src/           all the tooling (Node.js 22+, no npm packages but the page's)
-    *.mjs        the pipeline: pipeline (all of it), fetch, toolchain, migrate, import, build, playtest, fuzz, deploy, assets, transforms, offline, page
+    *.mjs        the pipeline: pipeline (all of it), fetch, toolchain, migrate, import, build, playtest, fuzz, video, deploy, assets, transforms, offline, page
     version.json the port's semver version, the one place it is written
     lib/         the GML grammar/parser and the GMX code (un)packer
     patches/     hand-written GML rewrites; modernized/ holds the web adaptations
@@ -228,6 +236,7 @@ scratchpad dir, never in the project.
 - `build/fuzz/`: the fuzzer's files.
   - `corpus/`: the unpacked working copy of `fuzz/corpus.json.gz` (`state.json`, `nodes.json`, `nodes/<id>.json.gz`, and `packed.md5`, the md5 of the file it came from). Its snapshots belong to one build; `--corpus` keeps it while the packed file is unchanged and unpacks afresh (a rebase) when it isn't.
   - `build/`: an unobfuscated build of `barkley-1.4.1` from `build/pipeline` (2026-09-26), which the corpus's snapshots belong to.
+  - `video/`: `video.mjs`'s videos (`longest-13959.mp4`, the packed corpus's longest path, 2026-10-01, with its `.txt` and `.log`).
   - `run15/` (crash 10, the dead turn) and `run16/`, with their logs: `run --save` findings cited under Current state.
 - GameMaker LTS 2026 (this Mac is **x86_64**; the arm64 binaries don't run):
   - ProjectTool: `/Applications/GameMaker LTS 2026.app/Contents/MacOS/x86_64/packages/project-tool-osx-x64/ProjectTool`. It must run with that directory as cwd. Import = `SCRIPT PATH=<file>` containing `PROJECT OPEN SOURCE="<.project.gmx>"` then `PROJECT SAVE DESTINATION="<.yyp>"`.
@@ -358,6 +367,7 @@ The pipeline lives in `migrate.mjs`. It copies the project, unpacks the code, ap
   - **A battle or a death mid-walk is never an exit's destination** (`INTERRUPTS` in `fuzz-page.js`: `RomInter`, `RomGameover`); otherwise a random encounter during a door walk made that door look ambiguous and `loadCorpus` dropped it.
   - **A node keeps its snapshot only when it owns a feature no other node owns**, and `choose()` draws only from nodes with a snapshot. So if an owner loses the state it claimed features from, the search is walled out of that room for good. `rebase()` (after a build change) replays each kept path from a fresh page and now refuses to let a replay that drifted to another room/plot inherit the features; `loadCorpus()` drops any feature whose room disagrees with its owner's room (and its `log` entries). Signature of this failure: the run status's `furthest` (computed over nodes that have a snapshot) is behind the corpus's `maxPlot`.
   - When reading a corpus by hand, globals in a snapshot's `resume` JSON are stored under their plain names (`plot`, `skipper`), not the page's `gml`-prefixed names.
+  - The fuzzer's "frames" are game steps. The rooms' GMX `<speed>` is 30, but `oController` sets `room_speed` 60 in play, so 60 steps are a second.
   - `HARNESS` in `fuzz.mjs` is folded into the corpus build id; bump it when a harness change makes recorded paths play differently. `setPort(n)` and the exported `Browser`/`Fuzzer`/`harness`/`serve` make one-off probe scripts easy (the CLI runs only under `import.meta.main`).
 - **The page (`src/web/`)** is a Vite + SolidJS + TypeScript project, the one part of the port with npm packages (`src/page.mjs` runs `npm ci` when `node_modules` is missing or older than the lockfile, then `npm run build`: `tsc --noEmit`, then `vite build` into `build/web/`). It builds **one classic IIFE script, `app/barkley.js`, plus `app/barkley.css`**, strict (Rolldown drops `"use strict"` unless `output.strict: true`) and unminified (~116 KB, ~31 KB gzipped; readable in a deployed build). `public/` is copied as it is: `sw.js` to the root and the font to `app/`. `offline.mjs`'s `writeBuild` copies `build/web/` over every HTML5 build before writing `version.json`, so **a page change never needs a re-import**. Layout:
   - `index.html`: Igor's page template (the runtime's `$RT/html5/index.html`, LF, with its `${GM_HTML5_*}` placeholders): the metas and PWA links, `app/barkley.css`, the `@font-face` and the runtime's own CSS (canvas, `#loading_screen` hidden, the `gm4html5_*` classes), `<div id="page">` and `<script src="app/barkley.js" data-folder="${GM_HTML5_GameFolder}">` **before the game's script** (the runtime captures `requestAnimationFrame` as its script runs, so the hooks must already be in; a module script would run after it), then the game's script and `window.onload = barkley.load`, as the runtime's own template has `window.onload = GameMaker_Init`. `import.mjs` copies it beside the HTML5 options; `fuzz.mjs build` copies it in fresh on every build.
@@ -563,7 +573,15 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   Balthios is down and Barkley too weak to survive its next move. Winning probably needs a stronger party going in
   (levels, healing items) rather than a better fight. Check progress by the boss cells in the corpus's `features`,
   not by `furthest`.
-- **Fuzzer restores replay exactly** (2026-09-18; `src/README.md`, "Snapshots and rewinds", has what is restored and what still differs). To check again after a harness change: play a corpus chain from a fresh page (`fromBoot`) and as recorded (`replayChain`), and compare `resume_save` at every step, treating handles and numbers alike (`"~ref object oBarkley"` is 13) and `true` as 1. No script for it is kept.
+- **Stale paths in the working copy (found 2026-10-01, fixed in `rebase()`):** a rebase checked only the nodes that owned
+  features, and left every other node in `build/fuzz/corpus` with the probes of the build it was recorded on. The local
+  working copy still has about 2,000 such nodes (5,156 against the packed file's 3,126), among them node 11809, a
+  122,450-step path recorded at plot 5 that sticks at plot 2 on this build. Nothing reads them but a hand replay or
+  `video.mjs --corpus=build/fuzz/corpus`; the next rebase drops them, or delete `build/fuzz/corpus` and the next
+  `run --corpus` unpacks and rebases the packed file (~6 min on 6 browsers; checked on a copy: 2,628 of 2,628 exact).
+- **Fuzzer restores replay exactly** (2026-09-18; checked again 2026-10-01 on `barkley-1.4.1`: node 13959, 99,191
+  frames with 185 restores, ends at the same spot from a fresh page, and a restore is the same whatever the browser ran
+  before it; `verify` now checks the longest path this way on every PR; `src/README.md`, "Snapshots and rewinds", has what is restored and what still differs). To check again after a harness change: play a corpus chain from a fresh page (`fromBoot`) and as recorded (`replayChain`), and compare `resume_save` at every step, treating handles and numbers alike (`"~ref object oBarkley"` is 13) and `true` as 1. No script for it is kept.
 - **v1.7.0 (2026-10-01): a Game style for the touch controls** (the ≡ sheet's Style row; see "Patches" under Architecture and `src/README.md`). Its screen is the menus' navy `#000040` (`#000080` is only the Configuration boxes' fill, and looked too bright), and its circles are drawn in two-game-pixel cells (one-pixel steps read as poor smoothing). Checked headlessly on a full migrate/import/build at 390x844@3 and 844x390@3, joystick and D-pad: the picture stays put upright, sits between the columns sideways, the border follows it in Integer scaling, and A and a D-pad arm light when held. The user has seen it on their phone over the LAN; not on a notched phone's safe-area insets yet.
 - **Not verified yet:**
   - The Controls panel and the Start screen on a real device: both have only been seen in headless Chromium (on a stand-in runtime since v1.6.0).
