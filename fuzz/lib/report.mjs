@@ -61,13 +61,15 @@ export const report = {
 					.filter((n) => n.snap)
 					.sort((a, b) => (b.probe.xp ?? 0) - (a.probe.xp ?? 0))[0];
 				return n?.probe.xp !== undefined
-					? `levels ${n.probe.lv}, ${n.probe.xp} xp (${n.probe.room} plot ${n.probe.plot})`
+					? `levels ${n.probe.lv}${n.probe.fudge ? ` (${n.probe.fudge} fudged)` : ''}, ${n.probe.xp} xp (${n.probe.room} plot ${n.probe.plot})`
 					: '-';
 			})()}; best boss fight: ${(() => {
 				const n = [...this.nodes.values()]
 					.filter((n) => n.snap && this.fightScore(n.probe) > 0)
 					.sort((a, b) => this.fightScore(b.probe) - this.fightScore(a.probe))[0];
-				return n ? `${n.probe.foes} (plot ${n.probe.plot}, levels ${n.probe.lv})` : '-';
+				return n
+					? `${n.probe.foes} (plot ${n.probe.plot}, levels ${n.probe.lv}${n.probe.fudge ? `, ${n.probe.fudge} fudged` : ''})`
+					: '-';
 			})()}`,
 			`story rooms ${this.storyRooms.size}: ${[...this.storyRooms].join(' ')}; ${this.exits.size} exits taken, ${this.talked.size} things talked to`,
 			`found per 10k frames: ${Object.entries(this.genStats)

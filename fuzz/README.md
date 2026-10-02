@@ -35,7 +35,7 @@ fuzz/
     probe.js        what the page reports: room, plot, position, the fight, the party, healing items and healers
     novelty.js      cells, flags, the next plot's conditions, the baseline
     walk.js         the episode's RNG, instances, routes and walking
-    generators.js   the closed-loop generators (dialog, exit, talk, seek, travel, heal, battle)
+    generators.js   the closed-loop generators (dialog, exit, talk, seek, travel, heal, train, battle) and the '!train' action
     goals.js        where the story moves on, read from the build
     through.js      --through: known crash classes patched
     episode.js      an episode: a program played, what was new, snapshots
@@ -194,7 +194,16 @@ How it works:
   other exits) (goal rooms place objects whose
   code sets `global.plot` to the next value, read from the build); `heal` (only outside a fight, when someone is below
   80% vitality) talks to a healer in the room if there is one (an object whose events call `sFullheal`, or a script that does, such as the Shark at the sewer inn, 25 Neo-Shekels) and takes the first answer, or opens the start menu's Items, picks a healing item (a `refItem` entry whose effect reads `VP +`, read
-  from the build) and gives it to the weakest member; `battle` presses action, cancel and arrows in a
+  from the build) and gives it to the weakest member; `train` **fudges levels** (the user allowed it: a party the search
+  can't grow strong enough leaves the later story unplayed). It plays one `'!train'` chunk, an action in place of a
+  key that `setKeys` runs as the chunk starts (`actions` in `page/input.js`), so a path that trained trains again on
+  every replay, and paths without one play as before. Each member below level 2·plot + 4 gains up to two levels the
+  way the game levels one up (`sBattleLevel`'s stats and skill, `sBattleSkill`), gets that level's experience and is
+  healed; `global.__fuzz_trained` counts the levels given (the probe's `fudge`, shown in the status box; the flag
+  scan skips `gml__` names). The search picks it only outside fights, at the furthest plot or the one before it, while
+  the weakest member (`low`) is below that level, so earlier plots are played on the party's own levels. Learned macros
+  drop actions (`keysOnly`). The natural party is level 3 all round at plot 7, against the level-16 Jordan; three
+  steps (level 9) were enough to win that fight, which reached plot 8 for the first time; `battle` presses action, cancel and arrows in a
   battle's rhythm, or four times in five fights: it reads the battle menu's state, mostly attacks the first target
   (sometimes it uses an item, a skill or defends instead, more often items when a member is below 40%, on an ally
   half the time), runs now and then (more when someone is low; bosses can't be run from), and in `postattack` attacks:

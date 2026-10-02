@@ -1,5 +1,6 @@
 import { F, gml, inst, roomName, safe } from './core.js';
 import { episodeOut } from './episode.js';
+import { actions } from './input.js';
 import { known } from './known.js';
 import { goalMask, spot } from './novelty.js';
 import { healers, heals } from './probe.js';
@@ -111,6 +112,33 @@ function* combo() {
 	yield* wait(20);
 	return frames;
 }
+// Fudged levels (the user's call: a party the search can't grow strong enough leaves the later story unplayed).
+// '!train' raises each party member below level 2·plot + 4 by up to two levels as the game itself levels one up
+// (sBattleLevel's stats and skill, sBattleSkill), sets their experience to the new level's and heals them. It is a
+// program step, so a path that trained trains again on every replay. global.__fuzz_trained counts the levels given
+// (the flag scan skips gml__ names; snapshots keep it).
+const TRAIN_STEP = 2;
+const trainTarget = (plot) => 2 * (Number(plot) || 0) + 4;
+actions.train = () => {
+	'use strict';
+	const g = gml();
+	const self = safe(() => inst('oController'));
+	if (!self || safe(roomName) === 'RomInter' || !Array.isArray(g.gmlparty)) return;
+	const target = trainTarget(g.gmlplot);
+	for (let i = 0; i < 8 && Number(g.gmlparty[i]) >= 0; i++) {
+		const m = Number(g.gmlparty[i]);
+		for (let k = 0; k < TRAIN_STEP && Number(g.gmlchar_res1[m]) < target; k++) {
+			const lv = Number(g.gmlchar_res1[m]) + 1;
+			g.gmlchar_res1[m] = lv;
+			const skill = window.gml_Script_sBattleLevel(self, self, m, lv);
+			if (skill) window.gml_Script_sBattleSkill(self, self, m, skill);
+			g.gmlchar_xp[m] = Math.max(Number(g.gmlchar_xp[m]) || 0, 100 * (lv - 1) * lv);
+			g.gml__fuzz_trained = (Number(g.gml__fuzz_trained) || 0) + 1;
+		}
+		g.gmlchar_chp[m] = g.gmlchar_hp[m];
+		g.gmlchar_czp[m] = g.gmlchar_zp[m];
+	}
+};
 export const G = {
 	// Presses action through dialog and cutscenes until the player can move again
 	*dialog(a) {
@@ -243,6 +271,12 @@ export const G = {
 				fails = 0;
 			}
 		}
+	},
+	// Fudged levels (actions.train above): one step, between fights and cutscenes
+	*train() {
+		for (let t = 0; t < 90 && busy(); t += 4) yield [[], 4];
+		if (busy() || safe(roomName) === 'RomInter') return;
+		yield [['!train'], 1];
 	},
 	// While the party is below 80% of its vitality: talks to a healer in the room, or uses a healing item from the
 	// start menu on whoever is lowest: Start, Items (right of Party), the item (right steps through the list in

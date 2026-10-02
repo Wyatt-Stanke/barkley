@@ -44,16 +44,25 @@ export const party = () => {
 	const g = gml();
 	let xp = 0,
 		lv = 0,
+		low = Infinity,
 		hp = 0,
 		max = 0;
 	for (let i = 0; i < 8 && Array.isArray(g.gmlparty) && Number(g.gmlparty[i]) >= 0; i++) {
 		const m = Number(g.gmlparty[i]);
 		xp += Math.max(0, Number(g.gmlchar_xp?.[m]) || 0);
 		lv += Number(g.gmlchar_res1?.[m]) || 0;
+		low = Math.min(low, Number(g.gmlchar_res1?.[m]) || 0);
 		hp += Math.max(0, Number(g.gmlchar_chp?.[m]) || 0);
 		max += Math.max(0, Number(g.gmlchar_hp?.[m]) || 0);
 	}
-	return { xp: Math.floor(xp), lv, hp: max ? Math.round((100 * hp) / max) / 100 : 1 };
+	// low: the weakest member's level; fudge: levels given by '!train' (generators.js)
+	return {
+		xp: Math.floor(xp),
+		lv,
+		hp: max ? Math.round((100 * hp) / max) / 100 : 1,
+		...(low < Infinity && { low }),
+		...(Number(g.gml__fuzz_trained) > 0 && { fudge: Number(g.gml__fuzz_trained) }),
+	};
 };
 // Items that restore vitality, by name, from refItem's own code ('Single, VP +%66')
 let healing = null;

@@ -45,7 +45,12 @@ export function randomProgram(frames) {
 }
 // Generators run in the page (page/generators.js): dialog, exit, talk, seek, travel, battle. Their base weights; each is then
 // scaled by how much it has found lately per frame played.
-// heal only counts where the party is hurt (pickGenerator).
-export const GENERATORS = { talk: 3, exit: 3, seek: 2, travel: 1.5, dialog: 0.5, battle: 0, heal: 0 };
+// heal only counts where the party is hurt, train only at the frontier while someone is below the target (pickGenerator).
+export const GENERATORS = { talk: 3, exit: 3, seek: 2, travel: 1.5, dialog: 0.5, battle: 0, heal: 0, train: 0 };
+// The level '!train' raises the party to at a plot (trainTarget in page/generators.js): the plot-5 boss is level 12,
+// the plot-7 pair 16 and 14
+export const trainTarget = (plot) => 2 * (Number(plot) || 0) + 4;
+// A program without its actions ('!train'): what a learned macro may replay
+export const keysOnly = (prog) => prog.filter(([k]) => !k.some((x) => x[0] === '!'));
 export const retime = (prog) => prog.map(([k, n]) => [k, Math.max(1, Math.round(n * (0.7 + Math.random() * 0.6)))]);
 export const frameCount = (prog) => prog.reduce((a, [, n]) => a + n, 0);

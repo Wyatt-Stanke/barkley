@@ -8,8 +8,12 @@ const ev = (k) => ({
 	key: k.length === 1 ? k : `Arrow${k[0].toUpperCase()}${k.slice(1)}`,
 	preventDefault() {},
 });
+// Actions a program can hold in place of a key ('!train'): done once as their chunk starts, so a path that holds one
+// plays it again on every replay. Registered by the module that owns each (generators.js).
+export const actions = {};
 export const setKeys = (keys) => {
-	const next = new Set(keys);
+	for (const k of keys) if (k[0] === '!') actions[k.slice(1)]();
+	const next = new Set(keys.filter((k) => k[0] !== '!'));
 	for (const k of held) if (!next.has(k)) window.onkeyup?.(ev(k));
 	for (const k of next) if (!held.has(k)) window.onkeydown?.(ev(k));
 	held = next;

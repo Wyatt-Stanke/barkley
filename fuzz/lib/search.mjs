@@ -1,4 +1,4 @@
-import { GENERATORS, randomProgram, retime } from './programs.mjs';
+import { GENERATORS, randomProgram, retime, trainTarget } from './programs.mjs';
 import { MENU_ROOMS, STORY, storyFlags, VOLATILE_AFTER } from './story.mjs';
 import { pick, rnd } from './util.mjs';
 
@@ -16,17 +16,20 @@ export const search = {
 		const plot = typeof g.plot === 'number' ? g.plot : 0;
 		let xp = 0,
 			lv = 0,
+			low = Infinity,
 			hp = 0,
 			max = 0;
 		for (let i = 0; i < 8 && Array.isArray(g.party) && g.party[i] >= 0; i++) {
 			xp += Math.max(0, Number(g.char_xp?.[g.party[i]]) || 0);
 			lv += Number(g.char_res1?.[g.party[i]]) || 0;
+			low = Math.min(low, Number(g.char_res1?.[g.party[i]]) || 0);
 			hp += Math.max(0, Number(g.char_chp?.[g.party[i]]) || 0);
 			max += Math.max(0, Number(g.char_hp?.[g.party[i]]) || 0);
 		}
 		// (probes from before these fields, filled in from the snapshot)
 		n.probe.xp ??= Math.floor(xp);
 		n.probe.lv ??= lv;
+		if (low < Infinity) n.probe.low ??= low;
 		n.probe.hp ??= max ? Math.round((100 * hp) / max) / 100 : 1;
 		// between fights, the party's vitality: it carries into the next fight, a boss's too
 		const health = n.probe.foes === undefined && max ? Math.round((40 * hp) / max) : 0;
@@ -152,6 +155,9 @@ export const search = {
 				base = g === 'battle' ? 10 : g === 'dialog' ? 1 : 0;
 			if (g === 'travel' && !this.goalRoom(node)) base = 0;
 			if (g === 'heal' && node.probe.room !== 'RomInter') base = node.probe.hp < 0.8 ? 6 * (1 - node.probe.hp) : 0;
+			// fudged levels, only where the search is stuck: the furthest plot and the one before it
+			if (g === 'train' && node.probe.room !== 'RomInter')
+				base = (node.probe.plot ?? 0) >= this.maxPlot - 1 && node.probe.low < trainTarget(node.probe.plot) ? 1 : 0;
 			const s = this.genStats[g] ?? { found: 0, frames: 0 };
 			return [g, base * (0.5 + Math.min(3, (s.found + 1) / (s.frames / 10000 + 1)))];
 		});

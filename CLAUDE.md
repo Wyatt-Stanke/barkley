@@ -584,8 +584,10 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   level 14, 1137 vitality; plot 8 is set after it). From a healed, level-12 node (19258), one seed of three won it once
   the combo player was in, and all three lost before. A 110-minute run on the restructured code (60% of its play from
   plot 7, best party level 12) got the pair no lower than 5/8 of their combined vitality (the cells
-  `RomInter|7|0|oBJordan:5:…`), so the search has not yet found the win by itself. Likely next steps: more levels
-  going in, or more episodes from healed plot-7 nodes. The only crash seen is #12, a restore artifact: it reproduces from its snapshot but
+  `RomInter|7|0|oBJordan:5:…`), so the search has not yet found the win by itself. The natural party is level 3 all round there
+  (the status box's "levels 12" is the sum of four members). **The user allowed fudged levels**, so the `train`
+  generator now raises the party toward level 2·plot + 4 at the frontier (`fuzz/README.md`); from node 20030,
+  three steps (level 9) and one seed of three won the fight and reached plot 8. Not yet tried in a long run. The only crash seen is #12, a restore artifact: it reproduces from its snapshot but
   not from a fresh page. **The fuzzer was split out of `src/` into `fuzz/`** (Node side in `fuzz/lib/`, page side in
   `fuzz/page/`, joined into one script by `harness.mjs`). Its `verify` replays the spine as before: on CI (PR #16,
   run `37058903057`) 993 of 997 paths exactly where recorded, and locally 1009 of 1013. In both, one path hit crash #12

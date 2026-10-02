@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { keysOnly } from './programs.mjs';
 import { MENU_ROOMS } from './story.mjs';
 import { bold, cyan, dur, red, rnd, yellow } from './util.mjs';
 
@@ -79,8 +80,8 @@ export const findings = {
 			for (const k of fresh) this.features.set(k, { key: k, node, chosen: 0, t: Date.now() });
 			if (fresh.length) {
 				const d = this.dict.get(from.probe.room) ?? [];
-				if (d.length < 60) d.push(program.slice(0, find.seg));
-				else d[rnd(0, d.length - 1)] = program.slice(0, find.seg);
+				if (d.length < 60) d.push(keysOnly(program.slice(0, find.seg)));
+				else d[rnd(0, d.length - 1)] = keysOnly(program.slice(0, find.seg));
 				this.dict.set(from.probe.room, d);
 				if (!MENU_ROOMS.has(room) && (!this.storyRooms.has(room) || find.probe.plot > this.maxPlot)) {
 					const why = !this.storyRooms.has(room) ? 'new room' : `plot ${find.probe.plot}`;
