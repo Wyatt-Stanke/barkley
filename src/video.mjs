@@ -69,7 +69,10 @@ console.log(
 );
 
 const server = await serve(root);
-const b = new Browser(95, path.join(tmpdir(), `barkley-video-${process.pid}`), harness(root), { shots: true });
+const b = new Browser(95, path.join(tmpdir(), `barkley-video-${process.pid}`), harness(root), {
+	shots: true,
+	through: true, // as the corpus was recorded and as verify replays it (patched crash classes don't end the game)
+});
 const ffmpeg = spawn(
 	'ffmpeg',
 	[

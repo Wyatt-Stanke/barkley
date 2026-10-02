@@ -94,7 +94,9 @@ cd <dir>/out && python3 -m http.server 8000 --bind 127.0.0.1   # then http://127
 #    all, while it came from that very file), packed back at every save. Commit the file after a run that found
 #    something. --through patches known crash classes and reports each patched spot instead.
 #    `verify` checks a build against the corpus (read-only): replays its spine (~2 min), explores --minutes, replays new
-#    crashes; exit 1 on a new crash that replays; drift is a warning (--strict: a failure). The PR workflow runs it.
+#    crashes; exit 1 on a new crash that replays; drift is a warning (--strict: a failure). It also plays the longest
+#    spine path from a fresh page with no restores (a few minutes, alongside): another room or plot there fails.
+#    The PR workflow runs it.
 #    `replay` plays a finding from a fresh page with screenshots, or a player's crash report
 #    (BARKLEY-CRASH-1: text) against the build it came from. Uses ports 8870 (server) and 9400-9499 (browsers);
 #    `--port=N` moves them to N and N+530 to N+629, so two fuzz processes can run at once.
@@ -106,8 +108,8 @@ node src/fuzz.mjs replay build/fuzz/build build/fuzz/<run>/crashes/1
 # A video of a corpus path, replayed as verify replays it (MP4, 60 fps = the game's speed, 2x, no sound; <out>.txt has
 # the rooms and plots by time and whether it ended where recorded). Default: the longest path in fuzz/corpus.json.gz
 # (node 13959, 99,191 steps = 27.5 min, ~35 min to render). --node=<id> another path's last node, --speed=N every Nth
-# step (a huge N only checks the path replays), --corpus=<file.gz|dir>, --port as fuzz.mjs. Don't use the working
-# copy's paths that aren't in the packed file: they can depend on snapshots that are gone and replay elsewhere.
+# step (a huge N only checks the path replays), --corpus=<file.gz|dir>, --port as fuzz.mjs. Exits 1 if the path
+# didn't end where recorded. Plays with --through, as the corpus was recorded.
 node src/video.mjs build/fuzz/build build/fuzz/video/longest.mp4
 
 # The page alone (src/web): npm ci on first use, type-check (tsc), bundle (vite) into build/web. ~2 s.
@@ -548,7 +550,15 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   Balthios is down and Barkley too weak to survive its next move. Winning probably needs a stronger party going in
   (levels, healing items) rather than a better fight. Check progress by the boss cells in the corpus's `features`,
   not by `furthest`.
-- **Fuzzer restores replay exactly** (2026-09-18; `src/README.md`, "Snapshots and rewinds", has what is restored and what still differs). To check again after a harness change: play a corpus chain from a fresh page (`fromBoot`) and as recorded (`replayChain`), and compare `resume_save` at every step, treating handles and numbers alike (`"~ref object oBarkley"` is 13) and `true` as 1. No script for it is kept.
+- **Stale paths in the working copy (found 2026-10-01, fixed in `rebase()`):** a rebase checked only the nodes that owned
+  features, and left every other node in `build/fuzz/corpus` with the probes of the build it was recorded on. The local
+  working copy still has about 2,000 such nodes (5,156 against the packed file's 3,126), among them node 11809, a
+  122,450-step path recorded at plot 5 that sticks at plot 2 on this build. Nothing reads them but a hand replay or
+  `video.mjs --corpus=build/fuzz/corpus`; the next rebase drops them, or delete `build/fuzz/corpus` and the next
+  `run --corpus` unpacks and rebases the packed file (~6 min on 6 browsers; checked on a copy: 2,628 of 2,628 exact).
+- **Fuzzer restores replay exactly** (2026-09-18; checked again 2026-10-01 on `barkley-1.4.1`: node 13959, 99,191
+  frames with 185 restores, ends at the same spot from a fresh page, and a restore is the same whatever the browser ran
+  before it; `verify` now checks the longest path this way on every PR; `src/README.md`, "Snapshots and rewinds", has what is restored and what still differs). To check again after a harness change: play a corpus chain from a fresh page (`fromBoot`) and as recorded (`replayChain`), and compare `resume_save` at every step, treating handles and numbers alike (`"~ref object oBarkley"` is 13) and `true` as 1. No script for it is kept.
 - **Not verified yet:**
   - The Controls panel and the Start screen on a real device: both have only been seen in headless Chromium (on a stand-in runtime since v1.6.0).
   - A real game controller, on any platform: everything above was driven by a faked `navigator.getGamepads`. Worth checking on hardware: that a pad shows up at all (browsers hide pads until a button is pressed on a focused page), that the face-button layout feels right, that walking with the stick is comfortable at the 0.45 deadzone, and that a pad connecting really does hide the phone's touch controls. A controller also cannot press the page's Start button: that still needs a click, tap or key.

@@ -732,6 +732,8 @@ class Fuzzer {
 						this.nodes.set(n.id, m);
 						this.addSnap(m, snap);
 						status.set(n.id, 'done');
+						// the steps on its way (no target is among them) now end where this build put them
+						for (const [i, s] of steps.slice(0, -1).entries()) this.nodes.get(s.id).probe = res.probes[i];
 					} catch (err) {
 						status.set(n.id, 'failed');
 						r.failed++;
@@ -750,6 +752,16 @@ class Fuzzer {
 				`rebase made no snapshots from ${r.targets} paths; the corpus in ${this.opts.corpus} is unchanged`,
 			);
 		for (const n of olds) rmSync(path.join(this.opts.corpus, 'nodes', `${n.id}.json.gz`), { force: true });
+		// Only the paths that came back are this build's. Every other node (one no target came through, or one past a
+		// drift) still has the probe of the build it was recorded on, and a replay of it goes somewhere else: the working
+		// copy kept a 122,450-step path that way, which ended at plot 5 on its old build and sticks at plot 2 on this one.
+		if (!this.opts.spine) {
+			const keep = new Set();
+			for (const [id, s] of status)
+				if (s === 'done')
+					for (let n = this.nodes.get(id); n && !keep.has(n.id); n = this.nodes.get(n.parent)) keep.add(n.id);
+			for (const id of [...this.nodes.keys()]) if (!keep.has(id)) this.nodes.delete(id);
+		}
 		// the story so far is what came back, so reaching the rest again counts as a milestone again
 		const back = this.candidates.map((n) => n.probe).filter((p) => !MENU_ROOMS.has(p.room));
 		this.storyRooms = new Set(back.map((p) => p.room));
@@ -1248,8 +1260,9 @@ class Fuzzer {
 	// ---- replays on a separate browser ----
 	// Plays chain steps in order: before a step that started with a restore, restores the previous step's snapshot;
 	// after every step but the last, takes a snapshot as the fuzzer did (it uses up an instance id). A crash comes back
-	// with the index of its step.
+	// with the index of its step; probes are where each step ended.
 	async replayChain(v, steps, snap) {
+		const probes = [];
 		let prev = snap,
 			r = { crash: null, probe: null };
 		if (snap) {
@@ -1268,9 +1281,10 @@ class Fuzzer {
 				600000,
 			);
 			if (r.crash) return { ...r, step: i };
+			probes.push(r.probe);
 			prev = r.saves[s.program.length] ?? prev;
 		}
-		return r;
+		return { ...r, probes };
 	}
 
 	// From a fresh page: the new game, then every step with no restores.
@@ -1280,6 +1294,30 @@ class Fuzzer {
 			[{ loaded: false, program: this.boot.program }, ...chain.slice(1).map((s) => ({ ...s, loaded: false }))],
 			null,
 		);
+	}
+
+	// verify: the longest path the rebase played, once more from a fresh page with no restores at all. The rebase played
+	// it with the fuzzer's restores; continuous play has to end in the same place, or a restore is not what the game does
+	// and every path, and every crash a restore led to, is in doubt. A few minutes on its own browser.
+	async freshCheck() {
+		const frames = (n) => frameCount(this.chain(n).flatMap((s) => s.program));
+		const leaf = this.candidates.reduce((a, n) => (frames(n) > frames(a) ? n : a));
+		const b = new Browser(80, path.join(this.work, 'browsers', 'fresh'), this.source, this.opts);
+		this.children.push(b);
+		const out = { id: leaf.id, frames: frames(leaf), want: leaf.probe };
+		try {
+			await b.start();
+			const r = await this.fromBoot(b, this.chain(leaf));
+			out.got = r.crash?.probe ?? r.probe;
+			out.crash = r.crash?.message;
+		} catch (err) {
+			out.error = err.message.split('\n')[0];
+		}
+		b.kill();
+		const g = out.got ?? {};
+		out.room = !out.crash && !out.error && g.room === out.want.room && g.plot === out.want.plot;
+		out.exact = out.room && ['x', 'y', 'battle'].every((k) => g[k] === out.want[k]);
+		this.fresh = out;
 	}
 
 	async verifyCrash(v, e) {
@@ -1470,6 +1508,7 @@ class Fuzzer {
 		}
 		for (let i = 1; i < n; i += 4) await Promise.all(this.workers.slice(i, i + 4).map((w) => w.b.start()));
 		if (corpus === 'rebase') await this.rebase();
+		const fresh = this.opts.verify && this.candidates.length > 1 ? this.freshCheck() : null;
 		this.saveCorpus();
 		const saver = setInterval(() => this.saveCorpus(), 300000);
 		// verify with no minutes: only the corpus replays (and their crashes)
@@ -1500,6 +1539,8 @@ class Fuzzer {
 		this.saveCorpus();
 		if (this.opts.verify) {
 			for (const w of this.workers) w.b.kill();
+			if (fresh && !this.fresh) this.say('waiting for the fresh-page replay of the longest path');
+			await fresh;
 			await Promise.allSettled(workers);
 			this.draining = true;
 			if (this.queue.length) this.say(`replaying ${this.queue.length} new crash(es) before the verdict`);
@@ -1529,8 +1570,11 @@ class Fuzzer {
 		const want = new Set(this.rebaseTargets?.filter((n) => !MENU_ROOMS.has(n.probe.room)).map((n) => where(n.probe)));
 		const got = new Set(this.candidates.map((n) => where(n.probe)));
 		const lost = [...want].filter((w) => !got.has(w));
-		const strict = this.opts.strict && (r.drifted.length || lost.length || r.failed);
-		const ok = !failing.length && !strict;
+		// the longest path from a fresh page: another room or plot (or no end at all) fails, another spot is a warning
+		const f = this.fresh;
+		const strict = this.opts.strict && (r.drifted.length || lost.length || r.failed || (f && !f.exact));
+		const ok = !failing.length && !strict && (!f || f.room);
+		const fpos = (p) => (p ? `${where(p)} at (${p.x},${p.y})${p.battle ? ' in a battle' : ''}` : 'nowhere');
 		const s = this.stats;
 		const md = [
 			`## Fuzz verification: ${ok ? 'passed' : 'failed'}`,
@@ -1539,6 +1583,12 @@ class Fuzzer {
 			`- Replayed ${r.targets} corpus paths (${this.opts.spine ? 'the furthest of each room and plot, and those on their way' : 'all of them'}): ` +
 				`${r.exact} ended exactly where they were recorded, ${r.moved} in the same room elsewhere, ${r.drifted.length} went ` +
 				`elsewhere, ${r.crashed.length} crashed, ${r.failed} failed to replay, ${r.skipped} skipped after those`,
+			f
+				? `- The longest (node ${f.id}, ${f.frames} frames) from a fresh page with no restores: ` +
+					(f.exact
+						? 'ended exactly where it was recorded'
+						: `${f.room ? 'warning' : 'FAILED'}: ended ${f.error ? `nowhere (${f.error})` : f.crash ? `in a crash (${f.crash})` : fpos(f.got)}, recorded ${fpos(f.want)}`)
+				: '',
 			this.opts.minutes
 				? `- Then explored for ${this.opts.minutes} min: ${s.episodes} episodes, ${(s.frames / 216000).toFixed(1)} h of play`
 				: '',

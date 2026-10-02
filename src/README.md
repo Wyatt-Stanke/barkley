@@ -220,7 +220,8 @@ A corpus path can be watched as a video: `video.mjs` plays one from a fresh page
 fuzzer's snapshot after every step, and its restores before the steps it began with one) and pipes the canvas after
 each step to ffmpeg: an H.264 MP4 at 60 frames a second, the game's speed (`oController` sets `room_speed` 60), scaled
 2x, no sound. A `.txt` beside it says when each room and plot comes up, and whether the path ended where it was
-recorded. The default path is the longest in `fuzz/corpus.json.gz`; `--node=<id>` picks another by its last node,
+recorded (exit 1 if not). It plays with `--through`, as the corpus was recorded. The default path is the longest in
+`fuzz/corpus.json.gz`; `--node=<id>` picks another by its last node,
 `--speed=N` draws every Nth step (a huge N only checks that the path replays, ~3 min). About 20 ms a step: the longest
 path in the 2026-09-26 corpus (node 13959, 99,191 steps, 27.5 minutes of play, ending in the catacombs at plot 4) takes
 about 35 minutes.
@@ -229,9 +230,9 @@ about 35 minutes.
 node src/video.mjs build/fuzz/build build/fuzz/video/longest.mp4 [--node=<id>] [--speed=N] [--corpus=<file|dir>]
 ```
 
-`--corpus=build/fuzz/corpus` takes the working copy, which has more paths than the packed file (packing keeps only the
-paths to nodes that own something), but such a path can depend on snapshots that are gone: the working copy's longest,
-node 11809 (122,450 steps, recorded ending at plot 5), replays to plot 2 and wanders there for an hour.
+`--corpus=build/fuzz/corpus` takes the working copy, which can have more paths than the packed file (packing keeps
+only the paths to nodes that own something). A working copy from before 2026-10-01 can also hold paths that were
+recorded on an older build and never played again (see Rebase).
 
 It also runs on the deployable build (`fuzz.mjs build --minify`, the pipeline's `site/`): terser keeps the `gml_*`
 names, and the harness finds the runtime's variables in both forms. Replays on the two match.
@@ -262,6 +263,11 @@ on 6 browsers). A replay that ends in another room or plot than recorded is drop
 those inputs were for a state that no longer happens, and kept as candidates that own nothing they crowded the search
 (the first try kept them, and 1,100 of 2,400 snapshots stood in one room). Their features can be found again. If not one path replays,
 the run stops and leaves the corpus as it was, since that means the harness or the build is broken.
+Only the targets are nodes that owned features; the nodes on their way are played but not checked, and take the probes
+their replay ended at. Every node the rebase didn't play (a path that owned nothing, after its last owner) is dropped
+from the working copy: it still had the probes of the build it was recorded on, and a replay of it went somewhere
+else (before this, a 122,450-step path recorded ending at plot 5 sat in the working copy and stuck at plot 2 on the
+build after).
 
 **`verify`** checks the game rather than looking for new things (the pull request workflow runs it). It reads the
 packed corpus (never writes it), plays the spine again (the furthest node of each room and plot and the nodes on its
@@ -269,7 +275,10 @@ way, ~320 paths in about 2 minutes; `--all` for every one), explores for `--minu
 `--through`, and replays every crash the corpus doesn't know, from its snapshot and from a fresh page. It exits 1 on a
 new crash that replays either way or couldn't be replayed. Crashes that only a restore causes (`restore`, `stall`,
 `hang`), paths that now end in another room or plot, and rooms no replayed path reached are warnings; `--strict` makes
-the last two failures. A change to the game that moves where recorded inputs lead shows up as those warnings, not as a
+the last two failures. It also plays the longest spine path once more from a fresh page with no restores at all (a
+few minutes, on its own browser, while the rest runs): the spine was played with the fuzzer's restores, so if
+continuous play ends in another room or plot the restores are not what the game does, and that fails; another spot in
+the same room is a warning (`--strict`: a failure). A change to the game that moves where recorded inputs lead shows up as those warnings, not as a
 failure. The verdict is `<findings>/verify.md` and goes to `$GITHUB_STEP_SUMMARY`.
 
 How it works:
