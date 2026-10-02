@@ -564,6 +564,26 @@
 		);
 		return healing;
 	};
+	// Objects that restore the whole party when talked to (an inn's keeper): their events call sFullheal, or a script
+	// that does (a cinema's 'code' step, cin_0387 for the Shark)
+	let healerObjs = null;
+	const healers = () => {
+		if (healerObjs) return healerObjs;
+		const scripts = ['gml_Script_sFullheal'];
+		for (const [fn, w] of fnIds)
+			if (fn !== w && /^gml_Script_/.test(fn.name) && fn.toString().includes('gml_Script_sFullheal('))
+				scripts.push(fn.name);
+		const fns = [];
+		for (const [fn, w] of fnIds)
+			if (fn !== w && /^gml_Object_/.test(fn.name) && scripts.some((n) => fn.toString().includes(n))) fns.push(fn.name);
+		healerObjs = new Set(
+			JSON_game.GMObjects.filter(
+				(o) =>
+					o && fns.some((n) => n.startsWith(`gml_Object_${o.pName}_`) && /^[A-Z]/.test(n.slice(12 + o.pName.length))),
+			).map((o) => o.pName),
+		);
+		return healerObjs;
+	};
 	F.probe = () => {
 		const g = gml();
 		const p = safe(() => inst('oBarkley'));
@@ -583,10 +603,12 @@
 	// Where the player stands, in 32 px. In a room with monsters roaming (battle 1) also the third of the party's
 	// vitality left: every walk there is a fight, a cell was kept by whichever state reached it first, often with the
 	// party nearly dead, and the search never got a healthy party past RomSewer1's seven monsters.
-	// The party's vitality in thirds is part of a cell where it can change (monsters roam) and in the room the next plot
-	// is reached in, which is where the bosses are: a healthier arrival there is a new state worth keeping.
-	let goalRooms = {};
-	const tiered = (p) => p.battle || goalRooms[p.plot + 1]?.includes(p.room);
+	// The party's vitality in thirds is part of a cell where it can change (monsters roam), in the room the next plot is
+	// reached in (where the bosses are), and anywhere at the story's frontier (fuzz.mjs sends the plot it starts at): a
+	// party healed at an inn is then a new state on every room of the way to the boss, not only when it gets there.
+	let goalRooms = {},
+		tierFrom = Infinity;
+	const tiered = (p) => p.battle || p.plot >= tierFrom || goalRooms[p.plot + 1]?.includes(p.room);
 	const spot = (p, x, y) => `${x >> 5},${y >> 5}${tiered(p) ? `:${p.hp >= 0.67 ? 2 : p.hp >= 0.34 ? 1 : 0}` : ''}`;
 	const cellOf = (p) => `${p.room}|${p.plot}|${p.battle}|${p.foes ?? (p.x == null ? '-' : spot(p, p.x, p.y))}`;
 	// The globals' values as flags: 'name=value', 'name[i]=value', 'name[i][j]=value'
@@ -1017,13 +1039,15 @@
 				}
 			}
 		},
-		// Uses a healing item from the start menu on whoever is lowest, while the party is below 80% of its vitality:
-		// Start, Items (right of Party), the item (right steps through the list in order), the party member, and out.
+		// While the party is below 80% of its vitality: talks to a healer in the room, or uses a healing item from the
+		// start menu on whoever is lowest: Start, Items (right of Party), the item (right steps through the list in
+		// order), the party member, and out.
 		*heal() {
 			const g = gml();
 			const ids = g.gmlitem_id,
 				amounts = g.gmlitem_amount,
 				party = g.gmlparty;
+			for (let t = 0; t < 90 && busy() && !exists('oDialog') && !exists('oStartmenu'); t += 4) yield [[], 4];
 			if (busy() || !Array.isArray(ids) || !Array.isArray(party) || safe(roomName) === 'RomInter') return;
 			let worst = -1,
 				frac = 0.8;
@@ -1032,7 +1056,20 @@
 				if (f < frac) [worst, frac] = [i, f];
 			}
 			const k = ids.findIndex((n, i) => heals().has(n) && Number(amounts?.[i]) > 0);
-			if (worst < 0 || k < 0) return;
+			if (worst < 0) return;
+			// someone here restores the party (for a fee): talk to them and take the first answer, yes
+			const healer = instances().find((i) => healers().has(objName(i)));
+			if (healer && (k < 0 || rng() < 0.5)) {
+				if ((yield* follow(beside(healer), new Set([healer]), 900, rng() < 0.5)) !== 'arrived') return;
+				const r = route(beside(healer), new Set([healer]));
+				yield* act(r?.goal ?? 'up');
+				for (let t = 0; t < 900 && busy(); t += 10) {
+					yield [['z'], 2];
+					yield [[], 8];
+				}
+				return;
+			}
+			if (k < 0) return;
 			const press = function* (key) {
 				yield [[key], 2];
 				yield [[], 6];
@@ -1293,6 +1330,7 @@
 		sync(req.sync);
 		if (req.goals) goalConds = req.goals;
 		if (req.goalRooms) goalRooms = req.goalRooms;
+		if (req.tierFrom != null) tierFrom = req.tierFrom;
 		const out = {
 			finds: [],
 			rec: [],

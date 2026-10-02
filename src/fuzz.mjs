@@ -818,7 +818,7 @@ class Fuzzer {
 			Math.min(
 				999,
 				this.goalsMet(g, plot + 1) * 100 +
-					Math.min(lv * 25 + Math.floor(xp / 100), 300) +
+					Math.min(lv * 25 + Math.floor(xp / 100), 600) +
 					this.fightScore(n.probe) +
 					health +
 					Math.min(n.rooms.length, 10) * 5 +
@@ -1268,6 +1268,7 @@ class Fuzzer {
 						seed: rnd(1, 2 ** 30),
 						goals: this.pageGoals,
 						goalRooms: this.goals?.rooms,
+						tierFrom: this.maxPlot > 0 ? this.maxPlot - 1 : null,
 					},
 					120000,
 				);

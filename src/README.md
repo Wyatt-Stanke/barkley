@@ -312,7 +312,7 @@ How it works:
 - **Search** (Go-Explore): a new game is started and snapshotted once. Each worker repeatedly picks a snapshot, restores
   it and plays a random program of input macros (walks, taps, dialog mashing, waits, the start menu, and programs that
   found something before). After every macro step the page looks for something new: a cell (room, plot, and the
-  player's position in 32 px, plus the party's vitality in thirds where roaming monsters are about and in the room the next plot is reached in (the bosses' rooms: before this a half-dead party's arrival in the church owned it, and the Jordan fight it starts was never fought healthy); in a battle instead the first enemy, the eighths of the enemies' vitality left, the
+  player's position in 32 px, plus the party's vitality in thirds where roaming monsters are about, everywhere at plots from the furthest one less one (so a party healed at an inn is new on each room of its way back to a boss), and in the room the next plot is reached in (the bosses' rooms: before this a half-dead party's arrival in the church owned it, and the Jordan fight it starts was never fought healthy); in a battle instead the first enemy, the eighths of the enemies' vitality left, the
   party members standing and the party's vitality in quarters, so a state that brought a boss lower or kept the party
   healthier is new and the search can work its way to a win), a (room, GML function) pair (every `gml_*` function is wrapped to record that it ran; a cutscene
   shows up as its `cin_NNNN` steps), or a value of a game global never seen before (story flags such as `plot=3` or
@@ -322,7 +322,7 @@ How it works:
   `xp=<n>`, the party's experience in steps of 40 (so grinding is progress: the plot-5 boss, 1317 vitality, was only
   beaten once the party had levels). Where it finds one it snapshots the
   game, and that node joins the archive. Picks favour nodes chosen less often, found recently and further in the story
-  (`progress`: plot, then the next plot's conditions met, the party's levels and experience, how far a boss fight got
+  (`progress`: plot, then the next plot's conditions met, the party's levels and experience (25 a level, up to 600: capped at 300, a party at total level 12 had nothing to gain from grinding for the Jordan fight at plot 7, which a healthy level-12 party loses), how far a boss fight got
   (bosses are the `sBoss` entries, read from the build), the party's vitality outside a fight, rooms on the path,
   story globals changed since the new game; recomputed when the corpus loads); menus and the debug room hardly count.
   Most picks go by plot: the furthest plot reached gets 55% of them, the one before 30%, the rest 15%, and half of the
@@ -346,7 +346,7 @@ How it works:
   not visited yet; `travel` heads for a story goal room through the known room graph (several hops; after a failed hop it tries
   other exits) (goal rooms place objects whose
   code sets `global.plot` to the next value, read from the build); `heal` (only outside a fight, when someone is below
-  80% vitality) opens the start menu's Items, picks a healing item (a `refItem` entry whose effect reads `VP +`, read
+  80% vitality) talks to a healer in the room if there is one (an object whose events call `sFullheal`, or a script that does, such as the Shark at the sewer inn, 25 Neo-Shekels) and takes the first answer, or opens the start menu's Items, picks a healing item (a `refItem` entry whose effect reads `VP +`, read
   from the build) and gives it to the weakest member; `battle` presses action, cancel and arrows in a
   battle's rhythm, or four times in five fights: it reads the battle menu's state, mostly attacks the first target
   (sometimes it uses an item, a skill or defends instead, more often items when a member is below 40%, on an ally
