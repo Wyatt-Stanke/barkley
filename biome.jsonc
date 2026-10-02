@@ -69,10 +69,12 @@
 			"linter": { "rules": { "correctness": { "noUndeclaredVariables": "off" } } }
 		},
 		{
-			// Injected as a classic (sloppy) script, not a module: its 'use strict' functions, function expressions and
-			// arguments are deliberate. The runtime's error trace walks arguments.callee.caller and has to stop at a strict
-			// function; an arrow function, or rest parameters beside 'use strict', would change that or not parse.
-			"includes": ["src/fuzz-page.js"],
+			// The fuzzer's in-page harness: written as modules, but injected as one classic (sloppy) script (fuzz/lib/
+			// harness.mjs joins the files and drops their imports and exports). Its 'use strict' functions, function
+			// expressions and arguments are deliberate: the runtime's error trace walks arguments.callee.caller and has to
+			// stop at a strict function; an arrow function, or rest parameters beside 'use strict', would change that or not
+			// parse.
+			"includes": ["fuzz/page/**"],
 			"javascript": {
 				"globals": [
 					"GetWithArray",
@@ -97,8 +99,8 @@
 			}
 		},
 		{
-			// Functions that fuzz.mjs and video.mjs send into the page, where fuzz-page.js has defined __fuzz
-			"includes": ["src/fuzz.mjs", "src/video.mjs"],
+			// Functions the fuzzer sends into the page, where its harness has defined __fuzz
+			"includes": ["fuzz/*.mjs", "fuzz/lib/**"],
 			"javascript": { "globals": ["__fuzz"] }
 		},
 		{

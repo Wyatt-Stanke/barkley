@@ -2,7 +2,7 @@
 import type { Api } from './page';
 
 declare global {
-	// Set by fuzz.mjs's in-page harness before anything else runs (src/fuzz-page.js).
+	// Set by the fuzzer's in-page harness before anything else runs (fuzz/page/).
 	var __fuzz: object | undefined;
 	// The page's own API: the play-test and fuzz tooling drive it, and each GameMaker extension's file calls
 	// barkley.extension(name) as the runtime loads it.

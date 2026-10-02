@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-This is a port of _Barkley, Shut Up and Jam: Gaiden_ v1.20 to **GameMaker LTS 2026**. The starting point is a **GameMaker: Studio 1.4 GMX export** decompiled from a Game Maker 6 executable, kept pristine at `game/BarkleyV120.gmx`. The work lives in `src/`: Node.js tooling that migrates that export reproducibly. The tooling has no npm dependencies; the page around the game, `src/web/`, is a Vite + SolidJS + TypeScript project whose packages `src/page.mjs` installs from its lockfile. `src/README.md` has the full pipeline description (every patch and transform, and the fuzzer's design).
+This is a port of _Barkley, Shut Up and Jam: Gaiden_ v1.20 to **GameMaker LTS 2026**. The starting point is a **GameMaker: Studio 1.4 GMX export** decompiled from a Game Maker 6 executable, kept pristine at `game/BarkleyV120.gmx`. The work lives in `src/`: Node.js tooling that migrates that export reproducibly. The tooling has no npm dependencies; the page around the game, `src/web/`, is a Vite + SolidJS + TypeScript project whose packages `src/page.mjs` installs from its lockfile. `src/README.md` has the full pipeline description (every patch and transform); `fuzz/README.md` has the fuzzer's.
 
 `virt/` reproduces that export from the original executable; see "Rebuilding the pristine export" below. It is a separate concern from `src/` and nothing in the port depends on it.
 
@@ -52,7 +52,7 @@ node src/import.mjs <out>.gmx <newdir>/<Name>.yyp
 # 3. Build HTML5.
 #    Deployable build (the supported way; unobfuscated + terser --keep-fnames, so player crash reports have readable
 #    gml_* stacks). Works on copies of the project and user folder; don't run Igor and terser by hand for a deploy:
-node src/build.mjs <.yyp> <dir> --minify     # fuzz.mjs build <.yyp> <dir> [--minify] is the same command
+node src/build.mjs <.yyp> <dir> --minify     # fuzz/fuzz.mjs build <.yyp> <dir> [--minify] is the same command
 #    build.mjs always takes the page from the current src/web: index.html, then (writeBuild) the page app it builds
 #    into build/web (app/barkley.js and .css, the font, sw.js) and version.json, the file list the service worker
 #    caches the build from (src/README.md, "Offline play"). So a page change needs no re-import. It refuses a project
@@ -102,16 +102,16 @@ cd <dir>/out && python3 -m http.server 8000 --bind 127.0.0.1   # then http://127
 #    (BARKLEY-CRASH-1: text) against the build it came from. Uses ports 8870 (server) and 9400-9499 (browsers);
 #    `--port=N` moves them to N and N+530 to N+629, so two fuzz processes can run at once.
 #    Run long jobs under `caffeinate -i` (a run during laptop sleep gave 108 browser restarts and useless data).
-node src/fuzz.mjs build build/pipeline/barkley-1.4.1/BarkleyLTS.yyp build/fuzz/build
-node src/fuzz.mjs run build/fuzz/build --save --corpus --through --verbose
-node src/fuzz.mjs verify build/fuzz/build --minutes=5
-node src/fuzz.mjs replay build/fuzz/build build/fuzz/<run>/crashes/1
+node fuzz/fuzz.mjs build build/pipeline/barkley-1.4.1/BarkleyLTS.yyp build/fuzz/build
+node fuzz/fuzz.mjs run build/fuzz/build --save --corpus --through --verbose
+node fuzz/fuzz.mjs verify build/fuzz/build --minutes=5
+node fuzz/fuzz.mjs replay build/fuzz/build build/fuzz/<run>/crashes/1
 # A video of a corpus path, replayed as verify replays it (MP4, 60 fps = the game's speed, 2x, no sound; <out>.txt has
 # the rooms and plots by time and whether it ended where recorded). Default: the longest path in fuzz/corpus.json.gz
 # (node 13959, 99,191 steps = 27.5 min, ~35 min to render). --node=<id> another path's last node, --speed=N every Nth
-# step (a huge N only checks the path replays), --corpus=<file.gz|dir>, --port as fuzz.mjs. Exits 1 if the path
+# step (a huge N only checks the path replays), --corpus=<file.gz|dir>, --port as fuzz/fuzz.mjs. Exits 1 if the path
 # didn't end where recorded. Plays with --through, as the corpus was recorded.
-node src/video.mjs build/fuzz/build build/fuzz/video/longest.mp4
+node fuzz/video.mjs build/fuzz/build build/fuzz/video/longest.mp4
 
 # The page alone (src/web): npm ci on first use, type-check (tsc), bundle (vite) into build/web. ~2 s.
 node src/page.mjs
@@ -141,7 +141,7 @@ There's no test suite. Verify in these ways:
 - `import.mjs` should report "importer converted all GML". The strongest check: scan the imported `.gml` for single-quoted strings outside `"…"` strings and comments. Any hit means the importer skipped that file.
 - `node src/page.mjs` should type-check and build clean.
 - `npx -y @biomejs/biome@2.5.14 ci` should pass. The rules are `recommended` plus a stricter set, all errors. Biome
-  parses every `.js` as a module, but `src/fuzz-page.js` is injected as a sloppy script whose `'use strict'` functions,
+  parses every `.js` as a module, and `fuzz/page/*.js` are modules too, but they are joined into one sloppy script whose `'use strict'` functions,
   function expressions and `arguments` keep the runtime's `arguments.callee.caller` walk working, so its override turns
   off the rules that would rewrite those. Put a real exception in a `// biome-ignore <rule>: <why>` comment.
 - Igor should exit 0 and `playtest.mjs` should show no exception. On HTML5, a GML runtime error shows up as `Unhandled Exception - Uncaught { message : … stacktrace : [ … gml_Script_…/gml_Object_… ] }`.
@@ -150,8 +150,8 @@ There's no test suite. Verify in these ways:
 
 Everything lives in `~/Documents/barkley/`, which is both the working directory and a **git repo**
 (initialised 2026-09-20), moving to **`github.com/Wyatt-Stanke/barkley`** (public; the old deploy repo below is
-separate). `.gitignore` keeps the generated and bulk-binary folders out, so only `src/`, `virt/`, `docs/`, `fuzz/` (the packed
-fuzz corpus), `game/recovered-scripts/`, `.github/`, `README.md`, `biome.jsonc`, `.gitignore` and this file are tracked.
+separate). `.gitignore` keeps the generated and bulk-binary folders out, so only `src/`, `virt/`, `docs/`, `fuzz/` (the fuzzer and its
+packed corpus), `game/recovered-scripts/`, `.github/`, `README.md`, `biome.jsonc`, `.gitignore` and this file are tracked.
 
 ### GitHub Actions (`.github/workflows/`)
 
@@ -160,15 +160,15 @@ ffmpeg is BtbN's static build through `AnimMouse/setup-ffmpeg` (cached; apt once
 release line (they keep only two, so a pin would break; a different ffmpeg changes PNG bytes, not pixels).
 
 **A build is made once per set of sources** (`.github/actions/prebuilt`): it is kept as an artifact named
-`site-<hashFiles of src/, virt/, game/recovered-scripts/, .github/actions/>` (minus `*.md`, `src/fuzz.mjs`,
-`src/fuzz-page.js`; 30 days) holding `build/pipeline/{site,playtest}`, and a job whose hash already has one from a run
+`site-<hashFiles of src/, virt/, game/recovered-scripts/, .github/actions/>` (minus `*.md`; the fuzzer is in `fuzz/`, outside it;
+30 days) holding `build/pipeline/{site,playtest}`, and a job whose hash already has one from a run
 of this repository (never a fork's) downloads it and skips the pipeline. So the deploy after a merge ships the very
 build the PR check play-tested and fuzzed (when `main` didn't move in between), and a PR push that touches only docs,
-the fuzzer or the corpus skips the build. **That is why `build()` lives in `src/build.mjs`, not in `fuzz.mjs`:**
+the fuzzer or the corpus skips the build. **That is why `build()` lives in `src/build.mjs`, not in `fuzz/`:**
 anything that changes what a build is must be inside the hash. Run `pages.yml` by hand with `rebuild` to build anyway.
 
 **`pr.yml`, on every pull request:** `node src/pipeline.mjs` (so it builds and play-tests; or the prebuilt build),
-then `node src/fuzz.mjs verify build/pipeline/site --workers=3 --minutes=4` on the minified site (no second Igor
+then `node fuzz/fuzz.mjs verify build/pipeline/site --workers=3 --minutes=4` on the minified site (no second Igor
 build). The verdict is in the job summary; the play-test and the fuzzer's findings are the `check` artifact. Nothing is
 deployed. A PR from a fork gets no secrets, so its build fails at the licence (unless its sources were built already).
 The runner has 4 vCPUs; measured on the same build, 3 verify browsers played 1.5x the frames of 2 (4 only 1.57x) and
@@ -198,7 +198,7 @@ barkley/
   CLAUDE.md      this file
   biome.jsonc    Biome's formatter and linter settings (see "Commands")
   src/           all the tooling (Node.js 22+, no npm packages but the page's)
-    *.mjs        the pipeline: pipeline (all of it), fetch, toolchain, migrate, import, build, playtest, fuzz, video, deploy, assets, transforms, offline, page
+    *.mjs        the pipeline: pipeline (all of it), fetch, toolchain, migrate, import, build, playtest, deploy, assets, transforms, offline, page
     version.json the port's semver version, the one place it is written
     lib/         the GML grammar/parser and the GMX code (un)packer
     patches/     hand-written GML rewrites; modernized/ holds the web adaptations
@@ -209,7 +209,9 @@ barkley/
   virt/          makes game/BarkleyV120.gmx from the original exe (see its README)
   game/          inputs: large, immutable, untracked (except recovered-scripts/)
   docs/          an earlier audit page
-  fuzz/          corpus.json.gz: the fuzzer's corpus, packed (paths, not snapshots; see src/README.md "Fuzzing")
+  fuzz/          the fuzzer (see fuzz/README.md): fuzz.mjs and video.mjs (command lines), lib/ (the Node side), page/ (the
+                 in-page harness, modules joined into one injected script), corpus.json.gz (its corpus, packed: paths, not
+                 snapshots)
   build/         everything generated; all of it reproducible from src/ (untracked); tools/ holds downloaded GameMaker tools,
                  web/ the page app (src/page.mjs)
   .github/       workflows/pages.yml: the whole pipeline on every push to main, deployed to GitHub Pages;
@@ -236,7 +238,7 @@ scratchpad dir, never in the project.
 - `build/fuzz/`: the fuzzer's files.
   - `corpus/`: the unpacked working copy of `fuzz/corpus.json.gz` (`state.json`, `nodes.json`, `nodes/<id>.json.gz`, and `packed.md5`, the md5 of the file it came from). Its snapshots belong to one build; `--corpus` keeps it while the packed file is unchanged and unpacks afresh (a rebase) when it isn't.
   - `build/`: an unobfuscated build of `barkley-1.4.1` from `build/pipeline` (2026-09-26), which the corpus's snapshots belong to.
-  - `video/`: `video.mjs`'s videos (`longest-13959.mp4`, the packed corpus's longest path, 2026-10-01, with its `.txt` and `.log`).
+  - `video/`: `fuzz/video.mjs`'s videos (`longest-13959.mp4`, the packed corpus's longest path, 2026-10-01, with its `.txt` and `.log`).
   - `run15/` (crash 10, the dead turn) and `run16/`, with their logs: `run --save` findings cited under Current state.
 - GameMaker LTS 2026 (this Mac is **x86_64**; the arm64 binaries don't run):
   - ProjectTool: `/Applications/GameMaker LTS 2026.app/Contents/MacOS/x86_64/packages/project-tool-osx-x64/ProjectTool`. It must run with that directory as cwd. Import = `SCRIPT PATH=<file>` containing `PROJECT OPEN SOURCE="<.project.gmx>"` then `PROJECT SAVE DESTINATION="<.yyp>"`.
@@ -350,8 +352,8 @@ The pipeline lives in `migrate.mjs`. It copies the project, unpacks the code, ap
   - Converts the 1×1 placeholder backgrounds and battle backdrops `BG0-13` (frames of `sBBattle`) from GIF with `ffmpeg`.
   - `importFonts` replaces every font's PNG and `<glyphs>` with the original GM6 glyph bitmaps from `BarkleyV120.exe` (it inflates the game data and undoes GM6's byte substitution, as `GmExtractor.extractStandalone` does, then finds each font by its name, face name and the 32–127 range). Applies in both modes.
 - **`playtest.mjs`**: HTML5 smoke test. It serves the build with `python3 -m http.server` on port 8766 and drives Chromium over DevTools on port 9333. Those ports are fixed, so run one playtest at a time.
-- **`fuzz.mjs` and `fuzz-page.js`**: the fuzzer; `src/README.md` ("Fuzzing") describes the design (virtual time, snapshots, Go-Explore search, generators, crash verification). Facts not in README:
-  - `fuzz.mjs` prepends `window.__fuzzNames`: runtime variable names it finds by regex in the unobfuscated bundle (RNG `state` and its index/seed vars, the instance id counter, the surface stack, the mouse dispatcher; for restores, the room method that removes destroyed instances and the room global, `_Jm3` on `_d4`, and the frame pacing's due time, `_BE3`). The regexes for the first group handle the minified build too; the restore ones are only checked on the unobfuscated build (a crash report's replay doesn't need them).
+- **`fuzz/`**: the fuzzer; `fuzz/README.md` has its file map and describes the design (virtual time, snapshots, Go-Explore search, generators, crash verification). Facts not in README:
+  - `fuzz/lib/harness.mjs` prepends `window.__fuzzNames`: runtime variable names it finds by regex in the unobfuscated bundle (RNG `state` and its index/seed vars, the instance id counter, the surface stack, the mouse dispatcher; for restores, the room method that removes destroyed instances and the room global, `_Jm3` on `_d4`, and the frame pacing's due time, `_BE3`). The regexes for the first group handle the minified build too; the restore ones are only checked on the unobfuscated build (a crash report's replay doesn't need them).
   - Runtime facts it relies on: the frame function is scheduled through a `requestAnimationFrame` alias captured at script load (so the harness overrides rAF before load); `current_time` is `performance.now()`; `game_restart()` re-runs Game Start in place without resetting globals or the id counter; object events, room code and `script_execute` targets are direct function references in `JSON_game` (`GMObjects`, `Scripts`); `GetWithArray(-3)` is `with (all)`; globals are `global.gml<name>`. The RNG is fixed-seeded at load (16 LCG words); `Math.random` is used only by particles, sorts and shuffles, which the game never calls.
   - Game facts the generators rely on: the player is `oBarkley` (collision box 16×12 at +4,+19), moves with `move_contact_solid`, sprints while X is held; action makes every `oItem` run User Event 0, which fires User Event 1 on the one under the `oTalker` in front of the player (people are `oPlayer`→`oItem` children, doors `oExitN` N<200 are `oItem` children, walk-on exits are the ones with a `gml_Object_<obj>_Collision_oBarkley` event); input is ignored while `global.cinema`, `global.freeze` or `global.movefreeze` is set or an `oDialog`/`oStartmenu` exists. `dialog` also takes the game's own cutscene skip in 30% of runs: while `global.skipper` is non-zero, two presses of Start (`c`, with a release between) run `oController`'s User Event 0, the story-warp table.
   - More game facts they rely on: a cutscene's quick-time event is an `oQuicker` (press the key its `key` 0-5 shows,
@@ -373,11 +375,11 @@ The pipeline lives in `migrate.mjs`. It copies the project, unpacks the code, ap
     x = 396 fits one) → `oExit202` → `RomSewerCesspool` → `oExit215` → `RomSewerCyberhome` (plot 7); plot 8 is the
     Jordan/Vince fight in `RomChurch` (`oIntro11`).
   - Plot 3 needs `global.scheme[0]>=2` (talk to `oLarry` in `RomChurch`) and `global.scheme[3]=1` (talk to `oChin` in `RomStore0`), then a return to the apartment.
-  - **A battle or a death mid-walk is never an exit's destination** (`INTERRUPTS` in `fuzz-page.js`: `RomInter`, `RomGameover`); otherwise a random encounter during a door walk made that door look ambiguous and `loadCorpus` dropped it.
+  - **A battle or a death mid-walk is never an exit's destination** (`INTERRUPTS` in `fuzz/page/walk.js`: `RomInter`, `RomGameover`); otherwise a random encounter during a door walk made that door look ambiguous and `loadCorpus` dropped it.
   - **A node keeps its snapshot only when it owns a feature no other node owns**, and `choose()` draws only from nodes with a snapshot. So if an owner loses the state it claimed features from, the search is walled out of that room for good. `rebase()` (after a build change) replays each kept path from a fresh page and now refuses to let a replay that drifted to another room/plot inherit the features; `loadCorpus()` drops any feature whose room disagrees with its owner's room (and its `log` entries). Signature of this failure: the run status's `furthest` (computed over nodes that have a snapshot) is behind the corpus's `maxPlot`.
   - When reading a corpus by hand, globals in a snapshot's `resume` JSON are stored under their plain names (`plot`, `skipper`), not the page's `gml`-prefixed names.
   - The fuzzer's "frames" are game steps. The rooms' GMX `<speed>` is 30, but `oController` sets `room_speed` 60 in play, so 60 steps are a second.
-  - `HARNESS` in `fuzz.mjs` is folded into the corpus build id; bump it when a harness change makes recorded paths play differently. `setPort(n)` and the exported `Browser`/`Fuzzer`/`harness`/`serve` make one-off probe scripts easy (the CLI runs only under `import.meta.main`).
+  - `HARNESS` in `fuzz/lib/corpus.mjs` is folded into the corpus build id; bump it when a harness change makes recorded paths play differently. `setPort(n)` and the exported `Browser`/`Fuzzer`/`harness`/`serve` make one-off probe scripts easy (the CLI runs only under `import.meta.main`).
 - **The page (`src/web/`)** is a Vite + SolidJS + TypeScript project, the one part of the port with npm packages (`src/page.mjs` runs `npm ci` when `node_modules` is missing or older than the lockfile, then `npm run build`: `tsc --noEmit`, then `vite build` into `build/web/`). It builds **one classic IIFE script, `app/barkley.js`, plus `app/barkley.css`**, strict (Rolldown drops `"use strict"` unless `output.strict: true`) and unminified (~116 KB, ~31 KB gzipped; readable in a deployed build). `public/` is copied as it is: `sw.js` to the root and the font to `app/`. `offline.mjs`'s `writeBuild` copies `build/web/` over every HTML5 build before writing `version.json`, so **a page change never needs a re-import**. Layout:
   - `index.html`: Igor's page template (the runtime's `$RT/html5/index.html`, LF, with its `${GM_HTML5_*}` placeholders): the metas and PWA links, `app/barkley.css`, the `@font-face` and the runtime's own CSS (canvas, `#loading_screen` hidden, the `gm4html5_*` classes), `<div id="page">` and `<script src="app/barkley.js" data-folder="${GM_HTML5_GameFolder}">` **before the game's script** (the runtime captures `requestAnimationFrame` as its script runs, so the hooks must already be in; a module script would run after it), then the game's script and `window.onload = barkley.load`, as the runtime's own template has `window.onload = GameMaker_Init`. `import.mjs` copies it beside the HTML5 options; `fuzz.mjs build` copies it in fresh on every build.
   - `src/main.tsx`: the entry. Sets `window.barkley` (`started`, `load`, `ready`, `start(fresh)`, `controls()`, `offlineSave()`, `extension(name)`, and `resumeState`/`padMuted` for `js:` probes), installs the runtime hooks (not under `window.__fuzz`), puts the GML's functions on `window` (`extensions/index.ts`), offers the install prompt, and renders `ui/App.tsx` into `#page`.
@@ -404,7 +406,7 @@ The pipeline lives in `migrate.mjs`. It copies the project, unpacks the code, ap
   - An unmatched glob such as `rm s[0-9]*` aborts the whole command. Use explicit names or `find`.
   - There's no `timeout` command (use `perl -e 'alarm N; exec @ARGV' …`).
   - `cat` and `strings` are BSD versions: use `cat -vet`, not `cat -A`; `strings` has no `-el`.
-  - `pgrep -f`/`pkill -f` match their own shell: anchor the pattern (`pgrep -f "^node src/fuzz.mjs run"`). To stop a fuzz run, send one SIGINT to the node process only; `pkill -INT -f` also hits the shell wrapper, which counts as a second Ctrl-C and exits without the final save.
+  - `pgrep -f`/`pkill -f` match their own shell: anchor the pattern (`pgrep -f "^node fuzz/fuzz.mjs run"`). To stop a fuzz run, send one SIGINT to the node process only; `pkill -INT -f` also hits the shell wrapper, which counts as a second Ctrl-C and exits without the final save.
 - The filesystem is case-insensitive. The export lost `sa`/`sA` and `bgm_Init`/`bgm_init` to case collisions, so rename through a temporary name. **On Linux (CI) both survive** from `virt/`'s tar; `migrate.mjs` drops `sa.gml` when `sA.gml` is also there, and the Linux migration then matches the Mac one except for PNG bytes (ffmpeg/zlib builds differ; all 140 are pixel-identical).
 - **Editing this file:** a JS `String.replace` replacement string containing `$` can splice the file (`` $` `` inserts everything before the match, `$'` everything after). Use a replacer function, `split/join`, or Python's `str.replace`. Write the whole new file to `<name>.new`, `mv` it into place, and check it (`wc -l`, one `## ` per section).
 - **The LTS importer silently skips any file it can't parse.** It logs "Too many errors - GML not processed" in `<project>/notes/compatibility_report_*/*.txt`, and the file keeps its 1.4 syntax, which then fails to compile with "invalid token '". Fixed causes so far: a modern keyword used as a name (`throw`), and a parenthesised statement as an `if`/`repeat` body. When a compile error names a file, check the report first.
@@ -461,14 +463,14 @@ The pipeline lives in `migrate.mjs`. It copies the project, unpacks the code, ap
 - **`playtest.mjs` keys don't activate a focused page button:** it sends CDP `keyDown` without `text`, so no char event follows and Enter never clicks the button. Page key handling that should work from a playtest has to act on `keydown` itself (as the Start screen's handler does).
 - **Homebrew autoupdate can unlink node mid-session** (`/usr/local/bin/node` disappears while `brew_autoupdate` runs). Use `/usr/local/opt/node/bin/node`, or put `/usr/local/opt/node/bin` first on PATH, since `deploy.mjs` and `fuzz.mjs` spawn `node` by name. Don't touch brew itself.
 - **A heavy game frame can stall the page for ~800 ms**, so a `js:` probe asserting on a `setTimeout` needs well over a second of slack. It also delays CDP touch events (a `tap:` of 30 ms arrived with 844 ms between down and up), so to test a tap shorter than the overlay's 100 ms minimum hold, dispatch `PointerEvent`s on `#gmtouch-hit` from a `js:` step.
-- **Fuzz harness lessons** (all handled in `fuzz-page.js`):
+- **Fuzz harness lessons** (all handled in `fuzz/page/`):
   - Everything that calls into the game is a `'use strict'` function, so the `yyError` caller walk stops (V8 returns `null` for a strict caller).
   - An exception inside a Draw event leaves a surface target set ("Unbalanced surface stack" next frame); reset with `surface_reset_target()` until the stack is empty.
   - Functions the game's scripts declare (`resume_take`, `game_end`, `gml_Script_*`) overwrite anything set before the bundle loads; replace them after the game runs.
   - Each page's AudioWorklet runs on a real-time thread and a dozen browsers starve each other; launch without `--autoplay-policy=no-user-gesture-required` and suspend the context.
   - Stub only WebGL `draw*`/`clear`; stubbing stateful calls breaks the runtime's GL state cache.
   - This laptop (i9-9980HK, 8 cores) scales to about 8 browsers; 12 was slower.
-  - Every `requestAnimationFrame` must be the runtime's frame: the touch extension (`touch_pin`) and the gamepad's (`pad_poll`) run their own rAF loops; once one became `frameCb`, a restart scheduled only it and the game froze in `RomStarter` (every restore "did not finish (phase 0)", then `choose()` crashed on an empty pool). The page starts neither under `window.__fuzz`, and the harness also drops them by function name (`OWN_LOOPS` in `fuzz-page.js`) for builds that do. **A new frame loop in the page must not start under `fuzz` either.**
+  - Every `requestAnimationFrame` must be the runtime's frame: the touch extension (`touch_pin`) and the gamepad's (`pad_poll`) run their own rAF loops; once one became `frameCb`, a restart scheduled only it and the game froze in `RomStarter` (every restore "did not finish (phase 0)", then `choose()` crashed on an empty pool). The page starts neither under `window.__fuzz`, and the harness also drops them by function name (`OWN_LOOPS` in `fuzz/page/clock.js`) for builds that do. **A new frame loop in the page must not start under `fuzz` either.**
   - The runtime paces frames itself: after each frame it sets a `setTimeout` for the rest of `1000/room_speed` from `_BE3`, and that timer requests the next rAF. Those are the only timers the game sets.
   - `instance_destroy` only marks an instance; the runtime removes marked ones near the end of the next frame (`_d4._Jm3()`), and removing one clears the id map entry for its id even if a new instance has that id by then. So never wind the id counter back below a destroyed instance that hasn't been swept.
   - `Browser.boot()` can return before the pump sees Game Start, and then `hook()` stops the pump: capture first-Game-Start state in `hook()`.
@@ -570,23 +572,26 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   which then completes; `?nosw` shows the version alone. Not checked on the live site or a real device.
 - **Offline play works headlessly** (2026-09-20, on a plain `fuzz.mjs build` of the same offline code that shipped in v1.1.0, driven over CDP): a first visit cached all 260 files (101 MB; the 50 MB of streamed music comes after what the game needs to start); with the server killed, the site root still loaded and the game reached the title screen with no exception; an update whose manifest listed a file that 404s left the build in use serving and untouched (261 entries) with the half-downloaded one beside it (233); the fixed update downloaded in full, took over, and only then was the old cache dropped. The Start screen showed `v1.0.0 · Saving for offline play N%` and then `v1.0.0 · Ready to play offline`.
 - **Patch 19** (older, still current): battles drew as a blank `#FFFFF7` screen with the menu boxes floating on it, because LTS clears a viewport before drawing it and the battle's HUD view (view 1) wiped the field (view 0). Checked headlessly on this build: a forced `oBDreadref` battle draws the backdrop, battlers, shadows and HUD; the opening zoom-in (`trn=1`) plays with the HUD at 1:1; running from the battle returns to a room that draws normally (so `view_surface_id[0]` is released); a normal boot to a new game is unchanged; no exception in any run. Earlier, on v34's page: the fast skip that doubled the music now plays `mSadness` alone; a new game, resume and "Start from the title screen" after a reload work; landscape with 59/59/21 px insets forced: a tap at x 12 doesn't steer, a drag over the picture does, the zone is 568 of 852 px, the D-pad keeps its 164 px bar, Side = Left mirrors onto the right inset, and with the controls Off the settings button alone shows and turns them back on; portrait with 59/34 px insets keeps the picture and note below the top inset. The status bar change can only be seen on an iPhone.
-- **Fuzzer (2026-09-25/26, on `barkley-1.4.1`):** the corpus is in git (`fuzz/corpus.json.gz`), `verify` exists, and
-  every pull request runs it (`pr.yml`; PR #5's run `36198303066` replayed 222 of 222 spine paths exactly on Linux).
-  About ten hours of runs rebuilt the corpus from the old one and took it to **plot 5,
-  19 story rooms**; a local `verify` then replayed 414 of 415 spine paths exactly. The reach fixes are in `src/README.md` ("Fuzzing"): quick-time events and dialog choices, the
-  room-entry freeze, and a fighter that reads the battle menu, times Barkley's attacks on `oBTimer` and uses items,
-  skills and defend. **One new crash, fixed:** a foe killed on its own turn left `global.turn` dangling
-  (`20-battle-dead-turn`; `run15/crashes/10`). The nine older crash classes did not come up in any run. **Next wall:
-  the plot-5 boss** (`oBBallmonster`, 1317 vitality, in `oIntro7`'s cutscene; plot 6, `RomSewer0`, needs it beaten).
-  The search gets it to about 1/20 of its vitality (the cell `RomInter|5|0|oBBallmonster:1.3:1`), but by then
-  Balthios is down and Barkley too weak to survive its next move. Winning probably needs a stronger party going in
-  (levels, healing items) rather than a better fight. Check progress by the boss cells in the corpus's `features`,
-  not by `furthest`.
+- **Fuzzer (2026-10-02, on `barkley-1.4.1`, branch `fuzz-further`):** the corpus is in git (`fuzz/corpus.json.gz`)
+  and every pull request runs `verify` (`pr.yml`). The corpus now reaches **plot 7, `RomSewerCyberhome`**, past the
+  plot-5 boss and through the sewers. The reach fixes are in `fuzz/README.md`:
+  - the other fighters' attacks get their presses;
+  - healers (`sFullheal` callers, such as the Shark at `RomSewerInn`) are visited by a `heal` generator;
+  - the frontier keeps healthy, levelled parties;
+  - Cyberdwarf's attack is a combo meter, played by `combo()` in `fuzz/page/generators.js`.
+
+  **Next wall: the plot-7 boss fight** (`oIntro11` in `RomChurch`: `oBJordan` level 16, 909 vitality, and `oBVinceE`
+  level 14, 1137 vitality; plot 8 is set after it). From a healed, level-12 node (19258), one seed of three won it once
+  the combo player was in, and all three lost before. A 110-minute run on the restructured code got as far as
+  plot-7 fights but not to plot 8. The only crash seen is #12, a restore artifact: it reproduces from its snapshot but
+  not from a fresh page. **The fuzzer was split out of `src/` into `fuzz/`** (Node side in `fuzz/lib/`, page side in
+  `fuzz/page/`, joined into one script by `harness.mjs`). Check progress by the boss cells in the corpus's
+  `features`, not by `furthest`.
 - **Stale paths in the working copy (found 2026-10-01, fixed in `rebase()`):** a rebase checked only the nodes that owned
   features, and left every other node in `build/fuzz/corpus` with the probes of the build it was recorded on. The local
   working copy still has about 2,000 such nodes (5,156 against the packed file's 3,126), among them node 11809, a
   122,450-step path recorded at plot 5 that sticks at plot 2 on this build. Nothing reads them but a hand replay or
-  `video.mjs --corpus=build/fuzz/corpus`; the next rebase drops them, or delete `build/fuzz/corpus` and the next
+  `fuzz/video.mjs --corpus=build/fuzz/corpus`; the next rebase drops them, or delete `build/fuzz/corpus` and the next
   `run --corpus` unpacks and rebases the packed file (~6 min on 6 browsers; checked on a copy: 2,628 of 2,628 exact).
 - **Fuzzer restores replay exactly** (2026-09-18; checked again 2026-10-01 on `barkley-1.4.1`: node 13959, 99,191
   frames with 185 restores, ends at the same spot from a fresh page, and a restore is the same whatever the browser ran
@@ -599,7 +604,7 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   - The offline link on a real build and a real phone, and whether desktop F11 fullscreen counts as `display-mode:
     fullscreen` in `isApp()` (then a tab in F11 would download on its own, as an app does).
   - Offline play in a real browser: Safari and an installed iOS app (storage quota — 101 MB is a lot to ask of Safari's, and a home-screen app has its own), a real flight-mode launch, and an update arriving at a browser that already holds an older build of the live site (the headless checks above used a local server). The service worker is never exercised by a play-test or a fuzz run, which both keep it out.
-  - A real player's crash report through `fuzz.mjs replay` (a headless one works; see Known bugs).
+  - A real player's crash report through `fuzz/fuzz.mjs replay` (a headless one works; see Known bugs).
   - Resume: after a real reload (the fuzzer's in-place restores checked battles and path-following instances), looping ambient sounds, cinema background toggles, a real browser reload or tab close, two tabs at once (they share the key). Known limits: up to 30 steps are lost, Start still needs a click, fullscreen, held keys and playing sound effects aren't restored.
   - Saves panel's Copy/Download/file-picker buttons in a real browser; that the volume change is audible (playtests are muted).
   - Fullscreen appearance and a real Esc in Chrome and Safari; the room-name banner and save-slot location names (`sRoomCaption`) on screen; saving outside a pump room. A pump save records the player position as -1, as in GM6.
