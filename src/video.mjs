@@ -7,7 +7,8 @@
 // sets room_speed 60; a few intro rooms run slower) and the video at 60 frames a second, so --speed=1 (the default) is
 // real time and --speed=N draws every Nth step; a huge --speed only checks that the path replays. The canvas is
 // captured after each drawn step and piped to ffmpeg, scaled 2x (nearest neighbour); there's no sound (the fuzz page
-// runs the game muted). Writes <out>.txt beside it: when each room and plot is reached, in video time.
+// runs the game muted). Writes <out>.txt beside it: when each room and plot is reached, in video time. Exits 1 on a
+// crash or when the path ends anywhere but where the corpus recorded it.
 import { spawn } from 'node:child_process';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -157,4 +158,4 @@ timeline.push('', res.crash ? `crash: ${res.crash.message}` : end);
 writeFileSync(`${out}.txt`, `${timeline.join('\n')}\n`);
 console.log(res.crash ? `crash at step ${done}: ${res.crash.message}` : end);
 console.log(`${out} (${Math.round((Date.now() - started) / 60000)} min)`);
-process.exit(res.crash ? 1 : 0);
+process.exit(res.crash || !same ? 1 : 0);
