@@ -361,7 +361,8 @@ function randomProgram(frames) {
 }
 // Generators run in the page (fuzz-page.js): dialog, exit, talk, seek, travel, battle. Their base weights; each is then
 // scaled by how much it has found lately per frame played.
-const GENERATORS = { talk: 3, exit: 3, seek: 2, travel: 1.5, dialog: 0.5, battle: 0 };
+// heal only counts where the party is hurt (pickGenerator).
+const GENERATORS = { talk: 3, exit: 3, seek: 2, travel: 1.5, dialog: 0.5, battle: 0, heal: 0 };
 const retime = (prog) => prog.map(([k, n]) => [k, Math.max(1, Math.round(n * (0.7 + Math.random() * 0.6)))]);
 const frameCount = (prog) => prog.reduce((a, [, n]) => a + n, 0);
 
@@ -792,9 +793,52 @@ class Fuzzer {
 		this.rootFlags ??= flags;
 		let changed = 0;
 		for (const [k, v] of flags) if (this.rootFlags.get(k) !== v) changed++;
-		// plot, then the next plot's conditions met (see __fuzz.goals), rooms on the path, story globals changed
+		// plot, then the next plot's conditions met (see __fuzz.goals), how much the party has fought (levels and
+		// experience: the next boss may need a stronger party, not a better fight), how far a boss fight has got, rooms
+		// on the path, story globals changed; all within the plot's thousand
 		const plot = typeof g.plot === 'number' ? g.plot : 0;
-		n.progress = plot * 1000 + this.goalsMet(g, plot + 1) * 100 + n.rooms.length * 10 + Math.min(changed, 9);
+		let xp = 0,
+			lv = 0,
+			hp = 0,
+			max = 0;
+		for (let i = 0; i < 8 && Array.isArray(g.party) && g.party[i] >= 0; i++) {
+			xp += Math.max(0, Number(g.char_xp?.[g.party[i]]) || 0);
+			lv += Number(g.char_res1?.[g.party[i]]) || 0;
+			hp += Math.max(0, Number(g.char_chp?.[g.party[i]]) || 0);
+			max += Math.max(0, Number(g.char_hp?.[g.party[i]]) || 0);
+		}
+		// (probes from before these fields, filled in from the snapshot)
+		n.probe.xp ??= Math.floor(xp);
+		n.probe.lv ??= lv;
+		n.probe.hp ??= max ? Math.round((100 * hp) / max) / 100 : 1;
+		// between fights, the party's vitality: it carries into the next fight, a boss's too
+		const health = n.probe.foes === undefined && max ? Math.round((40 * hp) / max) : 0;
+		n.progress =
+			plot * 1000 +
+			Math.min(
+				999,
+				this.goalsMet(g, plot + 1) * 100 +
+					Math.min(lv * 25 + Math.floor(xp / 100), 300) +
+					this.fightScore(n.probe) +
+					health +
+					Math.min(n.rooms.length, 10) * 5 +
+					Math.min(changed, 9),
+			);
+	}
+
+	get bosses() {
+		this._bosses ??= new Set(this.goals?.bosses ?? []);
+		return this._bosses;
+	}
+
+	// How far a boss fight has got (0-200): the boss's vitality taken, then the party's left. Ordinary fights score 0,
+	// so they don't outweigh the map: their end is a return to it, which the cells see anyway.
+	fightScore(probe) {
+		const m = probe?.foes?.match(/^(\w+):([\d.]+):(\d+):?(\d*)$/);
+		if (!m || !this.bosses.has(m[1])) return 0;
+		const [e, sub] = m[2].split('.').map(Number);
+		const left = sub ? sub / 64 : e / 8; // the boss's vitality left, 0-1
+		return Math.round(150 * (1 - left) + 10 * Number(m[3]) + 5 * (Number(m[4]) || 0));
 	}
 
 	// A global becomes volatile once it (or one of its array elements) has had too many values; its flags stop being
@@ -802,7 +846,9 @@ class Fuzzer {
 	learnValue(flag) {
 		const name = flag.slice(0, flag.search(/[[=]/));
 		if (this.volatile.has(name)) return false;
-		if (name === 'goal') return true; // the page's goal mask (goal=plot:bits) has few values and must stay a feature
+		// the page's goal mask (goal=plot:bits) has few values and must stay a feature; its party experience (xp=<step>)
+		// has many, every one of them progress
+		if (name === 'goal' || name === 'xp') return true;
 		const key = flag.slice(0, flag.indexOf('='));
 		const set = this.values.get(key) ?? new Set();
 		this.values.set(key, set.add(flag));
@@ -815,20 +861,31 @@ class Fuzzer {
 	}
 
 	// A node to explore from: nodes chosen less often, found recently, that found more, and further in the story
-	// weigh more; menu rooms hardly count. Some picks only look at the furthest plot, or at the furthest nodes.
+	// weigh more; menu rooms hardly count. Most picks go to the furthest plot or the one before it (where the party
+	// grows strong enough for what stops it), each plot's nodes taken together, so a thousand nodes of an old plot
+	// don't outweigh the twenty of a new one; half of those look only at the plot's best nodes.
 	choose() {
 		const now = Date.now();
 		const all = this.candidates.filter((n) => !n.bad);
 		const top = (a) => a.reduce((m, n) => Math.max(m, n.progress), -Infinity);
 		let pool = all;
 		const r = Math.random();
-		if (r < 0.4) {
-			const story = all.filter((n) => !MENU_ROOMS.has(n.probe.room));
-			const t = top(story);
-			const near = story.filter(
-				(n) => Math.floor(n.progress / 1000) === Math.floor(t / 1000) && (r < 0.2 || n.progress >= t - 15),
-			);
-			if (near.length) pool = near;
+		if (r < 0.85) {
+			const plots = new Map();
+			for (const n of all)
+				if (!MENU_ROOMS.has(n.probe.room)) {
+					const p = Math.floor(n.progress / 1000);
+					plots.set(p, [...(plots.get(p) ?? []), n]);
+				}
+			const order = [...plots.keys()].sort((a, b) => b - a);
+			const x = Math.random();
+			const tier = x < 0.55 ? 0 : x < 0.85 ? 1 : 2 + Math.floor(Math.random() * Math.max(1, order.length - 2));
+			const p = order[Math.min(tier, order.length - 1)];
+			if (p !== undefined) {
+				pool = plots.get(p);
+				const t = top(pool);
+				if (Math.random() < 0.5) pool = pool.filter((n) => n.progress >= t - 60);
+			}
 		}
 		const hi = top(pool);
 		const lo = pool.reduce((m, n) => Math.min(m, n.progress), Infinity);
@@ -836,7 +893,7 @@ class Fuzzer {
 			(n) =>
 				(1 / Math.sqrt(1 + n.chosen)) *
 				(1 + 0.25 * Math.log2(1 + Math.min(n.owns, 64))) *
-				(1 + (hi > lo ? (n.progress - lo) / (hi - lo) : 0)) *
+				(1 + (hi > lo ? (3 * (n.progress - lo)) / (hi - lo) : 0)) *
 				(1 + 2 * Math.exp(-(now - n.t) / 180000)) *
 				(MENU_ROOMS.has(n.probe.room) ? 0.03 : 1),
 		);
@@ -856,7 +913,8 @@ class Fuzzer {
 	// with bits of macros between them.
 	program(node) {
 		const frames = rnd(90, 1200);
-		if (Math.random() < 0.35) {
+		const fight = node.probe.foes !== undefined || node.probe.room === 'RomInter';
+		if (Math.random() < (fight ? 0.1 : 0.35)) {
 			const d = this.dict.get(node.probe.room);
 			if (d?.length && Math.random() < 0.25) return [...retime(pick(d)), ...randomProgram(frames / 2)];
 			return randomProgram(frames);
@@ -876,6 +934,7 @@ class Fuzzer {
 			if (node.probe.foes !== undefined || node.probe.room === 'RomInter')
 				base = g === 'battle' ? 10 : g === 'dialog' ? 1 : 0;
 			if (g === 'travel' && !this.goalRoom(node)) base = 0;
+			if (g === 'heal' && node.probe.room !== 'RomInter') base = node.probe.hp < 0.8 ? 6 * (1 - node.probe.hp) : 0;
 			const s = this.genStats[g] ?? { found: 0, frames: 0 };
 			return [g, base * (0.5 + Math.min(3, (s.found + 1) / (s.frames / 10000 + 1)))];
 		});
@@ -920,6 +979,8 @@ class Fuzzer {
 		const program = res.rec; // what actually ran (generators recorded as plain input)
 		this.stats.episodes++;
 		this.stats.frames += res.frames;
+		this.stats.byPlot ??= {};
+		this.stats.byPlot[from.probe.plot] = (this.stats.byPlot[from.probe.plot] ?? 0) + res.frames;
 		for (const [g, f] of Object.entries(res.genFrames ?? {})) {
 			this.genStats[g] ??= { found: 0, frames: 0 };
 			this.genStats[g].frames += f;
@@ -1124,6 +1185,21 @@ class Fuzzer {
 			`${dur(t)}, ${this.workers.length} workers: ${s.episodes} episodes (${(s.episodes / (t / 1000)).toFixed(1)}/s), ${s.frames} frames (${fps.toFixed(0)}/s, ${(fps / 60).toFixed(0)}x real time, ${(s.frames / 216000).toFixed(1)} h of play), ${s.restarts} browser restarts`,
 			`archive: ${this.nodes.size} nodes; features: ${kinds.c} cells, ${kinds.v} room×function, ${kinds.f} flags; ${this.volatile.size} volatile globals`,
 			`furthest: ${furthest ? `${furthest.probe.room} plot ${furthest.probe.plot}, ${furthest.rooms.length} rooms on its path, ${(furthest.frames / 60).toFixed(0)} s of play` : '-'}`,
+			`play by plot started from: ${Object.entries(s.byPlot ?? {})
+				.map(([p, f]) => `${p} ${((100 * f) / Math.max(1, s.frames)).toFixed(0)}%`)
+				.join(', ')}; strongest party: ${(() => {
+				const n = [...this.nodes.values()]
+					.filter((n) => n.snap)
+					.sort((a, b) => (b.probe.xp ?? 0) - (a.probe.xp ?? 0))[0];
+				return n?.probe.xp !== undefined
+					? `levels ${n.probe.lv}, ${n.probe.xp} xp (${n.probe.room} plot ${n.probe.plot})`
+					: '-';
+			})()}; best boss fight: ${(() => {
+				const n = [...this.nodes.values()]
+					.filter((n) => n.snap && this.fightScore(n.probe) > 0)
+					.sort((a, b) => this.fightScore(b.probe) - this.fightScore(a.probe))[0];
+				return n ? `${n.probe.foes} (plot ${n.probe.plot}, levels ${n.probe.lv})` : '-';
+			})()}`,
 			`story rooms ${this.storyRooms.size}: ${[...this.storyRooms].join(' ')}; ${this.exits.size} exits taken, ${this.talked.size} things talked to`,
 			`found per 10k frames: ${Object.entries(this.genStats)
 				.map(([g, v]) => `${g} ${((v.found * 10000) / Math.max(1, v.frames)).toFixed(1)}`)

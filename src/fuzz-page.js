@@ -126,6 +126,11 @@
 		fnIds = new Map();
 	let seg = new Uint8Array(0),
 		segList = [];
+	// A GML function's own code (the global is the coverage wrapper once instrumented)
+	const sourceOf = (name) => {
+		for (const [fn, w] of fnIds) if (fn !== w && fn.name === name) return fn.toString();
+		return window[name]?.toString() ?? '';
+	};
 	F.instrument = () => {
 		const wrap = (fn) => {
 			if (fnIds.has(fn)) return fnIds.get(fn);
@@ -496,22 +501,30 @@
 		}
 		for (const t of s.talked ?? []) known.talked.add(t);
 	};
-	// In a battle: the first enemy, the eighths of the enemies' vitality left and the party members standing, e.g.
-	// 'oBBallmonster:3:2'. As part of the cell it gives a battle somewhere to go: a state that got a boss lower is new.
-	// Undefined outside a fight. (Not global.battlers: that counts the monsters roaming a map room, so it stays set in a
-	// fight that began there and is 0 in a boss fight a cutscene starts.)
+	// In a battle: the first enemy, the eighths of the enemies' vitality left, the party members standing and the
+	// quarters of the party's vitality left, e.g. 'oBBallmonster:3:2:4'. As part of the cell it gives a battle somewhere
+	// to go: a state that got a boss lower is new, and so is one that got it as low with the party in better shape (with
+	// only the first two, whichever state got there first kept the cell, usually one with the party nearly dead, and the
+	// search could get a boss to its last 5% but never past it). Undefined outside a fight. (Not global.battlers: that
+	// counts the monsters roaming a map room, so it stays set in a fight that began there and is 0 in a boss fight a
+	// cutscene starts.)
 	const foes = () => {
 		let n = 0,
 			name = '',
 			vp = 0,
 			max = 0,
-			up = 0;
+			up = 0,
+			pvp = 0,
+			pmax = 0;
 		for (const i of GetWithArray(asset_get_index('oBattler'))) {
 			if (!i || i.marked) continue;
 			n++;
 			const v = Math.max(0, Number(i.gml_vp) || 0);
-			if (Number(i.gmlenemy) !== 1) up += v > 0 ? 1 : 0;
-			else {
+			if (Number(i.gmlenemy) !== 1) {
+				up += v > 0 ? 1 : 0;
+				pvp += v;
+				pmax += Math.max(v, Number(i.gml_rvp) || 0);
+			} else {
 				name ||= objName(i);
 				vp += v;
 				max += Math.max(v, Number(i.gml_rvp) || 0);
@@ -520,7 +533,36 @@
 		// The last eighth in eighths of its own ('1.3'), so the search still sees a boss brought lower near the end
 		const e = max ? Math.ceil((8 * vp) / max) : 0;
 		const left = e === 1 ? `1.${Math.ceil((64 * vp) / max)}` : e;
-		return n ? `${name}:${left}:${up}` : undefined;
+		const hp = pmax ? Math.ceil((4 * pvp) / pmax) : 0;
+		return n ? `${name}:${left}:${up}:${hp}` : undefined;
+	};
+	// The party's experience and levels (global.char_xp, char_res1), summed over its members, and the share of its
+	// vitality left between fights (char_chp of char_hp; a fight's vitality carries over, so the party can walk into
+	// a boss nearly dead: it met the plot-5 one at 79/418 and 1/290)
+	const party = () => {
+		const g = gml();
+		let xp = 0,
+			lv = 0,
+			hp = 0,
+			max = 0;
+		for (let i = 0; i < 8 && Array.isArray(g.gmlparty) && Number(g.gmlparty[i]) >= 0; i++) {
+			const m = Number(g.gmlparty[i]);
+			xp += Math.max(0, Number(g.gmlchar_xp?.[m]) || 0);
+			lv += Number(g.gmlchar_res1?.[m]) || 0;
+			hp += Math.max(0, Number(g.gmlchar_chp?.[m]) || 0);
+			max += Math.max(0, Number(g.gmlchar_hp?.[m]) || 0);
+		}
+		return { xp: Math.floor(xp), lv, hp: max ? Math.round((100 * hp) / max) / 100 : 1 };
+	};
+	// Items that restore vitality, by name, from refItem's own code ('Single, VP +%66')
+	let healing = null;
+	const heals = () => {
+		healing ??= new Set(
+			[...sourceOf('gml_Script_refItem').matchAll(/yyfequal\(argument0,"([^"]+)"\)\)\s*\{[^}]*?gmltEffect="([^"]*)"/g)]
+				.filter((m) => /VP \+/.test(m[2]))
+				.map((m) => m[1]),
+		);
+		return healing;
 	};
 	F.probe = () => {
 		const g = gml();
@@ -534,9 +576,15 @@
 			y: p ? Math.round(p.y) : null,
 			frame: F.frame,
 			foes: safe(foes, undefined),
+			...safe(party, {}),
 		};
 	};
-	const cellOf = (p) => `${p.room}|${p.plot}|${p.battle}|${p.foes ?? (p.x == null ? '-' : `${p.x >> 5},${p.y >> 5}`)}`;
+	const XP_STEP = 40;
+	// Where the player stands, in 32 px. In a room with monsters roaming (battle 1) also the third of the party's
+	// vitality left: every walk there is a fight, a cell was kept by whichever state reached it first, often with the
+	// party nearly dead, and the search never got a healthy party past RomSewer1's seven monsters.
+	const spot = (p, x, y) => `${x >> 5},${y >> 5}${p.battle ? `:${p.hp >= 0.67 ? 2 : p.hp >= 0.34 ? 1 : 0}` : ''}`;
+	const cellOf = (p) => `${p.room}|${p.plot}|${p.battle}|${p.foes ?? (p.x == null ? '-' : spot(p, p.x, p.y))}`;
 	// The globals' values as flags: 'name=value', 'name[i]=value', 'name[i][j]=value'
 	const flagsNow = (out) => {
 		const g = gml();
@@ -556,6 +604,10 @@
 					else for (let j = 0; j < v[i].length && j < 64; j++) add(`${name}[${i}][${j}]`, v[i][j]);
 		}
 		out.push(`goal=${goalMask()}`);
+		// The party's experience in steps of XP_STEP: char_xp churns too much to be a feature itself, so without this a
+		// state that had won more fights was no different from one that hadn't, and the party met the plot-5 boss (level
+		// 12) at level 2. Each step is new, so the search keeps a trail of ever stronger parties to explore from.
+		out.push(`xp=${Math.floor(safe(party, { xp: 0 }).xp / XP_STEP)}`);
 		return out;
 	};
 	// Which of the next plot's conditions (fuzz.mjs goalConds, sent with each episode) hold, as 'plot:bits'
@@ -657,13 +709,18 @@
 		const W = Math.ceil(rm.width / CELL) + 1,
 			H = Math.ceil(rm.height / CELL) + 1;
 		const blocked = new Uint8Array(W * H);
+		// The player's box is taken SLACK px smaller on each side: a gap exactly as wide as the box (a 16 px ladder
+		// between walls) is passable at one position only, which the grid only has when the player happens to stand on
+		// it. Walking into a wall within 13 px of a gap, the game slides the player into it (oPlayer's step), so the
+		// route only needs to get close. Before this, the ladder up RomSewer1 was never climbed.
+		const SLACK = CELL / 2;
 		for (const i of instances()) {
 			if (!i.solid || i === p || ignore?.has(i) || isFollower(objName(i))) continue;
 			const [l, t, r, b] = bbox(i);
-			const x0 = Math.max(0, Math.ceil((l - off[2] - ox) / CELL)),
-				x1 = Math.min(W - 1, Math.floor((r - off[0] - ox) / CELL));
-			const y0 = Math.max(0, Math.ceil((t - off[3] - oy) / CELL)),
-				y1 = Math.min(H - 1, Math.floor((b - off[1] - oy) / CELL));
+			const x0 = Math.max(0, Math.ceil((l - off[2] + SLACK - ox) / CELL)),
+				x1 = Math.min(W - 1, Math.floor((r - off[0] - SLACK - ox) / CELL));
+			const y0 = Math.max(0, Math.ceil((t - off[3] + SLACK - oy) / CELL)),
+				y1 = Math.min(H - 1, Math.floor((b - off[1] - SLACK - oy) / CELL));
 			for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) blocked[y * W + x] = 1;
 		}
 		const sx = Math.round((p.x - ox) / CELL),
@@ -722,14 +779,16 @@
 				yield [[choose(DIRS)], 8];
 				continue;
 			}
-			while (r.path.length && Math.abs(r.path[0][0] - p.x) < 2 && Math.abs(r.path[0][1] - p.y) < 2) r.path.shift();
+			// within half a cell is there: the route's slack (see route) leaves the last few pixels to the game's slide
+			const H = CELL / 2;
+			while (r.path.length && Math.abs(r.path[0][0] - p.x) <= H && Math.abs(r.path[0][1] - p.y) <= H) r.path.shift();
 			if (!r.path.length) return 'arrived';
 			const [wx, wy] = r.path[Math.min(1, r.path.length - 1)];
 			const keys = [];
-			if (wx - p.x > 1) keys.push('right');
-			if (wx - p.x < -1) keys.push('left');
-			if (wy - p.y > 1) keys.push('down');
-			if (wy - p.y < -1) keys.push('up');
+			if (wx - p.x > H) keys.push('right');
+			if (wx - p.x < -H) keys.push('left');
+			if (wy - p.y > H) keys.push('down');
+			if (wy - p.y < -H) keys.push('up');
 			if (sprint) keys.push('x');
 			still = p.x === lastX && p.y === lastY ? still + 4 : 0;
 			[lastX, lastY] = [p.x, p.y];
@@ -930,7 +989,7 @@
 		// Walks to a reachable spot the fuzzer hasn't been to
 		*seek(a) {
 			const p0 = F.probe();
-			const k = (x, y) => `${p0.room}|${p0.plot}|${p0.battle}|${x >> 5},${y >> 5}`;
+			const k = (x, y) => `${p0.room}|${p0.plot}|${p0.battle}|${spot(p0, x, y)}`;
 			const r = route((x, y) => !known.cells.has(k(x, y)) && rng() < 0.05 && 'new');
 			if (!r) return;
 			const [tx, ty] = r.path.at(-1) ?? [0, 0];
@@ -954,17 +1013,94 @@
 				}
 			}
 		},
+		// Uses a healing item from the start menu on whoever is lowest, while the party is below 80% of its vitality:
+		// Start, Items (right of Party), the item (right steps through the list in order), the party member, and out.
+		*heal() {
+			const g = gml();
+			const ids = g.gmlitem_id,
+				amounts = g.gmlitem_amount,
+				party = g.gmlparty;
+			if (busy() || !Array.isArray(ids) || !Array.isArray(party) || safe(roomName) === 'RomInter') return;
+			let worst = -1,
+				frac = 0.8;
+			for (let i = 0; i < 8 && Number(party[i]) >= 0; i++) {
+				const f = Number(g.gmlchar_chp?.[party[i]]) / Number(g.gmlchar_hp?.[party[i]]);
+				if (f < frac) [worst, frac] = [i, f];
+			}
+			const k = ids.findIndex((n, i) => heals().has(n) && Number(amounts?.[i]) > 0);
+			if (worst < 0 || k < 0) return;
+			const press = function* (key) {
+				yield [[key], 2];
+				yield [[], 6];
+			};
+			yield* press('c');
+			const menu = () => safe(() => inst('oStartmenu'));
+			if (!menu()) return;
+			for (let i = 0; i < 4 && Number(menu()?.gmlpos0) !== 1; i++)
+				yield* press(Number(menu()?.gmlpos0) < 1 ? 'right' : 'left');
+			yield* press('z');
+			if (Number(menu()?.gmlstage) === 2) {
+				for (let i = 0; i < k; i++) yield* press('right');
+				yield* press('z');
+				if (Number(menu()?.gmlstage) === 3) {
+					for (let i = 0; i < worst; i++) yield* press('down');
+					yield* press('z');
+				}
+			}
+			for (let i = 0; i < 6 && menu(); i++) yield* press('x');
+		},
 		// In a battle: action, cancel and the arrows, with the rhythm menus and combos take. Half the time it fights instead,
 		// reading the battle menu: attack and the first target, then an attack move (they are timing moves: hold a key and
 		// release it when the indicator lines up, so a tap barely ever hits), held for a random time.
 		*battle(a) {
-			if (rng() < 0.5) {
+			// a party member standing with less than 40% of their vitality
+			const low = () =>
+				safe(
+					() =>
+						GetWithArray(asset_get_index('oBattler')).some(
+							(i) =>
+								i &&
+								!i.marked &&
+								Number(i.gmlenemy) !== 1 &&
+								Number(i.gml_vp) > 0 &&
+								Number(i.gml_vp) < 0.4 * Number(i.gml_rvp),
+						),
+					false,
+				);
+			if (rng() < 0.8) {
 				for (let t = 0; t < a.n; ) {
-					const st = safe(() => inst('oBattleMenu')?.gmlstate);
+					const menu = safe(() => inst('oBattleMenu'));
+					const st = menu?.gmlstate;
 					if (st === 'names') {
-						// the menu is a cross: action alone attacks; with left held it opens skills, right items, up defends
-						const r = rng();
-						yield [r < 0.2 ? ['right', 'z'] : r < 0.3 ? ['left', 'z'] : r < 0.35 ? ['up', 'z'] : ['z'], 2];
+						// the menu is a cross: action alone attacks; with left held it opens skills, right items, up defends,
+						// down runs. Someone low on vitality makes items (most are for healing) and running much likelier:
+						// vitality carries from fight to fight, and a room's monsters (seven in RomSewer1) wear a party down.
+						// A boss can't be run from (it says so and the menu comes back).
+						const hurt = low();
+						const r = rng() - (hurt ? 0.4 : 0);
+						const keys =
+							rng() < (hurt ? 0.3 : 0.06)
+								? ['down', 'z']
+								: r < 0.2
+									? ['right', 'z']
+									: r < 0.3
+										? ['left', 'z']
+										: r < 0.35
+											? ['up', 'z']
+											: ['z'];
+						yield [keys, 2];
+						yield [[], 6];
+						t += 8;
+					} else if (st === 'target' && menu.gmlpretarget === 'Ally' && rng() < 0.5) {
+						// an item for someone else in the party
+						yield [['down'], 2];
+						yield [[], 4];
+						yield [['z'], 2];
+						yield [[], 6];
+						t += 14;
+					} else if ((st === 'items' || st === 'skills') && rng() < 0.25) {
+						// back out: a skill the turn hasn't the points for ignores action, and nothing else leaves the menu
+						yield [['x'], 2];
 						yield [[], 6];
 						t += 8;
 					} else if (st === 'items' || st === 'skills') {
@@ -1071,7 +1207,11 @@
 		}
 		for (const k in out) out[k] = [...new Set(out[k])];
 		for (const k in conds) conds[k] = [...new Map(conds[k].map((c) => [c.join(), c])).values()];
-		return { rooms: out, conds };
+		// the bosses: the battlers sBoss lines up ("oBBallmonster,12,56,112": object, level, position)
+		const bosses = [
+			...new Set([...sourceOf('gml_Script_sBoss').matchAll(/["'](oB\w+),\d+,\d+,\d+["']/g)].map((m) => m[1])),
+		];
+		return { rooms: out, conds, bosses };
 	};
 
 	// Known crash classes patched so the search can go on past them (fuzz.mjs --through): a number drawn as text,
