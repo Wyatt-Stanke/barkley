@@ -582,8 +582,10 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
 
   **Next wall: the plot-7 boss fight** (`oIntro11` in `RomChurch`: `oBJordan` level 16, 909 vitality, and `oBVinceE`
   level 14, 1137 vitality; plot 8 is set after it). From a healed, level-12 node (19258), one seed of three won it once
-  the combo player was in, and all three lost before. A 110-minute run on the restructured code got as far as
-  plot-7 fights but not to plot 8. The only crash seen is #12, a restore artifact: it reproduces from its snapshot but
+  the combo player was in, and all three lost before. A 110-minute run on the restructured code (60% of its play from
+  plot 7, best party level 12) got the pair no lower than 5/8 of their combined vitality (the cells
+  `RomInter|7|0|oBJordan:5:…`), so the search has not yet found the win by itself. Likely next steps: more levels
+  going in, or more episodes from healed plot-7 nodes. The only crash seen is #12, a restore artifact: it reproduces from its snapshot but
   not from a fresh page. **The fuzzer was split out of `src/` into `fuzz/`** (Node side in `fuzz/lib/`, page side in
   `fuzz/page/`, joined into one script by `harness.mjs`). Its `verify` replays the spine as before: on CI (PR #16,
   run `37058903057`) 993 of 997 paths exactly where recorded, and locally 1009 of 1013. In both, one path hit crash #12
