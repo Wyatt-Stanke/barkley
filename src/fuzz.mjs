@@ -1267,6 +1267,7 @@ class Fuzzer {
 						sync: this.syncFor(w),
 						seed: rnd(1, 2 ** 30),
 						goals: this.pageGoals,
+						goalRooms: this.goals?.rooms,
 					},
 					120000,
 				);

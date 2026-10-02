@@ -362,7 +362,16 @@ The pipeline lives in `migrate.mjs`. It copies the project, unpacks the code, ap
     starts); a fight is `RomInter`, where `probe.foes` reads the `oBattler`s; battle attacks are hold-and-release
     timing moves read from `oBattleMenu.state` (`names`, `target`, `postattack`), scored on the release (`sBarkDmg`;
     a pass is best let go at `oBTimer.zy` 4), and a battler's vitality is
-    `_vp`/`_rvp` with `enemy=1` for foes.
+    `_vp`/`_rvp` with `enemy=1` for foes. Vince's laser fires only on an action press in `postattack`, and Balthios
+    picks his move with action/cancel/start. Running is Down then action (bosses have `cantrun`). Party vitality
+    (`global.char_chp`/`char_hp`) carries over between fights; levels are `global.char_res1` (200·n XP each). Start-menu
+    item use: Start, right to Items, action, right k times to the item, action, down to the member, action. Healing
+    items are the `refItem` entries whose effect reads `VP +`; bosses are the `sBoss` entries (`"oBXxx,level,x,y"`).
+    The harness's `sourceOf(name)` gets a script's source past the coverage wrapper (`fn.toString()` of
+    `window.gml_Script_*` returns the wrapper).
+  - Story after plot 5: `RomSewer0` → `RomSewer1` (its ladders are 16 px gaps; Barkley's box is 16 px at +4, so only
+    x = 396 fits one) → `oExit202` → `RomSewerCesspool` → `oExit215` → `RomSewerCyberhome` (plot 7); plot 8 is the
+    Jordan/Vince fight in `RomChurch` (`oIntro11`).
   - Plot 3 needs `global.scheme[0]>=2` (talk to `oLarry` in `RomChurch`) and `global.scheme[3]=1` (talk to `oChin` in `RomStore0`), then a return to the apartment.
   - **A battle or a death mid-walk is never an exit's destination** (`INTERRUPTS` in `fuzz-page.js`: `RomInter`, `RomGameover`); otherwise a random encounter during a door walk made that door look ambiguous and `loadCorpus` dropped it.
   - **A node keeps its snapshot only when it owns a feature no other node owns**, and `choose()` draws only from nodes with a snapshot. So if an owner loses the state it claimed features from, the search is walled out of that room for good. `rebase()` (after a build change) replays each kept path from a fresh page and now refuses to let a replay that drifted to another room/plot inherit the features; `loadCorpus()` drops any feature whose room disagrees with its owner's room (and its `log` entries). Signature of this failure: the run status's `furthest` (computed over nodes that have a snapshot) is behind the corpus's `maxPlot`.

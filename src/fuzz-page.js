@@ -583,7 +583,11 @@
 	// Where the player stands, in 32 px. In a room with monsters roaming (battle 1) also the third of the party's
 	// vitality left: every walk there is a fight, a cell was kept by whichever state reached it first, often with the
 	// party nearly dead, and the search never got a healthy party past RomSewer1's seven monsters.
-	const spot = (p, x, y) => `${x >> 5},${y >> 5}${p.battle ? `:${p.hp >= 0.67 ? 2 : p.hp >= 0.34 ? 1 : 0}` : ''}`;
+	// The party's vitality in thirds is part of a cell where it can change (monsters roam) and in the room the next plot
+	// is reached in, which is where the bosses are: a healthier arrival there is a new state worth keeping.
+	let goalRooms = {};
+	const tiered = (p) => p.battle || goalRooms[p.plot + 1]?.includes(p.room);
+	const spot = (p, x, y) => `${x >> 5},${y >> 5}${tiered(p) ? `:${p.hp >= 0.67 ? 2 : p.hp >= 0.34 ? 1 : 0}` : ''}`;
 	const cellOf = (p) => `${p.room}|${p.plot}|${p.battle}|${p.foes ?? (p.x == null ? '-' : spot(p, p.x, p.y))}`;
 	// The globals' values as flags: 'name=value', 'name[i]=value', 'name[i][j]=value'
 	const flagsNow = (out) => {
@@ -1121,6 +1125,16 @@
 						// (zy 4) as the throw reads it, one step after the release, so it lets go while the meter's next move
 						// (5 + |zy-50|/5, downwards) lands there. A jump shot is best at the top of the jump (up held ~25
 						// frames). Otherwise any move, held a while.
+						// The others' attacks wait for a press: Vince's laser fires on action, Balthios picks with
+						// action, cancel or start.
+						const turn = objName(window.yyInst(null, null, gml().gmlturn) ?? {});
+						if (turn && turn !== 'oBBarkley' && rng() < 0.85) {
+							const k = rng();
+							yield [[k < 0.7 ? 'z' : k < 0.9 ? 'x' : 'c'], 2];
+							yield [[], 30];
+							t += 32;
+							continue;
+						}
 						const r = rng();
 						let hold = 0;
 						if (r < 0.45) {
@@ -1278,6 +1292,7 @@
 		hook();
 		sync(req.sync);
 		if (req.goals) goalConds = req.goals;
+		if (req.goalRooms) goalRooms = req.goalRooms;
 		const out = {
 			finds: [],
 			rec: [],

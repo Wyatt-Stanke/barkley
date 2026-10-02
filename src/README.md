@@ -312,15 +312,22 @@ How it works:
 - **Search** (Go-Explore): a new game is started and snapshotted once. Each worker repeatedly picks a snapshot, restores
   it and plays a random program of input macros (walks, taps, dialog mashing, waits, the start menu, and programs that
   found something before). After every macro step the page looks for something new: a cell (room, plot, and the
-  player's position in 32 px; in a battle instead the first enemy, the eighths of the enemies' vitality left and the
-  party members standing, so a state that brought a boss lower is new and the search can work its way to a win), a (room, GML function) pair (every `gml_*` function is wrapped to record that it ran; a cutscene
+  player's position in 32 px, plus the party's vitality in thirds where roaming monsters are about and in the room the next plot is reached in (the bosses' rooms: before this a half-dead party's arrival in the church owned it, and the Jordan fight it starts was never fought healthy); in a battle instead the first enemy, the eighths of the enemies' vitality left, the
+  party members standing and the party's vitality in quarters, so a state that brought a boss lower or kept the party
+  healthier is new and the search can work its way to a win), a (room, GML function) pair (every `gml_*` function is wrapped to record that it ran; a cutscene
   shows up as its `cin_NNNN` steps), or a value of a game global never seen before (story flags such as `plot=3` or
   `treasure[3]=1`; globals whose values churn are learned as volatile and ignored), including the pseudo-flag
   `goal=<plot>:<bits>`, which of the next plot's conditions hold (so a state that meets two of them at once, such as
-  Larry and Chin both talked to, becomes a node even though each value on its own was already known). Where it finds one it snapshots the
+  Larry and Chin both talked to, becomes a node even though each value on its own was already known), and
+  `xp=<n>`, the party's experience in steps of 40 (so grinding is progress: the plot-5 boss, 1317 vitality, was only
+  beaten once the party had levels). Where it finds one it snapshots the
   game, and that node joins the archive. Picks favour nodes chosen less often, found recently and further in the story
-  (plot, the next plot's conditions met, rooms on the path, story globals changed since the new game; recomputed when
-  the corpus loads); menus and the debug room hardly count.
+  (`progress`: plot, then the next plot's conditions met, the party's levels and experience, how far a boss fight got
+  (bosses are the `sBoss` entries, read from the build), the party's vitality outside a fight, rooms on the path,
+  story globals changed since the new game; recomputed when the corpus loads); menus and the debug room hardly count.
+  Most picks go by plot: the furthest plot reached gets 55% of them, the one before 30%, the rest 15%, and half of the
+  picks within a plot keep to its nodes within 60 of its best progress, so a new plot is worked on at once rather than
+  drowned out by thousands of nodes behind it (before this, nine picks in ten went to plots already done).
 - **Generators** (in the page, closed-loop: they read the game between 4-frame chunks, and the keys they press are
   recorded, so replays need no generator): `dialog` presses action until the player can move,
   moves the cursor to a random option when a dialog offers a choice (pressing straight through takes the first), and
@@ -329,16 +336,23 @@ How it works:
   almost never passed; the walking generators wait out the moment a room freezes the player on entry
   (`global.freeze`, about 20 frames), since a new room's first snapshot is taken right there and they used to give up
   on it at once; `exit` walks to an exit
-  not taken from this room yet (a breadth-first route on an 8 px grid around solid instances) and takes it, by
+  not taken from this room yet (a breadth-first route on an 8 px grid around solid instances, with the player's box taken 4 px smaller on each
+  side and a waypoint counted reached within 4 px: the game's corner shifter slides the player round small overlaps,
+  and RomSewer1's ladders are gaps exactly as wide as the player's 16 px box, which a full-size box never routed through) and takes it, by
   walking into it (`oExitPar` children and exits with their own collision event with `oBarkley`) or pressing action
   beside it; the exit recorded is the one nearest the player's last position, since the way to one exit can cross
   another (a corpus exit that seems to lead to several rooms is dropped on load); `talk` walks up to something usable (`oItem`
   descendants: people, signs, pumps) not talked to at this plot and goal mask and presses action; `seek` walks to a reachable spot
   not visited yet; `travel` heads for a story goal room through the known room graph (several hops; after a failed hop it tries
   other exits) (goal rooms place objects whose
-  code sets `global.plot` to the next value, read from the build); `battle` presses action, cancel and arrows in a
-  battle's rhythm, or half the time fights: it reads the battle menu's state, mostly attacks the first target
-  (sometimes it uses an item, a skill or defends instead), and in `postattack` attacks. Barkley's attacks are timing moves scored on the release, so taps barely ever
+  code sets `global.plot` to the next value, read from the build); `heal` (only outside a fight, when someone is below
+  80% vitality) opens the start menu's Items, picks a healing item (a `refItem` entry whose effect reads `VP +`, read
+  from the build) and gives it to the weakest member; `battle` presses action, cancel and arrows in a
+  battle's rhythm, or four times in five fights: it reads the battle menu's state, mostly attacks the first target
+  (sometimes it uses an item, a skill or defends instead, more often items when a member is below 40%, on an ally
+  half the time), runs now and then (more when someone is low; bosses can't be run from), and in `postattack` attacks:
+  Vince's and Balthios's attacks wait for a press (action fires the laser; Balthios picks with action, cancel or
+  start), and before that was pressed a Vince turn waited about a minute for a random action. Barkley's attacks are timing moves scored on the release, so taps barely ever
   hit: most of the time it passes (holds cancel and lets go so that `oBTimer`'s side meter is at its end, `zy` 4, one
   step later, when the throw reads it: the most damage, about twice his power) or takes a jump shot (up held about 25 frames, to the top of the jump), and
   otherwise holds any move for a random time. A fight that begins during an episode (an enemy walked
