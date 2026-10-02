@@ -585,7 +585,9 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   the combo player was in, and all three lost before. A 110-minute run on the restructured code got as far as
   plot-7 fights but not to plot 8. The only crash seen is #12, a restore artifact: it reproduces from its snapshot but
   not from a fresh page. **The fuzzer was split out of `src/` into `fuzz/`** (Node side in `fuzz/lib/`, page side in
-  `fuzz/page/`, joined into one script by `harness.mjs`). Check progress by the boss cells in the corpus's
+  `fuzz/page/`, joined into one script by `harness.mjs`). Its `verify` replays the spine as before: on CI (PR #16,
+  run `37058903057`) 993 of 997 paths exactly where recorded, and locally 1009 of 1013. In both, one path hit crash #12
+  and the 3 after it were skipped; on CI #12 didn't replay, so it was only a warning. Check progress by the boss cells in the corpus's
   `features`, not by `furthest`.
 - **Stale paths in the working copy (found 2026-10-01, fixed in `rebase()`):** a rebase checked only the nodes that owned
   features, and left every other node in `build/fuzz/corpus` with the probes of the build it was recorded on. The local
