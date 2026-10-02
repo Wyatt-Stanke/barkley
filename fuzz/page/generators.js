@@ -115,8 +115,8 @@ function* combo() {
 // Fudged levels (the user's call: a party the search can't grow strong enough leaves the later story unplayed).
 // '!train' raises each party member below level 2·plot + 4 by up to two levels as the game itself levels one up
 // (sBattleLevel's stats and skill, sBattleSkill), sets their experience to the new level's and heals them. It is a
-// program step, so a path that trained trains again on every replay. global.__fuzz_trained counts the levels given
-// (the flag scan skips gml__ names; snapshots keep it).
+// program step, so a path that trained trains again on every replay. global.__fuzz_trained and __fuzz_xp count the
+// levels and experience given (the flag scan skips gml__ names; snapshots keep them; score() leaves them out).
 const TRAIN_STEP = 2;
 const trainTarget = (plot) => 2 * (Number(plot) || 0) + 4;
 actions.train = () => {
@@ -132,7 +132,9 @@ actions.train = () => {
 			g.gmlchar_res1[m] = lv;
 			const skill = window.gml_Script_sBattleLevel(self, self, m, lv);
 			if (skill) window.gml_Script_sBattleSkill(self, self, m, skill);
-			g.gmlchar_xp[m] = Math.max(Number(g.gmlchar_xp[m]) || 0, 100 * (lv - 1) * lv);
+			const xp = Number(g.gmlchar_xp[m]) || 0;
+			g.gmlchar_xp[m] = Math.max(xp, 100 * (lv - 1) * lv);
+			g.gml__fuzz_xp = (Number(g.gml__fuzz_xp) || 0) + g.gmlchar_xp[m] - xp;
 			g.gml__fuzz_trained = (Number(g.gml__fuzz_trained) || 0) + 1;
 		}
 		g.gmlchar_chp[m] = g.gmlchar_hp[m];

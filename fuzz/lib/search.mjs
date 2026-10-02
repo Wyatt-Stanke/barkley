@@ -26,6 +26,12 @@ export const search = {
 			hp += Math.max(0, Number(g.char_chp?.[g.party[i]]) || 0);
 			max += Math.max(0, Number(g.char_hp?.[g.party[i]]) || 0);
 		}
+		// Fudged levels and experience ('!train') aren't progress by themselves, only what they unlock; counted in, they
+		// made trained parties far from the goal outrank untrained ones beside it. (Snapshots from before __fuzz_xp
+		// count a trained party's experience as all fudged.)
+		const fudged = Number(g.__fuzz_trained) || 0;
+		const natLv = lv - fudged;
+		const natXp = fudged ? Math.max(0, xp - (g.__fuzz_xp ?? xp)) : xp;
 		// (probes from before these fields, filled in from the snapshot)
 		n.probe.xp ??= Math.floor(xp);
 		n.probe.lv ??= lv;
@@ -38,7 +44,7 @@ export const search = {
 			Math.min(
 				999,
 				this.goalsMet(g, plot + 1) * 100 +
-					Math.min(lv * 25 + Math.floor(xp / 100), 600) +
+					Math.min(natLv * 25 + Math.floor(natXp / 100), 600) +
 					this.fightScore(n.probe) +
 					health +
 					Math.min(n.rooms.length, 10) * 5 +
