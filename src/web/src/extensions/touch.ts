@@ -34,6 +34,9 @@ export interface Layout {
 	gear: { x: number; y: number; r: number };
 	buttons: Button[];
 	safe: Rect;
+	stickArea: Rect; // where the joystick is drawn: the safe area, or (Game style, landscape) its column
+	pic: Rect; // where oScreenFill draws the picture inside game, as it will draw it
+	unit: number; // one game pixel, in CSS pixels that are whole device pixels (the Game style draws at it)
 }
 type Sector = 'right' | 'upright' | 'up' | 'upleft' | 'left' | 'downleft' | 'down' | 'downright';
 interface Pointer {
@@ -47,6 +50,7 @@ export const BASE_R = 56,
 	THROW = 48;
 const HYST = 7,
 	MIN_HOLD = 100,
+	COL = 150, // Game style, landscape: the width of a control column inside the safe area
 	GW = 320,
 	GH = 240;
 // Cardinal-biased sectors: walking straight is the common case, so cardinals get 50 deg, diagonals 40.
@@ -83,12 +87,14 @@ export const [cfg, setCfg] = createStore({
 	side: 'right' as 'right' | 'left',
 	haptics: 1,
 	enabled: 2, // 2 auto (hidden while a gamepad is connected), 1 on, 0 off
+	theme: 'plain' as 'plain' | 'game', // Game: the controls in the game's menu style, on a blue screen around the picture
 });
 let key = DEFAULT_KEYS;
 const [started, setStarted] = createSignal(false); // the game has run key_doset: the overlay may come up
 export const [live, setLive] = createSignal(false); // the controls are up (not just the settings button)
 export const [ctx, setCtx] = createSignal(0);
 export const [ready, setReady] = createSignal(false);
+const [integer, setInteger] = createSignal(false); // SCALING is Integer, so the picture may not fill game
 export const [layout, setLayout] = createSignal<Layout | null>(null);
 export const [held, setHeld] = createStore<Partial<Record<Control, boolean>>>({});
 export const [dir, setDir] = createStore({ active: false, bx: 0, by: 0, tx: 0, ty: 0, sector: null as Sector | null });
@@ -122,6 +128,17 @@ export const touch_view_x = () => Math.round((gameRect()?.x ?? 0) * px());
 export const touch_view_y = () => Math.round((gameRect()?.y ?? 0) * px());
 export const touch_view_w = () => Math.round((gameRect()?.w ?? innerWidth) * px());
 export const touch_view_h = () => Math.round((gameRect()?.h ?? innerHeight) * px());
+
+// oScreenFill passes SCALING (global.sat[0]: 0 Integer, 1 Sharp fit) every frame, so the Game style's border can hug
+// the picture it actually draws.
+export function touch_fit(n: number) {
+	const i = n === 0;
+	if (i !== integer()) {
+		setInteger(i);
+		relayout();
+	}
+	return 0;
+}
 
 // The runtime ignores devicePixelRatio, so the canvas is backed by CSS pixels and the browser upscales it.
 // oScreenFill sizes the canvas to browser_* times this, and touch_pin puts the CSS size back.
@@ -281,8 +298,8 @@ function relayout() {
 		const none = { x: 0, y: 0, w: 0, h: 0 };
 		// biome-ignore format: laid out by hand
 		setLayout({
-			W, H, safe, buttons: [], dpadR: 0,
-			game: { x: 0, y: 0, w: W, h: H }, dirZone: none, dirHit: none, dirCenter: { x: 0, y: 0 },
+			W, H, safe, buttons: [], dpadR: 0, stickArea: safe, unit: 1,
+			game: { x: 0, y: 0, w: W, h: H }, pic: { x: 0, y: 0, w: W, h: H }, dirZone: none, dirHit: none, dirCenter: { x: 0, y: 0 },
 			gear: shown() ? { x: W - ir - 30, y: it + 30, r: 15 } : { x: -99, y: -99, r: 0 },
 		});
 		return;
@@ -292,6 +309,7 @@ function relayout() {
 	const wide = W / H > GW / GH,
 		buttons: Button[] = [];
 	let game: Rect, dirZone: Rect, dirHit: Rect, dirCenter: { x: number; y: number }, gear: Layout['gear'];
+	let stickArea = safe;
 	if (!wide) {
 		const s = W / GW;
 		game = { x: 0, y: it, w: W, h: Math.round(GH * s) };
@@ -306,6 +324,33 @@ function relayout() {
 		buttons.push({ k: 'start', label: 'START', x: W / 2, y: py + 64, r: 22, pill: true });
 		gear = { x: W - 50 - ir, y: py + 64, r: 15 };
 		dirCenter = { x: dirZone.x + dirZone.w * 0.46, y: py + panel.h - 190 };
+	} else if (cfg.theme === 'game') {
+		// Delta-style: a column each side for the controls, which never cover the picture, and the picture as large as
+		// fits between them, 4:3 to the device pixel so it fills its rectangle exactly. Both columns are as wide as the
+		// wider inset needs, so the picture stays centred.
+		const r = px(),
+			col = Math.max(il, ir) + COL,
+			n = Math.floor(Math.min(((W - 2 * col) * r) / 4, ((H - it - ib - 16) * r) / 3, (W * r) / 4, (H * r) / 3));
+		const gw = (4 * n) / r,
+			gh = (3 * n) / r;
+		game = {
+			x: Math.round(((W - gw) / 2) * r) / r,
+			y: Math.round((it + (H - it - ib - gh) / 2) * r) / r,
+			w: gw,
+			h: gh,
+		};
+		const lw = game.x - il - 8, // to the border, less the border itself
+			rx = game.x + game.w + 8;
+		dirZone = { x: il, y: it, w: lw, h: H - it - ib };
+		dirHit = { x: 0, y: 0, w: game.x - 4, h: H };
+		stickArea = dirZone;
+		const ax = (rx + W - ir) / 2 + 25, // the A/B cluster runs 84 px left of A's centre and 34 right
+			ay = H - 104 - ib;
+		buttons.push({ k: 'action', label: 'A', x: ax, y: ay, r: 34 });
+		buttons.push({ k: 'cancel', label: 'B', x: ax - 54, y: ay - 46, r: 30 });
+		buttons.push({ k: 'start', label: 'START', r: 20, pill: true, x: (rx + W - ir) / 2, y: 42 + it });
+		gear = { x: il + lw / 2, y: 36 + it, r: 15 };
+		dirCenter = { x: il + lw / 2, y: H - 118 - ib };
 	} else {
 		const sc = Math.min(W / GW, H / GH);
 		const gw = Math.round(GW * sc),
@@ -352,7 +397,27 @@ function relayout() {
 	}
 	dirCenter.x = Math.max(dirZone.x + dpadR + 6, Math.min(dirZone.x + dirZone.w - dpadR - 6, dirCenter.x));
 	dirCenter.y = Math.max(dirZone.y + dpadR + 6, Math.min(dirZone.y + dirZone.h - dpadR - 6, dirCenter.y));
-	setLayout({ W, H, game, dirZone, dirHit, dirCenter, dpadR, gear, buttons, safe });
+	setLayout({ W, H, game, dirZone, dirHit, dirCenter, dpadR, gear, buttons, safe, stickArea, ...picture(game) });
+}
+// Where oScreenFill draws the picture in game, worked out as it does it, in device pixels: the largest scale that fits,
+// whole when SCALING is Integer (or when it is under 1), centred. And the size of one game pixel, whole in device
+// pixels, for the Game style to draw at.
+function picture(game: Rect) {
+	const r = px(),
+		vx = Math.round(game.x * r),
+		vy = Math.round(game.y * r),
+		vw = Math.round(game.w * r),
+		vh = Math.round(game.h * r);
+	const fit = Math.min(vw / GW, vh / GH);
+	const s = integer() && fit >= 1 ? Math.floor(fit) : fit; // as oScreenFill: whole only for Integer
+	const pic = {
+		x: (vx + Math.floor((vw - GW * s) / 2)) / r,
+		y: (vy + Math.floor((vh - GH * s) / 2)) / r,
+		w: (GW * s) / r,
+		h: (GH * s) / r,
+	};
+	// the unit comes from the fit, so the controls keep their size whichever SCALING is on
+	return { pic, unit: Math.max(1, Math.round(fit)) / r };
 }
 
 // ---- input

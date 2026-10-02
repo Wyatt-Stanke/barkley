@@ -27,7 +27,7 @@ Don't hand-edit the GMX resources in `game/BarkleyV120.gmx` (`objects/`, `script
 ```sh
 # 0. Everything, from the original exe to a play-tested site (~5 min on a GitHub runner; each step's output is kept, so a rerun resumes).
 #    fetch (archive.org zip, MD5-checked, + the GM6 decompiler's source at a pinned commit, into game/original/) ->
-#    virt/run.sh -> migrate (fails unless the audit is clean) -> import -> fuzz.mjs build --minify -> play-test.
+#    virt/run.sh -> migrate (fails unless the audit is clean) -> import -> build.mjs --minify -> play-test.
 #    Writes <out>/BarkleyV120.gmx, barkley-<version>.gmx, barkley-<version>/BarkleyLTS.yyp, site/, playtest/.
 #    --from=pristine migrates game/BarkleyV120.gmx instead of exporting. This is what the GitHub workflow runs.
 node src/pipeline.mjs [--out=build/pipeline] [--mode=modernized|faithful] [--from=exe|pristine] [--no-playtest]
@@ -52,8 +52,8 @@ node src/import.mjs <out>.gmx <newdir>/<Name>.yyp
 # 3. Build HTML5.
 #    Deployable build (the supported way; unobfuscated + terser --keep-fnames, so player crash reports have readable
 #    gml_* stacks). Works on copies of the project and user folder; don't run Igor and terser by hand for a deploy:
-node src/fuzz.mjs build <.yyp> <dir> --minify
-#    fuzz.mjs build always takes the page from the current src/web: index.html, then (writeBuild) the page app it builds
+node src/build.mjs <.yyp> <dir> --minify     # fuzz.mjs build <.yyp> <dir> [--minify] is the same command
+#    build.mjs always takes the page from the current src/web: index.html, then (writeBuild) the page app it builds
 #    into build/web (app/barkley.js and .css, the font, sw.js) and version.json, the file list the service worker
 #    caches the build from (src/README.md, "Offline play"). So a page change needs no re-import. It refuses a project
 #    whose extensions aren't the stubs import.mjs writes: import it again.
@@ -93,8 +93,9 @@ cd <dir>/out && python3 -m http.server 8000 --bind 127.0.0.1   # then http://127
 #    --corpus starts from the corpus in git, fuzz/corpus.json.gz: unpacked into build/fuzz/corpus (kept, snapshots and
 #    all, while it came from that very file), packed back at every save. Commit the file after a run that found
 #    something. --through patches known crash classes and reports each patched spot instead.
-#    `verify` checks a build against the corpus (read-only): replays its spine (~2 min), explores --minutes, replays new
-#    crashes; exit 1 on a new crash that replays; drift is a warning (--strict: a failure). It also plays the longest
+#    `verify` checks a build against the corpus (read-only): replays its spine (~1.5 min on CI), explores --minutes, replays new
+#    crashes and known ones that come back; exit 1 on either that replays (its "crashes N (M from earlier runs)" line
+#    counts the corpus's record of past crashes, not crashes this run); drift is a warning (--strict: a failure). It also plays the longest
 #    spine path from a fresh page with no restores (a few minutes, alongside): another room or plot there fails.
 #    The PR workflow runs it.
 #    `replay` plays a finding from a fresh page with screenshots, or a player's crash report
@@ -136,7 +137,7 @@ There's no test suite. Verify in these ways:
 - Two runs into different output dirs should be identical under `diff -r`. Use `-x mvc` if either has been imported. Don't expect two imports of identical GMX to match: ProjectTool gives sprite frames and layers random GUIDs and names the `notes/compatibility_report_*` folder by time, and `options_html5.yy` holds the absolute path of the index. Compare the migrations, and the imports' `extensions/`.
 - After a grammar or transform change that shouldn't change output, migrate into a new dir and `diff -r` against the previous output. If they're identical, import, build and play-test can't have changed.
 - Every `.gml` in a code tree should parse with `parse()` from `src/lib/gml.mjs`. This is a weak syntax check: when a keyword statement fails to parse, the PEG falls back to a plain statement, so `if (a) = 3` with no body parses as assigning to a call `if(a)`, and `if = 3`, `with = 2` or a bare `return` at end of file also pass. The LTS importer is the real syntax check.
-- Every called function should exist in LTS. Walk the code tree with `parse`/`walk`/`isCall`, then subtract the built-ins from `$RT/GmlSpec.xml` (`<Function Name="…">`, about 2,357), the project's `scripts/`, the imported project's `scripts/` (the importer's compatibility scripts: `instance_create`, `joystick_exists`, `joystick_direction`, `joystick_check_button`, `draw_set_blend_mode`, `room_set_view`), and the extension functions (listed per extension in `import.mjs`: `fullscreen_*`, `resume_*`, `saves_open`, `touch_*`, `crash_*`). Nothing should be left.
+- Every called function should exist in LTS. Walk the code tree with `parse`/`walk`/`isCall`, then subtract the built-ins from `$RT/GmlSpec.xml` (`<Function Name="…">`, about 2,357), the project's `scripts/`, the imported project's `scripts/` (the importer's compatibility scripts: `instance_create`, `joystick_exists`, `joystick_direction`, `joystick_check_button`, `draw_set_blend_mode`, `room_set_view`), and the extension functions (listed per extension in `import.mjs`: `fullscreen_*`, `resume_*`, `saves_open`, `touch_*`, `pad_*`, `crash_*`). Nothing should be left.
 - `import.mjs` should report "importer converted all GML". The strongest check: scan the imported `.gml` for single-quoted strings outside `"…"` strings and comments. Any hit means the importer skipped that file.
 - `node src/page.mjs` should type-check and build clean.
 - `npx -y @biomejs/biome@2.5.14 ci` should pass. The rules are `recommended` plus a stricter set, all errors. Biome
@@ -155,13 +156,25 @@ fuzz corpus), `game/recovered-scripts/`, `.github/`, `README.md`, `biome.jsonc`,
 ### GitHub Actions (`.github/workflows/`)
 
 Both workflows set up through `.github/actions/setup` (Node with the page's npm cache, ffmpeg, the two caches below).
+ffmpeg is BtbN's static build through `AnimMouse/setup-ffmpeg` (cached; apt once hung for 26 min), at BtbN's current
+release line (they keep only two, so a pin would break; a different ffmpeg changes PNG bytes, not pixels).
 
-**`pr.yml`, on every pull request:** `node src/pipeline.mjs` (so it builds and play-tests), then
-`node src/fuzz.mjs verify build/pipeline/site --minutes=5` on the minified site (no second Igor build). The verdict
-is in the job summary; the play-test and the fuzzer's findings are the `check` artifact. Nothing is deployed. A PR
-from a fork gets no secrets, so its build fails at the licence. The runner has 4 vCPUs, so verify runs 2 browsers.
+**A build is made once per set of sources** (`.github/actions/prebuilt`): it is kept as an artifact named
+`site-<hashFiles of src/, virt/, game/recovered-scripts/, .github/actions/>` (minus `*.md`, `src/fuzz.mjs`,
+`src/fuzz-page.js`; 30 days) holding `build/pipeline/{site,playtest}`, and a job whose hash already has one from a run
+of this repository (never a fork's) downloads it and skips the pipeline. So the deploy after a merge ships the very
+build the PR check play-tested and fuzzed (when `main` didn't move in between), and a PR push that touches only docs,
+the fuzzer or the corpus skips the build. **That is why `build()` lives in `src/build.mjs`, not in `fuzz.mjs`:**
+anything that changes what a build is must be inside the hash. Run `pages.yml` by hand with `rebuild` to build anyway.
 
-**`pages.yml`:** on every push to `main` (and on `workflow_dispatch`), an `ubuntu-24.04` runner runs `node src/pipeline.mjs` and
+**`pr.yml`, on every pull request:** `node src/pipeline.mjs` (so it builds and play-tests; or the prebuilt build),
+then `node src/fuzz.mjs verify build/pipeline/site --workers=3 --minutes=4` on the minified site (no second Igor
+build). The verdict is in the job summary; the play-test and the fuzzer's findings are the `check` artifact. Nothing is
+deployed. A PR from a fork gets no secrets, so its build fails at the licence (unless its sources were built already).
+The runner has 4 vCPUs; measured on the same build, 3 verify browsers played 1.5x the frames of 2 (4 only 1.57x) and
+replayed the corpus in 92 s instead of 121 s.
+
+**`pages.yml`:** on every push to `main` (and on `workflow_dispatch`), an `ubuntu-24.04` runner runs `node src/pipeline.mjs` (or takes the prebuilt build) and
 deploys `build/pipeline/site` to the repo's own GitHub Pages (`https://wyatt-stanke.github.io/barkley/`). The deploy
 job runs only on the default branch; Pages is set to "GitHub Actions" as its source, and the `github-pages`
 environment's deployment branch policy allows `main` only (it was created naming whatever the default branch was, so
@@ -185,7 +198,7 @@ barkley/
   CLAUDE.md      this file
   biome.jsonc    Biome's formatter and linter settings (see "Commands")
   src/           all the tooling (Node.js 22+, no npm packages but the page's)
-    *.mjs        the pipeline: pipeline (all of it), fetch, toolchain, migrate, import, playtest, fuzz, video, deploy, assets, transforms, offline, page
+    *.mjs        the pipeline: pipeline (all of it), fetch, toolchain, migrate, import, build, playtest, fuzz, video, deploy, assets, transforms, offline, page
     version.json the port's semver version, the one place it is written
     lib/         the GML grammar/parser and the GMX code (un)packer
     patches/     hand-written GML rewrites; modernized/ holds the web adaptations
@@ -200,7 +213,8 @@ barkley/
   build/         everything generated; all of it reproducible from src/ (untracked); tools/ holds downloaded GameMaker tools,
                  web/ the page app (src/page.mjs)
   .github/       workflows/pages.yml: the whole pipeline on every push to main, deployed to GitHub Pages;
-                 workflows/pr.yml: the pipeline and a fuzz verify on every pull request; actions/setup: their shared setup
+                 workflows/pr.yml: the pipeline and a fuzz verify on every pull request; actions/setup: their shared setup;
+                 actions/prebuilt: finds the build of these sources an earlier run made
   README.md      the GitHub front page: what this is and the one command
 ```
 
@@ -218,7 +232,7 @@ scratchpad dir, never in the project.
 - `build/outputs/`: migrations and their imports made by hand (`migrate.mjs`, `import.mjs`). **The user wants only the latest kept**: when you make a new one, delete the superseded migration and import (the user OK'd that). There is none at the moment; the latest migration and import are the pipeline's.
   - After an Igor build, copy `src/web/index.html` back into the project's `options/html5/` (see the HTML5 options gotcha).
 - `build/pipeline/`: `node src/pipeline.mjs`'s output (2026-09-26, with patch 20): `BarkleyV120.gmx` from `virt/`, `barkley-1.4.1.gmx` (plus `.code`), its import `barkley-1.4.1/BarkleyLTS.yyp` (with the extension stubs), `site/` (the minified deployable build) and `playtest/`.
-- `build/deploy/bsuajg-test`: `deploy.mjs`'s kept clone of the deploy repo (shallow; reset to `origin/main` on every deploy, so never keep work in it).
+- `build/deploy/bsuajg-test`: `deploy.mjs`'s old clone of the deploy repo, which is now a redirect (stale; safe to delete).
 - `build/fuzz/`: the fuzzer's files.
   - `corpus/`: the unpacked working copy of `fuzz/corpus.json.gz` (`state.json`, `nodes.json`, `nodes/<id>.json.gz`, and `packed.md5`, the md5 of the file it came from). Its snapshots belong to one build; `--corpus` keeps it while the packed file is unchanged and unpacks afresh (a rebase) when it isn't.
   - `build/`: an unobfuscated build of `barkley-1.4.1` from `build/pipeline` (2026-09-26), which the corpus's snapshots belong to.
@@ -230,21 +244,25 @@ scratchpad dir, never in the project.
   - User folder: `~/Library/Application Support/GameMakerStudio2-LTS2026/wyattstanke_5117727`. It holds the `licence.plist` Igor needs. `unknownUser_unknownUserID` is the old signed-out folder and has no licence.
 - Headless browser for `playtest.mjs`: Playwright's cached `~/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-x64/chrome-headless-shell` (override with `CHROME=`). There's no `playwright` npm package; the script talks to the DevTools protocol directly.
 
-### The web deploy: `github.com/Wyatt-Stanke/bsuajg-test`
+### The old web deploy: `github.com/Wyatt-Stanke/bsuajg-test` (now a redirect)
 
-It holds the contents of an HTML5 build's `out/` dir plus `README.md` and `.github/workflows/static.yml`, which deploys to GitHub Pages on every push to `main` (the origin is `wyatt-stanke.github.io`). The workflow pins `actions/checkout@v4`, `configure-pages@v5` and `upload-artifact@v4`, which target the deprecated Node 20; the runner forces them onto Node 24 and warns. They'll need bumping at some point.
+**Since 2026-10-01 (`7d12cbb`) it is only a redirect to `https://wyatt-stanke.github.io/barkley/`**, which the
+GitHub workflow builds and deploys on every push to `main` (see "GitHub Actions"). Its tree is `index.html` and
+`404.html` (both `location.replace('/barkley/' + search + hash)`, with a meta refresh and a link), `README.md`,
+`.github/workflows/static.yml`, and `sw.js`, a worker that retires the old build's: the browser fetches `sw.js` from
+the network on its update check even while the old worker serves a cached page, so a returning player gets it. It
+deletes `/bsuajg-test/.state` from `barkley-meta` and that state's build cache unless another site's `.state` names
+it, claims and reloads open tabs (`navigate()` needs the claim), and unregisters itself. **Both sites are on the
+origin `wyatt-stanke.github.io`, so they share `localStorage` (saves carry over) and Cache Storage, under the same
+cache names**: a cleanup there must never delete by prefix. (While both were live, `/barkley/`'s worker deleted the
+old site's build cache as a stale `barkley-build-*` the moment it saved its own.) Checked locally with both sites
+under one server: the old site with an offline copy, visited after the swap, landed on `/barkley/` with its own state
+and worker gone and `/barkley/`'s complete offline copy untouched. Live checks: the root and any old path (e.g.
+`html5game/BarkleyLTS.js`, a 404) serve the redirect.
 
-**Live: `3b7522f`** (2026-09-22), v1.3.1, the modernized build of `barkley-1.3.1`, deployed with `deploy.mjs`: the same game as v1.3.0, rebuilt from an export `virt/` makes on its own. Build id `cf172539be62bdd4`, 262 files cached. `BarkleyLTS.js` md5 `0747ac35d5b8a8e4b80fe5227ac793b9`; `index.html` md5 `7769c6b48933acfb6fed259c47805939`; `sw.js` md5 `8352242ca58c04a4c488f81a8d89eef7`; `version.json` md5 `2dd8f06063a5394d51e5765325b9f6c2`; shims `tph_crash.js`, `uph_controls.js`, `vph_gamepad.js`, `wph_touch.js`, `xph_saves.js`, `yph_resume.js`, `zph_fullscreen.js`, plus `inter.woff2` and `inter-OFL.txt` (a new extension shifts every shim's prefix, so they must ship with their bundle).
-
-**The deploy repo's history was flattened on 2026-09-22** (the user asked for it, with that deploy): its 26 commits, each a whole ~150 MB copy of the build tree, became the single orphan root commit `3b7522f`, force-pushed to `main`. The tree hash is unchanged (`2a3cee26`, 482 files) and the live site never moved, but **every earlier deploy hash is gone** — `61c0307` (v1.3.0), `7191192` (v1.2.2), `b7599e9` (v1.2.1), `0b65adb` (v1.2.0), `068a661` (v1.1.1), `58167a6` (v1.1.0) and the rest no longer resolve. This file's older entries name them only as labels. `deploy.mjs` needs no change: it resets to `origin/main` and commits on top, so the next deploy is the second commit in the new history. **Don't flatten again without being asked**; the history that is left is the record.
-
-**To deploy, run one command** (about 6 min with a build, ~2 more for the first clone):
-
-```sh
-node src/deploy.mjs build/outputs/<import>/BarkleyLTS.yyp --message-file=<file>   # or a build dir instead of a .yyp
-```
-
-It builds with `fuzz.mjs build --minify`, writes the offline layer over whatever built the tree (`sw.js` and a fresh `version.json`, and warns if the live site already has this version with different files), play-tests the build (boots, Start clicked, no exception), clones or reuses `build/deploy/bsuajg-test`, resets it to `origin/main` (deploys are pushed from several sessions, and committing on a stale tree drops the ones in between), rsyncs the whole build over it (shims have a per-build prefix, `tph_`, `uph_`, …, so they must ship with their bundle), commits as the previous deploy's author, pushes, watches the Pages workflow, and checks the live `index.html`, `version.json`, `sw.js`, `app/barkley.js`, `app/barkley.css` and game script md5s (cache-busted, retried while the CDN catches up) and that every shim answers 200. It exits non-zero at the first failed step and stops with a note if the site already has the build. `--dry-run` stops after the local commit. Write the commit message in the style of the earlier deploys ("Update HTML5 build: …", a paragraph for players, then the attribution trailers).
+**Don't run `src/deploy.mjs`**: it still targets this repo and would put a build back over the redirect. The deploy
+repo's history was flattened once (2026-09-22, at the user's request) to the single commit `3b7522f` (v1.3.1); every
+older deploy hash cited in this file is only a label now. Don't flatten again without being asked.
 
 ## Rebuilding the pristine export (`virt/`)
 
@@ -317,7 +335,7 @@ The pipeline lives in `migrate.mjs`. It copies the project, unpacks the code, ap
   - `07-crash-report` (+ `extensions/crash.ts` and `ui/CrashPanel.tsx`): every 30 steps `resume_tick` hands the checkpoint to `crash_put` and reseeds the RNG from `global.crash_seed`; each step reports its frame time (`crash_step`); the page records key events (the touch overlay's and the gamepad's too: `sendKey` calls no DOM listener, so it hands each press to the recorder through `hearKeys`) and keeps a ring of checkpoints. On an uncaught error, when the player types `BUG` (capitals), or when they tap Report on the Bug report row of the touch controls' ≡ sheet (`askReport`, shown only when the build has Crash), the page shows a `BARKLEY-CRASH-1:` report (gzip + Base64: the checkpoint about 10 s back, frame times and key events since, the error or the current state) to copy. `fuzz.mjs replay <build dir> <report file>` replays it; the build must be the one the report came from (obfuscated or minified rebuilds are not byte-identical, and `resume_start` rejects another `GM_build_date`). Not yet tried on a real player's report.
   - `08-volume`: VOLUME row (11 steps in `global.sat[6]`, sixth line of `config.txt`), applied through `audio_master_gain` from `oStartConfig`'s Begin Step and `oController`'s Game Start. **The steps are equal in decibels**, via `sVolume(step)` = `power(10,(step-10)*0.2)` (4 dB a step, 50% = -20 dB, step 0 = silence); the label shows the slider position, not the gain.
   - `09-save-transfer`: Saves replaces Test on the SETTINGS row and calls `sSaveData`, which opens the page's Saves panel (`saves_open`) (the slots as one `BARKLEY-SAVES-1:` Base64 gzip block to copy out or paste in).
-  - `10-touch-controls` (+ `extensions/touch.ts` and `ui/TouchOverlay.tsx`): the mobile touch overlay and the high-DPI canvas.
+  - `10-touch-controls` (+ `extensions/touch.ts`, `ui/TouchOverlay.tsx` and `ui/TouchGame.tsx`): the mobile touch overlay and the high-DPI canvas. The overlay has two styles (the sheet's Style row, `barkley.touch` `theme`): Plain, and Game, the controls as pixel-art menu boxes on a blue screen with a white pixel border round the picture, which in landscape shrinks to sit between two control columns (`src/README.md` has the detail). `oScreenFill` calls `touch_fit(global.sat[0])` every frame so the page knows SCALING and can work out where the picture really is (`picture()` in `touch.ts`, which must stay in step with `oScreenFill`'s maths).
   - `11-gamepad` (+ `extensions/gamepad.ts`): game controllers. `key_doset` passes the bound keys to `pad_keys` and `oController`'s Begin Step passes `sTouchContext()` to `pad_context`. The page polls the Gamepad API once a frame in its own rAF loop (`pad_poll`) and sends those keys through `window.onkeydown`/`onkeyup` (`sendKey`), exactly as the touch overlay does, so a pad press is a key press everywhere (rebinding, the key latch, menus). D-pad and left stick steer (on past 0.45 of the stick's travel, off inside 0.3, repeating while held); faces 0/2 confirm, 1/3 and both shoulders cancel; 8/9 are Start. A press is held out to 100 ms so a tap between two 30 fps steps is never lost, and context 4 (SET KEYS) releases everything and sends nothing. The game's own `key_joyemu` is untouched: its one call site was already commented out in the original.
   - **The Configuration menu is full.** Column 1 (x=151) holds rows 0-4 at y=1/49/97/145/193; column 2 (x=1) holds SET KEYS, LANGUAGE (y=145) and VOLUME (y=193); SETTINGS is full at three options (a fourth doesn't fit: the blips sit at a fixed pitch `xs + spc*k` while labels have their own widths, so a fourth blip overlaps a label or leaves the 168-wide panel). See the fonts gotcha for how to lay out a row.
 - **`transforms.mjs`**: ordered AST transforms. Order matters:
@@ -358,7 +376,7 @@ The pipeline lives in `migrate.mjs`. It copies the project, unpacks the code, ap
   - `src/extensions/`: one module per GameMaker extension, with the functions the GML calls (`fullscreen_*`, `resume_*`, `saves_open`, `touch_*`, `pad_*`, `controls_show`, `crash_*`) and each one's state as Solid signals and stores. `src/ui/`: the components, each with its CSS beside it (`base.css` holds the tokens and buttons and is imported first).
   - **The extensions are stubs.** `import.mjs` writes each extension's file as one line, `barkley.extension("Touch");`, with its function declarations in the `.yy`. The GML's functions are page globals whatever the build, but what an extension does on its own (the crash recorder's listeners, the touch overlay, the pad poll, the resume listeners, the Controls link) starts only when its stub runs, so a faithful build, which has only Fullscreen, gets none of it. The stubs run as the runtime loads them, during `GameMaker_Init` (after `load` registered the Start screen's key handler, so the crash recorder never sees a key the Start screen kept from the game).
   - `canPlayType` reports no Ogg support, so the runtime loads the MP3 of every sound (Safari's Vorbis decoder drops the first ~26 ms of a sound, which cut the menu cursor thump; the user confirmed the fix by ear).
-  - **Font: Inter** (SIL OFL 1.1; the Latin subset with the weight and optical-size axes, from `@fontsource-variable/inter` 5.3.0), self-hosted as `app/inter.woff2` with `inter-OFL.txt` beside it (`src/web/public/app/`), preloaded, `font-display: swap`, falling back to Helvetica/Arial. The code boxes use the system monospace.
+  - **Font: Inter** (SIL OFL 1.1; the Latin subset with the weight and optical-size axes, from `@fontsource-variable/inter` 5.3.0), self-hosted as `app/inter.woff2` with `inter-OFL.txt` beside it (`src/web/public/app/`), preloaded, `font-display: block` (with `swap` the fallback face's other ascent and descent drew the Start word ~2 px lower until Inter arrived, so it jumped on every cold load and PWA launch; with `block` the text waits up to ~3 s for Inter), falling back to Helvetica/Arial. The code boxes use the system monospace.
   - **The Start word is the loading bar:** it fills grey to white, left to right, through a background-clipped gradient on a registered `@property --p` (animated 0.6 s linear). Progress is weighted 90% texture bytes, 10% the runtime's count of everything else: the runtime counts files, and ~180 small sounds (3.4 MB) finish long before the 9 texture pages (37 MB of the ~41 MB it loads), so counting alone sat at 89% for most of the load. To see texture bytes, the page overrides `HTMLImageElement.prototype.src` for `_texture_N.png` before Start: it downloads through `fetch` (priority low, as an image) with a stream reader, then loads the image from a blob URL; any failure falls back to the plain URL. Pages whose size isn't known yet count as the average known one.
   - **The design** (Swiss, monochrome, Inter, flush left; the user wants it forgettable, the game the centrepiece) lives in the components' style sheets (`.ui-panel`/`.ui-head`/`.ui-cols`/`.ui-code`/`.ui-btn`/`.ui-link`, `#gmtouch`/`.gmt-*`, `.ctl-table`). Every panel is `ui/Panel.tsx`: a `role="dialog"` sheet above the touch overlay's hit layer (`z-index` 2147483600 vs 2147483000), focused when it opens, with a Close link and Esc when it has `onClose`. It keeps the key events pressed inside it (native `on:keydown`, stopped before they reach the runtime's `window.onkeydown`), but passes through the release of a key pressed before it opened.
   - A `<button id="start">` covering the whole page, with its words (the game's name, "Start" in large type, a hint, the version line) drawn over it by `#face`, which has `pointer-events: none` so every click but the offline link's reaches the button (a button can't hold a link). **"Start" never moves** (the user's rule: it is the focal point): `#face` is a grid of `minmax(0, 1fr) auto minmax(0, 1fr)` with the word alone in the middle row, the name in the top row and everything under it (`.below`: the hint, then `#offline`, which appears at `markReady`) in the bottom one, and `--lift` (39 px of extra bottom padding) puts it where the old centred block left it once the version line was in, which also keeps that line clear of `#foot` on a phone in landscape with a resume state. Anything added above or below the word goes in those rows, never beside it in the middle one. **The game loads behind it:** `load` calls `GameMaker_Init()`; `import.mjs` sets `option_html5_loadingbar` to `barkley_loading`, which the runtime calls every loading frame instead of drawing its bar, but only once the extension scripts have loaded (so a 100 ms timer also runs `showProgress`). The runtime's frame state machine starts the game in the same frame that sees the last asset loaded, so the page holds it at the one gap: a `console.log` hook throws a sentinel at "Entering main loop..." (logged after all loading, just before Game Start), a `requestAnimationFrame` wrapper catches it and keeps later frames back, and Start is enabled and focused. A click, a tap, or a character key, Enter or an arrow (`barkley.start()`) removes the Start screen, resumes the recorded AudioContexts (the runtime unlocks audio on pointer presses only) and releases the frames, so the game starts at once. Keys before Start never reach the runtime. **Not resuming:** when `localStorage` holds `barkley.resume`, `#fresh` (a footer line flush with the words: "Continues where you left off." and the link `#fresh-go`, "Start from the title screen") shows; it's enabled with Start, and it or Enter/Space on it calls `barkley.start(true)`, which removes the key before Game Start's `resume_take` reads it. **Under the fuzz harness (`window.__fuzz`) none of this applies:** Start is enabled on load and runs `GameMaker_Init()`, because the harness wraps the game functions before init and runs the frames itself; the page also starts no frame loops of its own (`touch_pin`, `pad_poll`). `playtest.mjs` and `fuzz.mjs` find Start by id. `playtest.mjs` clicks it at once, so to screenshot the Start screen or the install prompt, use a scratch copy with the Start-click loop skipped.
@@ -460,8 +478,8 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   built v1.3.1 from the archive.org exe on `ubuntu-24.04` with no GameMaker installed (ProjectTool, Igor, the runtime
   and the licence all come through `toolchain.mjs`), play-tested it (game started, no exception), and deployed it to
   `https://wyatt-stanke.github.io/barkley/`. The CI migration matches a Mac migration of the same export except for
-  PNG encoding (pixel-identical). `bsuajg-test` (below) is still live and `deploy.mjs` still targets it; the GitHub
-  Pages site is now built only by the workflow.
+  PNG encoding (pixel-identical). `bsuajg-test` (below) is now only a redirect to it; the GitHub
+  Pages site is built only by the workflow.
 - **v1.3.1 is deployed (`3b7522f`, 2026-09-22): the same game as v1.3.0, rebuilt from an export `virt/` now
   makes from the original executable on its own.** Not a line of GML or a pixel of art changed; the export in front of the pipeline now comes from `virt/` (see below).
   `barkley-1.3.1` is the migration and import behind it, and its `.gmx` is byte-identical to `barkley-1.3.0.gmx`.
@@ -474,7 +492,12 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
 - **v1.1.1 (`068a661`) was the deploy before it.** It adds game controllers (`modernized/11` and `gamepad.js`); `barkley-1.1.1` is the migration and import behind it. Checked headlessly on that build with a fake standard-mapping pad injected by overriding `navigator.getGamepads` in a `js:` step: the shim loads and takes the bound keys (38/40/37/39/90/88/67), a face-0 press starts a new game and advances dialog, one d-pad press moves the title menu to New season and two to Load season, and two flicks of the left stick move the save-slot highlight from slot 0 to slot 2 (one step a flick, no runaway repeat). The audit is clean, the importer converted all GML, and `deploy.mjs`'s own play-test and its live md5 checks passed. Faithful output is unchanged by construction: nothing outside `patches/modernized/`, `web/gamepad.js` and the `import.mjs` gate was touched.
 - **v1.1.0 (`58167a6`) was the deploy before it:** the offline layer, the new app icon, the rebuilt battle-start transition and the dialog key fix.
 - **The dialog key was read twice in cutscenes.** `keyboard_clear` zeroes `keyboard_check` for the rest of the step, and the runtime rebuilds the key state from the real keyboard only once per step, at the top of the frame. An `oDialog` Create calls `key_clear`, and deferred instance creation runs after that rebuild but before Begin Step, so `key_release` read the clear as a release and dropped the latch mid-press; the next frame the still-held key read as a fresh press and fast-forwarded the new box's typing. `modernized/03` now latches only a held key and carries a "set this step" state. Verified on an unobfuscated build by wrapping the runtime's IO rebuild, `keyboard_clear`, `key_check`, `key_release` and `dialog_step`.
-- **v1.6.0 (`src/version.json`, 2026-10-01): "Start" holds still, a short Controls panel, no W/A/S/D.** The word
+- **v1.7.1 (`src/version.json`, 2026-10-01): "Start" no longer jumps when Inter loads.** v1.6.0's fix kept the word's
+  box still, but the glyphs moved inside it on the font swap (see the Font note under "The page"); now the font blocks.
+  Checked on a stand-in runtime with the font held 1.5 s over CDP: before, the baseline went 405.1 → 403.1 px at
+  1024x768 with the box fixed at 316.1; after, nothing is painted until Inter is in. **To measure a text shift, measure
+  a baseline (a 0x0 inline-block in the text), not the element's box.**
+- **v1.6.0 (2026-10-01): "Start" holds still, a short Controls panel, no W/A/S/D.** The word
   used to jump ~15 px up when the version line appeared under it at load; now it sits where it ended up from the
   first frame. The Controls panel is one table whose rows light up when pressed, with a connected/not connected mark
   for the controller, and on a phone or tablet the touch controls in place of the keyboard (see "The Controls link"). Patch `modernized/02` (W/A/S/D and J/K as extra keys) is gone, and
@@ -525,7 +548,7 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   was backed at 1170x2532 with its CSS pinned to 390 px, and a tap on A skipped the intro. Not seen yet on a real
   device or by a player. `barkley-1.3.1` has to be imported again before a local build (the extension stubs).
 - **v1.4.0 is live on `https://wyatt-stanke.github.io/barkley/`** (CI run `36085824557`, on `178d974`, the merge of
-  PR #2, 2026-09-25; `bsuajg-test` is still v1.3.1). **A browser tab no longer downloads the offline copy by
+  PR #2, 2026-09-25). **A browser tab no longer downloads the offline copy by
   itself.** The Start screen's version line offers it as a link that turns into the progress (see Offline play under
   "The page"); an installed app still downloads and updates on its own. The same change fixes the Start screen's foot, where
   Controls was drawn over "Continues where you left off." whenever a resume state was waiting. Checked only on a
@@ -559,6 +582,7 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
 - **Fuzzer restores replay exactly** (2026-09-18; checked again 2026-10-01 on `barkley-1.4.1`: node 13959, 99,191
   frames with 185 restores, ends at the same spot from a fresh page, and a restore is the same whatever the browser ran
   before it; `verify` now checks the longest path this way on every PR; `src/README.md`, "Snapshots and rewinds", has what is restored and what still differs). To check again after a harness change: play a corpus chain from a fresh page (`fromBoot`) and as recorded (`replayChain`), and compare `resume_save` at every step, treating handles and numbers alike (`"~ref object oBarkley"` is 13) and `true` as 1. No script for it is kept.
+- **v1.7.0 (2026-10-01): a Game style for the touch controls** (the ≡ sheet's Style row; see "Patches" under Architecture and `src/README.md`). Its screen is the menus' navy `#000040` (`#000080` is only the Configuration boxes' fill, and looked too bright), and its circles are drawn in two-game-pixel cells (one-pixel steps read as poor smoothing). Checked headlessly on a full migrate/import/build at 390x844@3 and 844x390@3, joystick and D-pad: the picture stays put upright, sits between the columns sideways, the border follows it in Integer scaling, and A and a D-pad arm light when held. The user has seen it on their phone over the LAN; not on a notched phone's safe-area insets yet.
 - **Not verified yet:**
   - The Controls panel and the Start screen on a real device: both have only been seen in headless Chromium (on a stand-in runtime since v1.6.0).
   - A real game controller, on any platform: everything above was driven by a faked `navigator.getGamepads`. Worth checking on hardware: that a pad shows up at all (browsers hide pads until a button is pressed on a focused page), that the face-button layout feels right, that walking with the stick is comfortable at the 0.45 deadzone, and that a pad connecting really does hide the phone's touch controls. A controller also cannot press the page's Start button: that still needs a click, tap or key.

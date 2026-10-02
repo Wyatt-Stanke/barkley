@@ -34,7 +34,7 @@ diff -ruN a/objects/oScreenFill/8_77.gml b/objects/oScreenFill/8_77.gml
  ah=surface_get_height(application_surface);
 -s=min(ww/aw,wh/ah);
 +//Modernized: with touch controls the picture gets part of the window and the rest holds the controls
-+if (touch_active()) { vx=touch_view_x(); vy=touch_view_y(); vw=touch_view_w(); vh=touch_view_h(); }
++if (touch_active()) { touch_fit(global.sat[0]); vx=touch_view_x(); vy=touch_view_y(); vw=touch_view_w(); vh=touch_view_h(); }
 +else { vx=0; vy=0; vw=ww; vh=wh; }
 +s=min(vw/aw,vh/ah);
  draw_clear(c_black);

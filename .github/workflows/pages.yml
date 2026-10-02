@@ -1,15 +1,24 @@
 # Builds the whole port from the original executable (node src/pipeline.mjs) and deploys the site to this
 # repository's GitHub Pages. Needs the repository secret GAMEMAKER_ACCESS_KEY (https://gamemaker.io/account/access_keys),
 # which Igor turns into a licence; everything else is downloaded, pinned, by src/fetch.mjs and src/toolchain.mjs.
+#
+# When the pull request check already built these exact sources (.github/actions/prebuilt), that build is deployed
+# instead of a new one: the same sources, already play-tested and fuzzed. Run it by hand with rebuild to build anyway.
 name: Build and deploy
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      rebuild:
+        description: Build again even if a build of these sources exists
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+  actions: read # to find the pull request check's build
   pages: write
   id-token: write
 
@@ -25,13 +34,31 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: ./.github/actions/setup
+      - id: prebuilt
+        if: ${{ !inputs.rebuild }}
+        uses: ./.github/actions/prebuilt
+
+      - if: steps.prebuilt.outputs.found != 'true'
+        uses: ./.github/actions/setup
 
       - name: Build (exe -> GMX -> LTS project -> HTML5 -> play-test)
+        if: steps.prebuilt.outputs.found != 'true'
         run: node src/pipeline.mjs --out=build/pipeline
         env:
           GAMEMAKER_ACCESS_KEY: ${{ secrets.GAMEMAKER_ACCESS_KEY }}
           BARKLEY_CONTAINER: docker
+
+      # so a pull request whose sources main already has can take this build
+      - name: Keep the build
+        if: steps.prebuilt.outputs.found != 'true' && steps.prebuilt.outputs.key
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.prebuilt.outputs.key }}
+          path: |
+            build/pipeline/site
+            build/pipeline/playtest
+          retention-days: 30
+          compression-level: 1
 
       - name: Keep the play-test's screenshot and console
         if: always()

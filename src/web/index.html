@@ -39,12 +39,14 @@
 		<link rel="stylesheet" href="app/barkley.css">
 		<!-- The font, and the runtime's own elements -->
 		<style>
+			/* block, not swap: the fallback face has other ascent and descent, so Inter swapping in moved the Start word
+			   a few pixels inside its line box on every cold load. The text waits (up to ~3 s) for Inter instead. */
 			@font-face {
 				font-family: 'Inter';
 				src: url('app/inter.woff2') format('woff2');
 				font-weight: 100 900;
 				font-style: normal;
-				font-display: swap;
+				font-display: block;
 			}
 
 			canvas {

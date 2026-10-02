@@ -14,9 +14,12 @@ runs:
         cache: npm
         cache-dependency-path: src/web/package-lock.json
 
+    # Prebuilt static ffmpeg and ffprobe (BtbN's builds, from GitHub releases), cached. apt took 20 s on a good day and
+    # once 26 min. The version is BtbN's current release line: they keep only the last two, so a pin would break, and
+    # ffmpeg only resizes icons, converts GIFs to PNG and counts channels here (another version's PNGs differ in bytes,
+    # not pixels).
     - name: Install ffmpeg
-      shell: bash
-      run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      uses: AnimMouse/setup-ffmpeg@v1
 
     - name: Cache the game's inputs
       uses: actions/cache@v6
