@@ -224,7 +224,7 @@ scratchpad dir, never in the project.
 - `build/outputs/`: migrations and their imports made by hand (`migrate.mjs`, `import.mjs`). **The user wants only the latest kept**: when you make a new one, delete the superseded migration and import (the user OK'd that). There is none at the moment; the latest migration and import are the pipeline's.
   - After an Igor build, copy `src/web/index.html` back into the project's `options/html5/` (see the HTML5 options gotcha).
 - `build/pipeline/`: `node src/pipeline.mjs`'s output (2026-09-26, with patch 20): `BarkleyV120.gmx` from `virt/`, `barkley-1.4.1.gmx` (plus `.code`), its import `barkley-1.4.1/BarkleyLTS.yyp` (with the extension stubs), `site/` (the minified deployable build) and `playtest/`.
-- `build/deploy/bsuajg-test`: `deploy.mjs`'s kept clone of the deploy repo (shallow; reset to `origin/main` on every deploy, so never keep work in it).
+- `build/deploy/bsuajg-test`: `deploy.mjs`'s old clone of the deploy repo, which is now a redirect (stale; safe to delete).
 - `build/fuzz/`: the fuzzer's files.
   - `corpus/`: the unpacked working copy of `fuzz/corpus.json.gz` (`state.json`, `nodes.json`, `nodes/<id>.json.gz`, and `packed.md5`, the md5 of the file it came from). Its snapshots belong to one build; `--corpus` keeps it while the packed file is unchanged and unpacks afresh (a rebase) when it isn't.
   - `build/`: an unobfuscated build of `barkley-1.4.1` from `build/pipeline` (2026-09-26), which the corpus's snapshots belong to.
@@ -235,21 +235,25 @@ scratchpad dir, never in the project.
   - User folder: `~/Library/Application Support/GameMakerStudio2-LTS2026/wyattstanke_5117727`. It holds the `licence.plist` Igor needs. `unknownUser_unknownUserID` is the old signed-out folder and has no licence.
 - Headless browser for `playtest.mjs`: Playwright's cached `~/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-x64/chrome-headless-shell` (override with `CHROME=`). There's no `playwright` npm package; the script talks to the DevTools protocol directly.
 
-### The web deploy: `github.com/Wyatt-Stanke/bsuajg-test`
+### The old web deploy: `github.com/Wyatt-Stanke/bsuajg-test` (now a redirect)
 
-It holds the contents of an HTML5 build's `out/` dir plus `README.md` and `.github/workflows/static.yml`, which deploys to GitHub Pages on every push to `main` (the origin is `wyatt-stanke.github.io`). The workflow pins `actions/checkout@v4`, `configure-pages@v5` and `upload-artifact@v4`, which target the deprecated Node 20; the runner forces them onto Node 24 and warns. They'll need bumping at some point.
+**Since 2026-10-01 (`7d12cbb`) it is only a redirect to `https://wyatt-stanke.github.io/barkley/`**, which the
+GitHub workflow builds and deploys on every push to `main` (see "GitHub Actions"). Its tree is `index.html` and
+`404.html` (both `location.replace('/barkley/' + search + hash)`, with a meta refresh and a link), `README.md`,
+`.github/workflows/static.yml`, and `sw.js`, a worker that retires the old build's: the browser fetches `sw.js` from
+the network on its update check even while the old worker serves a cached page, so a returning player gets it. It
+deletes `/bsuajg-test/.state` from `barkley-meta` and that state's build cache unless another site's `.state` names
+it, claims and reloads open tabs (`navigate()` needs the claim), and unregisters itself. **Both sites are on the
+origin `wyatt-stanke.github.io`, so they share `localStorage` (saves carry over) and Cache Storage, under the same
+cache names**: a cleanup there must never delete by prefix. (While both were live, `/barkley/`'s worker deleted the
+old site's build cache as a stale `barkley-build-*` the moment it saved its own.) Checked locally with both sites
+under one server: the old site with an offline copy, visited after the swap, landed on `/barkley/` with its own state
+and worker gone and `/barkley/`'s complete offline copy untouched. Live checks: the root and any old path (e.g.
+`html5game/BarkleyLTS.js`, a 404) serve the redirect.
 
-**Live: `3b7522f`** (2026-09-22), v1.3.1, the modernized build of `barkley-1.3.1`, deployed with `deploy.mjs`: the same game as v1.3.0, rebuilt from an export `virt/` makes on its own. Build id `cf172539be62bdd4`, 262 files cached. `BarkleyLTS.js` md5 `0747ac35d5b8a8e4b80fe5227ac793b9`; `index.html` md5 `7769c6b48933acfb6fed259c47805939`; `sw.js` md5 `8352242ca58c04a4c488f81a8d89eef7`; `version.json` md5 `2dd8f06063a5394d51e5765325b9f6c2`; shims `tph_crash.js`, `uph_controls.js`, `vph_gamepad.js`, `wph_touch.js`, `xph_saves.js`, `yph_resume.js`, `zph_fullscreen.js`, plus `inter.woff2` and `inter-OFL.txt` (a new extension shifts every shim's prefix, so they must ship with their bundle).
-
-**The deploy repo's history was flattened on 2026-09-22** (the user asked for it, with that deploy): its 26 commits, each a whole ~150 MB copy of the build tree, became the single orphan root commit `3b7522f`, force-pushed to `main`. The tree hash is unchanged (`2a3cee26`, 482 files) and the live site never moved, but **every earlier deploy hash is gone** — `61c0307` (v1.3.0), `7191192` (v1.2.2), `b7599e9` (v1.2.1), `0b65adb` (v1.2.0), `068a661` (v1.1.1), `58167a6` (v1.1.0) and the rest no longer resolve. This file's older entries name them only as labels. `deploy.mjs` needs no change: it resets to `origin/main` and commits on top, so the next deploy is the second commit in the new history. **Don't flatten again without being asked**; the history that is left is the record.
-
-**To deploy, run one command** (about 6 min with a build, ~2 more for the first clone):
-
-```sh
-node src/deploy.mjs build/outputs/<import>/BarkleyLTS.yyp --message-file=<file>   # or a build dir instead of a .yyp
-```
-
-It builds with `fuzz.mjs build --minify`, writes the offline layer over whatever built the tree (`sw.js` and a fresh `version.json`, and warns if the live site already has this version with different files), play-tests the build (boots, Start clicked, no exception), clones or reuses `build/deploy/bsuajg-test`, resets it to `origin/main` (deploys are pushed from several sessions, and committing on a stale tree drops the ones in between), rsyncs the whole build over it (shims have a per-build prefix, `tph_`, `uph_`, …, so they must ship with their bundle), commits as the previous deploy's author, pushes, watches the Pages workflow, and checks the live `index.html`, `version.json`, `sw.js`, `app/barkley.js`, `app/barkley.css` and game script md5s (cache-busted, retried while the CDN catches up) and that every shim answers 200. It exits non-zero at the first failed step and stops with a note if the site already has the build. `--dry-run` stops after the local commit. Write the commit message in the style of the earlier deploys ("Update HTML5 build: …", a paragraph for players, then the attribution trailers).
+**Don't run `src/deploy.mjs`**: it still targets this repo and would put a build back over the redirect. The deploy
+repo's history was flattened once (2026-09-22, at the user's request) to the single commit `3b7522f` (v1.3.1); every
+older deploy hash cited in this file is only a label now. Don't flatten again without being asked.
 
 ## Rebuilding the pristine export (`virt/`)
 
@@ -464,8 +468,8 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   built v1.3.1 from the archive.org exe on `ubuntu-24.04` with no GameMaker installed (ProjectTool, Igor, the runtime
   and the licence all come through `toolchain.mjs`), play-tested it (game started, no exception), and deployed it to
   `https://wyatt-stanke.github.io/barkley/`. The CI migration matches a Mac migration of the same export except for
-  PNG encoding (pixel-identical). `bsuajg-test` (below) is still live and `deploy.mjs` still targets it; the GitHub
-  Pages site is now built only by the workflow.
+  PNG encoding (pixel-identical). `bsuajg-test` (below) is now only a redirect to it; the GitHub
+  Pages site is built only by the workflow.
 - **v1.3.1 is deployed (`3b7522f`, 2026-09-22): the same game as v1.3.0, rebuilt from an export `virt/` now
   makes from the original executable on its own.** Not a line of GML or a pixel of art changed; the export in front of the pipeline now comes from `virt/` (see below).
   `barkley-1.3.1` is the migration and import behind it, and its `.gmx` is byte-identical to `barkley-1.3.0.gmx`.
@@ -529,7 +533,7 @@ Bugs found but not fixed yet. **When one is fixed, delete its entry entirely** (
   was backed at 1170x2532 with its CSS pinned to 390 px, and a tap on A skipped the intro. Not seen yet on a real
   device or by a player. `barkley-1.3.1` has to be imported again before a local build (the extension stubs).
 - **v1.4.0 is live on `https://wyatt-stanke.github.io/barkley/`** (CI run `36085824557`, on `178d974`, the merge of
-  PR #2, 2026-09-25; `bsuajg-test` is still v1.3.1). **A browser tab no longer downloads the offline copy by
+  PR #2, 2026-09-25). **A browser tab no longer downloads the offline copy by
   itself.** The Start screen's version line offers it as a link that turns into the progress (see Offline play under
   "The page"); an installed app still downloads and updates on its own. The same change fixes the Start screen's foot, where
   Controls was drawn over "Continues where you left off." whenever a resume state was waiting. Checked only on a
