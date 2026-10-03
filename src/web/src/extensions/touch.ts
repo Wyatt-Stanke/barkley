@@ -4,8 +4,12 @@
 //
 // Two coordinate systems meet here. The overlay lives in CSS pixels; GML's window/canvas coordinates are device
 // pixels once the DPR fix is on. px() is the only place that converts.
+//
+// The player can move each control (the layout editor, from the sheet): a move is an offset from where relayout puts
+// the control, kept per layout (upright, sideways, sideways in the Game style) and stored right-handed, so it mirrors
+// with Side as the defaults do.
 import { batch, createSignal } from 'solid-js';
-import { createStore } from 'solid-js/store';
+import { createStore, reconcile } from 'solid-js/store';
 import { fuzz, storage } from '../page';
 import { type Control, DEFAULT_KEYS, keysFrom, sendKey } from '../runtime/keys';
 
@@ -37,6 +41,13 @@ export interface Layout {
 	stickArea: Rect; // where the joystick is drawn: the safe area, or (Game style, landscape) its column
 	pic: Rect; // where oScreenFill draws the picture inside game, as it will draw it
 	unit: number; // one game pixel, in CSS pixels that are whole device pixels (the Game style draws at it)
+}
+// What the layout editor moves
+export type Part = 'dir' | 'action' | 'cancel' | 'start' | 'gear';
+type Kind = 'tall' | 'wide' | 'game'; // upright, sideways, sideways in the Game style
+interface Point {
+	x: number;
+	y: number;
 }
 type Sector = 'right' | 'upright' | 'up' | 'upleft' | 'left' | 'downleft' | 'down' | 'downright';
 interface Pointer {
@@ -99,6 +110,12 @@ export const [layout, setLayout] = createSignal<Layout | null>(null);
 export const [held, setHeld] = createStore<Partial<Record<Control, boolean>>>({});
 export const [dir, setDir] = createStore({ active: false, bx: 0, by: 0, tx: 0, ty: 0, sector: null as Sector | null });
 export const [sheetOpen, setSheetOpen] = createSignal(false);
+export const [editing, setEditing] = createSignal(false);
+export const [grabbed, setGrabbed] = createStore<Partial<Record<Part, boolean>>>({});
+let moves: Partial<Record<Kind, Partial<Record<Part, [number, number]>>>> = {}, // stored with the settings
+	kind: Kind = 'tall',
+	home: Record<Part, Point> | null = null, // where relayout put each control before the player's moves
+	grabs: Record<number, { part: Part; x: number; y: number; from: Point }> = {};
 const downAt: Partial<Record<Control, number>> = {},
 	pending: Partial<Record<Control, number>> = {};
 let ptr: Record<number, Pointer> = {};
@@ -214,6 +231,8 @@ export function releaseAll() {
 			}
 		setDir({ active: false, sector: null });
 		ptr = {};
+		grabs = {};
+		setGrabbed(reconcile({}));
 	});
 }
 function buzz(ms: number) {
@@ -241,13 +260,15 @@ function load() {
 	try {
 		const s = JSON.parse(storage.get('barkley.touch') || '{}');
 		for (const k of Object.keys(cfg) as (keyof typeof cfg)[]) if (s[k] !== undefined) setCfg(k, s[k]);
+		if (s.moves && typeof s.moves === 'object') moves = s.moves;
 	} catch {}
 }
+const save = () => storage.set('barkley.touch', JSON.stringify({ ...cfg, moves }));
 // A setting from the sheet: kept, then laid out again
 export function setting<K extends keyof typeof cfg>(k: K, v: (typeof cfg)[K]) {
 	setCfg(k, v);
 	if (k === 'enabled') apply();
-	storage.set('barkley.touch', JSON.stringify(cfg));
+	save();
 	relayout();
 }
 function wanted() {
@@ -270,7 +291,10 @@ function apply() {
 	const want = ready() && started() && wanted();
 	if (want !== live()) {
 		setLive(want);
-		if (!want) releaseAll();
+		if (!want) {
+			releaseAll();
+			setEditing(false);
+		}
 	}
 	relayout();
 }
@@ -308,6 +332,7 @@ function relayout() {
 	if (cfg.side === 'left') [il, ir] = [ir, il];
 	const wide = W / H > GW / GH,
 		buttons: Button[] = [];
+	kind = !wide ? 'tall' : cfg.theme === 'game' ? 'game' : 'wide';
 	let game: Rect, dirZone: Rect, dirHit: Rect, dirCenter: { x: number; y: number }, gear: Layout['gear'];
 	let stickArea = safe;
 	if (!wide) {
@@ -388,16 +413,52 @@ function relayout() {
 		for (const b of buttons) b.x = W - b.x;
 		[il, ir] = [ir, il]; // back to the real edges
 	}
-	for (const bt of [...buttons, gear] as (Button | Layout['gear'])[]) {
+	// inside the safe area, by a control's half width and height
+	const keep = (p: Point, hw: number, hh: number, m: number) => {
+		p.x = Math.max(il + hw + m, Math.min(W - ir - hw - m, p.x));
+		p.y = Math.max(it + hh + m, Math.min(H - ib - hh - m, p.y));
+	};
+	const fit = (bt: Button | Layout['gear']) => {
 		const pill = 'pill' in bt && bt.pill;
-		const hw = pill ? bt.r * 1.7 : bt.r,
-			hh = pill ? bt.r * 0.75 : bt.r; // the pill is 3.4r x 1.5r
-		bt.x = Math.max(il + hw + 8, Math.min(W - ir - hw - 8, bt.x));
-		bt.y = Math.max(it + hh + 8, Math.min(H - ib - hh - 8, bt.y));
-	}
+		keep(bt, pill ? bt.r * 1.7 : bt.r, pill ? bt.r * 0.75 : bt.r, 8); // the pill is 3.4r x 1.5r
+	};
+	for (const bt of [...buttons, gear]) fit(bt);
 	dirCenter.x = Math.max(dirZone.x + dpadR + 6, Math.min(dirZone.x + dirZone.w - dpadR - 6, dirCenter.x));
 	dirCenter.y = Math.max(dirZone.y + dpadR + 6, Math.min(dirZone.y + dirZone.h - dpadR - 6, dirCenter.y));
+	// Then the player's moves
+	const parts: Partial<Record<Part, Point>> = { dir: dirCenter, gear };
+	for (const b of buttons) parts[b.k as Part] = b;
+	home = Object.fromEntries(Object.entries(parts).map(([k, p]) => [k, { x: p.x, y: p.y }])) as Record<Part, Point>;
+	const flip = cfg.side === 'left' ? -1 : 1;
+	for (const [part, d] of Object.entries(moves[kind] ?? {}) as [Part, [number, number]][]) {
+		const p = parts[part];
+		if (!p || !Array.isArray(d)) continue;
+		p.x += flip * d[0];
+		p.y += d[1];
+		if (part !== 'dir') fit(p as Layout['gear']);
+	}
+	if (moves[kind]?.dir) {
+		const r = cfg.mode === 'dpad' ? dpadR : BASE_R;
+		keep(dirCenter, r, r, 6);
+		// the direction control's zones go with it
+		const dx = dirCenter.x - home.dir.x,
+			dy = dirCenter.y - home.dir.y;
+		if (stickArea !== safe) stickArea = shift(stickArea, dx, dy, safe);
+		dirZone = shift(dirZone, dx, dy, safe);
+		dirHit = shift(dirHit, dx, dy, { x: 0, y: 0, w: W, h: H });
+	}
 	setLayout({ W, H, game, dirZone, dirHit, dirCenter, dpadR, gear, buttons, safe, stickArea, ...picture(game) });
+}
+// A zone moved with its control, inside bounds. A side on the edge of the bounds stays there, so a hit zone that ran
+// out to the screen edge (for a thumb beside the Dynamic Island) still does.
+function shift(z: Rect, dx: number, dy: number, b: Rect): Rect {
+	const side = (v: number, d: number, lo: number, hi: number) =>
+		v <= lo || v >= hi ? v : Math.max(lo, Math.min(hi, v + d));
+	const x0 = side(z.x, dx, b.x, b.x + b.w),
+		x1 = side(z.x + z.w, dx, b.x, b.x + b.w),
+		y0 = side(z.y, dy, b.y, b.y + b.h),
+		y1 = side(z.y + z.h, dy, b.y, b.y + b.h);
+	return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
 }
 // Where oScreenFill draws the picture in game, worked out as it does it, in device pixels: the largest scale that fits,
 // whole when SCALING is Integer (or when it is under 1), centred. And the size of one game pixel, whole in device
@@ -471,6 +532,7 @@ export function onPointerDown(e: PointerEvent) {
 	if (!L || ctx() === 4) return;
 	e.preventDefault();
 	const p = { x: e.clientX, y: e.clientY };
+	if (editing()) return grab(e, p, L);
 	if (Math.hypot(p.x - L.gear.x, p.y - L.gear.y) <= L.gear.r * 1.6) return openSheet();
 	if (!live()) return; // controls off: only the settings button answers
 	batch(() => {
@@ -496,6 +558,7 @@ export function onPointerDown(e: PointerEvent) {
 	} catch {}
 }
 export function onPointerMove(e: PointerEvent) {
+	if (grabs[e.pointerId]) return drag(e);
 	const r = ptr[e.pointerId];
 	if (!r) return;
 	e.preventDefault();
@@ -510,6 +573,7 @@ export function onPointerMove(e: PointerEvent) {
 	});
 }
 export function onPointerUp(e: PointerEvent) {
+	if (grabs[e.pointerId]) return drop(e.pointerId);
 	const r = ptr[e.pointerId];
 	if (!r) return;
 	delete ptr[e.pointerId];
@@ -525,11 +589,68 @@ export function onPointerUp(e: PointerEvent) {
 	});
 }
 
-// ---- the settings sheet and SET KEYS
+// ---- the settings sheet, the layout editor and SET KEYS
 
 function openSheet() {
 	releaseAll();
 	setSheetOpen(true);
+}
+
+export function editLayout() {
+	releaseAll();
+	setSheetOpen(false);
+	setEditing(true);
+}
+export function doneEditing() {
+	releaseAll();
+	setEditing(false);
+}
+// Every control back where relayout puts it, in this layout
+export function resetLayout() {
+	delete moves[kind];
+	save();
+	relayout();
+}
+const where = (L: Layout, part: Part): Point =>
+	part === 'dir' ? L.dirCenter : part === 'gear' ? L.gear : (L.buttons.find((b) => b.k === part) ?? L.gear);
+function partAt(p: Point, L: Layout): Part | null {
+	if (Math.hypot(p.x - L.gear.x, p.y - L.gear.y) <= L.gear.r * 1.6) return 'gear';
+	for (const b of L.buttons) if (over(p, b, 1.1)) return b.k as Part;
+	const r = cfg.mode === 'dpad' ? L.dpadR : BASE_R;
+	if (Math.hypot(p.x - L.dirCenter.x, p.y - L.dirCenter.y) <= r * 1.1) return 'dir';
+	return null;
+}
+function grab(e: PointerEvent, p: Point, L: Layout) {
+	const part = partAt(p, L);
+	if (!part || grabbed[part]) return;
+	const at = where(L, part);
+	grabs[e.pointerId] = { part, x: p.x, y: p.y, from: { x: at.x, y: at.y } };
+	setGrabbed(part, true);
+	buzz(8);
+	try {
+		(e.currentTarget as Element).setPointerCapture(e.pointerId);
+	} catch {}
+}
+// A move, from where the control would be without one, right-handed
+function move(part: Part, x: number, y: number) {
+	if (!home) return;
+	const flip = cfg.side === 'left' ? -1 : 1;
+	moves[kind] = { ...moves[kind], [part]: [Math.round(flip * (x - home[part].x)), Math.round(y - home[part].y)] };
+	relayout();
+}
+function drag(e: PointerEvent) {
+	const g = grabs[e.pointerId];
+	e.preventDefault();
+	move(g.part, g.from.x + e.clientX - g.x, g.from.y + e.clientY - g.y);
+}
+// Kept as far as it went: a control dragged past the edge of the safe area stops at it
+function drop(id: number) {
+	const g = grabs[id],
+		L = layout();
+	delete grabs[id];
+	setGrabbed(g.part, false);
+	if (L) move(g.part, where(L, g.part).x, where(L, g.part).y);
+	save();
 }
 
 // SET KEYS records the next seven keys pressed and has no cancel key, so on a device with no keyboard this is the only

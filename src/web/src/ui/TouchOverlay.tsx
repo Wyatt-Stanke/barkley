@@ -1,6 +1,6 @@
 // The touch overlay (extensions/touch.ts has its state and input): the direction control, A, B and START drawn in an
 // SVG over the canvas, the settings button and its sheet (with a bug report, which needs a keyboard to type BUG
-// otherwise), and the note SET KEYS needs on a device with no keyboard.
+// otherwise), the layout editor the sheet opens, and the note SET KEYS needs on a device with no keyboard.
 import { For, type JSX, Show } from 'solid-js';
 import { askReport } from '../extensions/crash';
 import {
@@ -10,6 +10,10 @@ import {
 	cfg,
 	ctx,
 	dir,
+	doneEditing,
+	editing,
+	editLayout,
+	grabbed,
 	held,
 	KNOB_R,
 	type Layout,
@@ -18,6 +22,8 @@ import {
 	onPointerDown,
 	onPointerMove,
 	onPointerUp,
+	type Part,
+	resetLayout,
 	restoreDefaultKeys,
 	setSheetOpen,
 	setting,
@@ -34,6 +40,8 @@ export function TouchOverlay() {
 		const L = layout();
 		return L ? `0 0 ${L.W} ${L.H}` : undefined;
 	};
+	// a context's opacity for the direction control (0) or the buttons (1); the editor shows everything
+	const fade = (i: 0 | 1) => (editing() ? 1 : CONTEXTS[ctx()][i]);
 	return (
 		<Show when={shown()}>
 			<div id="gmtouch">
@@ -61,12 +69,15 @@ export function TouchOverlay() {
 									when={cfg.theme === 'game'}
 									fallback={
 										<>
-											<g opacity={CONTEXTS[ctx()][0]} class="gmt-fade">
+											<Show when={editing()}>
+												<Scrim L={L()} />
+											</Show>
+											<g opacity={fade(0)} class="gmt-fade">
 												<Show when={cfg.mode === 'dpad'} fallback={<Stick L={L()} />}>
 													<Dpad L={L()} />
 												</Show>
 											</g>
-											<g opacity={CONTEXTS[ctx()][1]} class="gmt-fade">
+											<g opacity={fade(1)} class="gmt-fade">
 												<Gear L={L()} />
 												<For each={L().buttons}>{(b) => <TouchButton b={b} />}</For>
 											</g>
@@ -74,15 +85,21 @@ export function TouchOverlay() {
 									}
 								>
 									<Backdrop L={L()} />
-									<g opacity={CONTEXTS[ctx()][0]} class="gmt-fade">
+									<Show when={editing()}>
+										<Scrim L={L()} />
+									</Show>
+									<g opacity={fade(0)} class="gmt-fade">
 										<Show when={cfg.mode === 'dpad'} fallback={<GameStick L={L()} />}>
 											<GameDpad L={L()} />
 										</Show>
 									</g>
-									<g opacity={CONTEXTS[ctx()][1]} class="gmt-fade">
+									<g opacity={fade(1)} class="gmt-fade">
 										<GameGear L={L()} />
 										<For each={L().buttons}>{(b) => <GameButton b={b} u={L().unit} />}</For>
 									</g>
+								</Show>
+								<Show when={editing()}>
+									<Marks L={L()} />
 								</Show>
 							</Show>
 						)}
@@ -91,9 +108,10 @@ export function TouchOverlay() {
 				<Show when={sheetOpen()}>
 					<Sheet />
 				</Show>
+				<Show when={editing() && layout()}>{(L) => <EditBar L={L()} />}</Show>
 				<Show when={ctx() === 4 && live()}>
 					<div id="gmtouch-note">
-						<p>SET KEYS needs a keyboard. It records the next seven keys you press and has no cancel.</p>
+						<p>SET KEYS needs a keyboard: it waits for seven key presses.</p>
 						<button type="button" class="ui-btn primary" onClick={restoreDefaultKeys}>
 							Restore default keys
 						</button>
@@ -162,10 +180,16 @@ function Stick(props: { L: Layout }) {
 		}
 		return { x: base().x + dx, y: base().y + dy };
 	};
+	const c = () => props.L.dirCenter;
 	return (
 		<Show
 			when={dir.active}
-			fallback={<circle cx={props.L.dirCenter.x} cy={props.L.dirCenter.y} r={BASE_R} class="gmt-ghost" />}
+			fallback={
+				<Show when={editing()} fallback={<circle cx={c().x} cy={c().y} r={BASE_R} class="gmt-ghost" />}>
+					<circle cx={c().x} cy={c().y} r={BASE_R} class="gmt-ring" />
+					<circle cx={c().x} cy={c().y} r={KNOB_R} class="gmt-knob" />
+				</Show>
+			}
 		>
 			<circle cx={base().x} cy={base().y} r={BASE_R} class="gmt-ring" />
 			<circle cx={knob().x} cy={knob().y} r={KNOB_R} class="gmt-knob" classList={{ on: !!dir.sector }} />
@@ -235,26 +259,73 @@ function Dpad(props: { L: Layout }) {
 	);
 }
 
+// The layout editor: the game dimmed, an outline round each control (solid while it is being dragged), and a bar over
+// the picture to reset the layout or finish.
+function Scrim(props: { L: Layout }) {
+	return <rect x={-1} y={-1} width={props.L.W + 2} height={props.L.H + 2} class="gmt-scrim" />;
+}
+function Marks(props: { L: Layout }) {
+	const ring = (part: Part, x: number, y: number, r: number) => (
+		<circle cx={x} cy={y} r={r + 6} class="gmt-mark" classList={{ on: !!grabbed[part] }} />
+	);
+	return (
+		<>
+			{ring('dir', props.L.dirCenter.x, props.L.dirCenter.y, cfg.mode === 'dpad' ? props.L.dpadR : BASE_R)}
+			{ring('gear', props.L.gear.x, props.L.gear.y, props.L.gear.r)}
+			<For each={props.L.buttons}>
+				{(b) => (
+					<Show when={b.pill} fallback={ring(b.k as Part, b.x, b.y, b.r)}>
+						<rect
+							x={b.x - b.r * 1.7 - 6}
+							y={b.y - b.r * 0.75 - 6}
+							width={b.r * 3.4 + 12}
+							height={b.r * 1.5 + 12}
+							class="gmt-mark"
+							classList={{ on: !!grabbed[b.k as Part] }}
+						/>
+					</Show>
+				)}
+			</For>
+		</>
+	);
+}
+function EditBar(props: { L: Layout }) {
+	const g = () => props.L.game;
+	return (
+		<div id="gmtouch-edit" style={{ left: `${g().x + g().w / 2}px`, top: `${g().y + g().h / 2}px` }}>
+			<p>Drag the controls to move them.</p>
+			<div>
+				<button type="button" id="gmtouch-reset" class="gmt-b" onClick={resetLayout}>
+					Reset
+				</button>
+				<button type="button" id="gmtouch-edit-done" class="gmt-b on" onClick={doneEditing}>
+					Done
+				</button>
+			</div>
+		</div>
+	);
+}
+
 // A row of the settings sheet: what it sets, and a segmented choice
 function Choice<T extends string | number>(props: {
 	label: string;
-	hint?: string;
 	options: [string, T][];
 	value: T;
 	set: (v: T) => void;
 }): JSX.Element {
 	return (
 		<div class="gmt-row">
-			<div class="gmt-cell">
-				<div class="gmt-lab">{props.label}</div>
-				<Show when={props.hint}>
-					<div class="gmt-hint">{props.hint}</div>
-				</Show>
-			</div>
+			<span>{props.label}</span>
 			<div class="gmt-seg">
 				<For each={props.options}>
 					{([name, v]) => (
-						<button type="button" data-v={String(v)} aria-pressed={props.value === v} onClick={() => props.set(v)}>
+						<button
+							type="button"
+							class="gmt-opt"
+							data-v={String(v)}
+							aria-pressed={props.value === v}
+							onClick={() => props.set(v)}
+						>
 							{name}
 						</button>
 					)}
@@ -273,75 +344,78 @@ function Sheet() {
 					Done
 				</button>
 			</div>
-			<Choice
-				label="Control"
-				hint="Joystick follows your thumb. D-pad stays put."
-				options={[
-					['Joystick', 'stick'],
-					['D-pad', 'dpad'],
-				]}
-				value={cfg.mode}
-				set={(v) => setting('mode', v)}
-			/>
-			<Choice
-				label="Style"
-				hint="Game draws the controls like the game's menus, around the picture."
-				options={[
-					['Plain', 'plain'],
-					['Game', 'game'],
-				]}
-				value={cfg.theme}
-				set={(v) => setting('theme', v)}
-			/>
-			<Choice
-				label="Side"
-				options={[
-					['Right', 'right'],
-					['Left', 'left'],
-				]}
-				value={cfg.side}
-				set={(v) => setting('side', v)}
-			/>
-			<Choice
-				label="Vibration"
-				options={[
-					['On', 1],
-					['Off', 0],
-				]}
-				value={cfg.haptics}
-				set={(v) => setting('haptics', v)}
-			/>
-			<Choice
-				label="Show controls"
-				hint="Auto hides them for a gamepad. Off keeps the ≡ button, to bring them back."
-				options={[
-					['Auto', 2],
-					['On', 1],
-					['Off', 0],
-				]}
-				value={cfg.enabled}
-				set={(v) => setting('enabled', v)}
-			/>
-			<Show when={has('Crash')}>
-				<div class="gmt-row">
-					<div class="gmt-cell">
-						<div class="gmt-lab">Bug report</div>
-						<div class="gmt-hint">The last 10 seconds of play, to copy and send.</div>
-					</div>
-					<div class="gmt-seg">
-						<button
-							type="button"
-							id="gmtouch-bug"
-							onClick={() => {
-								setSheetOpen(false);
-								askReport();
-							}}
-						>
-							Report
-						</button>
-					</div>
-				</div>
-			</Show>
+			<div class="gmt-rows">
+				<Choice
+					label="Control"
+					options={[
+						['Joystick', 'stick'],
+						['D-pad', 'dpad'],
+					]}
+					value={cfg.mode}
+					set={(v) => setting('mode', v)}
+				/>
+				<Choice
+					label="Style"
+					options={[
+						['Plain', 'plain'],
+						['Game', 'game'],
+					]}
+					value={cfg.theme}
+					set={(v) => setting('theme', v)}
+				/>
+				<Choice
+					label="Side"
+					options={[
+						['Left', 'left'],
+						['Right', 'right'],
+					]}
+					value={cfg.side}
+					set={(v) => setting('side', v)}
+				/>
+				{/* iOS has no vibration */}
+				<Show when={typeof navigator.vibrate === 'function'}>
+					<Choice
+						label="Vibration"
+						options={[
+							['On', 1],
+							['Off', 0],
+						]}
+						value={cfg.haptics}
+						set={(v) => setting('haptics', v)}
+					/>
+				</Show>
+				{/* Auto hides them while a gamepad is connected; Off keeps the ≡ button, to bring them back */}
+				<Choice
+					label="Show"
+					options={[
+						['Auto', 2],
+						['On', 1],
+						['Off', 0],
+					]}
+					value={cfg.enabled}
+					set={(v) => setting('enabled', v)}
+				/>
+			</div>
+			<div class="gmt-acts">
+				<Show when={live()}>
+					<button type="button" id="gmtouch-layout" class="gmt-b" onClick={editLayout}>
+						Move controls
+					</button>
+				</Show>
+				<Show when={has('Crash')}>
+					<button
+						type="button"
+						id="gmtouch-bug"
+						class="gmt-b"
+						onClick={() => {
+							setSheetOpen(false);
+							askReport();
+						}}
+					>
+						Report a bug
+					</button>
+				</Show>
+			</div>
 		</div>
 	);
 }
