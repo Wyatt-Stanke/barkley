@@ -86,21 +86,52 @@
 	stroke: rgba(255, 255, 255, 0.6);
 	stroke-width: 1.25;
 }
+/* The layout editor: the game dimmed under the controls, an outline round each, a bar over the picture */
+.gmt-scrim {
+	fill: rgba(0, 0, 0, 0.6);
+}
+.gmt-mark {
+	fill: none;
+	stroke: rgba(255, 255, 255, 0.7);
+	stroke-width: 1;
+	stroke-dasharray: 4 4;
+}
+.gmt-mark.on {
+	stroke: #ffffff;
+	stroke-width: 2;
+	stroke-dasharray: none;
+}
+#gmtouch-edit {
+	position: absolute;
+	transform: translate(-50%, -50%);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+	color: var(--ink);
+	font: 14px / 1.3 var(--font);
+	white-space: nowrap;
+}
+#gmtouch-edit p {
+	margin: 0;
+}
+#gmtouch-edit div {
+	display: flex;
+	gap: 8px;
+}
 /* Its settings sheet and the SET KEYS note */
 #gmtouch-sheet {
 	position: absolute;
 	left: 0;
 	right: 0;
 	bottom: 0;
-	display: flex;
-	flex-direction: column;
 	box-sizing: border-box;
-	padding: 4px calc(var(--g) + var(--touch-right)) calc(12px + var(--touch-bottom)) calc(var(--g) + var(--touch-left));
+	padding: 0 calc(var(--g) + var(--touch-right)) calc(10px + var(--touch-bottom)) calc(var(--g) + var(--touch-left));
 	color: var(--ink);
 	background: var(--paper);
 	border-top: 1px solid var(--ink);
 	pointer-events: auto;
-	font: 15px / 1.3 var(--font);
+	font: 14px / 1.3 var(--font);
 	max-height: calc(100% - var(--touch-top));
 	overflow-y: auto;
 }
@@ -109,34 +140,52 @@
 	justify-content: space-between;
 	align-items: center;
 }
+.gmt-head .ui-link {
+	min-height: 40px;
+}
 #gmtouch-sheet h3 {
 	margin: 0;
 	font: 700 12px / 1.3 var(--font);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 }
+/* One column upright, two sideways */
+.gmt-rows {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	column-gap: 32px;
+}
+@media (min-width: 600px) {
+	.gmt-rows {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	}
+}
 .gmt-row {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	gap: 16px;
-	padding: 10px 0;
+	gap: 12px;
+	padding: 4px 0;
 	border-top: 1px solid var(--rule);
 }
-.gmt-hint {
-	margin-top: 2px;
-	font-size: 12px;
-	color: var(--mute);
-}
-.gmt-seg {
+.gmt-seg,
+.gmt-acts {
 	display: flex;
 	flex: 0 0 auto;
+}
+.gmt-seg {
 	border: 1px solid var(--ink);
 }
-.gmt-seg button {
+.gmt-acts {
+	gap: 8px;
+	padding-top: 8px;
+	border-top: 1px solid var(--rule);
+}
+.gmt-opt,
+.gmt-b {
 	appearance: none;
 	min-width: 44px;
-	min-height: 36px;
+	min-height: 34px;
 	padding: 0 12px;
 	font: 500 13px / 1 var(--font);
 	color: var(--ink);
@@ -144,11 +193,19 @@
 	border: 0;
 	border-radius: 0;
 	cursor: pointer;
+	touch-action: manipulation;
 }
-.gmt-seg button + button {
+/* In the edit bar only these take a touch, so a control dropped under it can still be dragged out by its edges */
+.gmt-b {
+	background: var(--paper);
+	border: 1px solid var(--ink);
+	pointer-events: auto;
+}
+.gmt-opt + .gmt-opt {
 	border-left: 1px solid var(--ink);
 }
-.gmt-seg button[aria-pressed='true'] {
+.gmt-opt[aria-pressed='true'],
+.gmt-b.on {
 	color: var(--paper);
 	background: var(--ink);
 }
