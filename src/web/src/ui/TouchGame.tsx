@@ -3,7 +3,7 @@
 // whole number of device pixels), framed as the menu sprites are (sStartConfig, sTitle0): a grey pixel, two brown,
 // then the fill. Labels are the menu font's (Courier8, GZFruit) own bitmaps.
 import { createMemo, For, Show } from 'solid-js';
-import { BASE_R, type Button, dir, held, KNOB_R, type Layout, THROW } from '../extensions/touch';
+import { BASE_R, type Button, dir, editing, held, KNOB_R, type Layout, THROW } from '../extensions/touch';
 
 // The menus' navy: the title menu, save boxes, game over and the battle HUD all fill with it (only the three
 // Configuration boxes use #000080). The controls share it and stand out by their frames, as the menus do.
@@ -224,7 +224,7 @@ export function GameStick(props: { L: Layout }) {
 	};
 	const r = dpr();
 	return (
-		<g shape-rendering="crispEdges" opacity={dir.active ? 1 : 0.7}>
+		<g shape-rendering="crispEdges" opacity={dir.active || editing() ? 1 : 0.7}>
 			<g transform={`translate(${snap(at().bx, r)} ${snap(at().by, r)})`}>
 				<Framed layers={base().layers} />
 				<g transform={`translate(${snap(at().kx, r)} ${snap(at().ky, r)})`}>
