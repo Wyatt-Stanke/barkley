@@ -18,7 +18,7 @@ while it downloads the game and the tools):
 
 | step | what | tool |
 |---|---|---|
-| fetch | the original game (archive.org, MD5-checked) and the GM6 decompiler's source | `src/fetch.mjs` |
+| fetch | the original game (archive.org, MD5-checked), and the submodules in `virt/upstream/` if they aren't checked out | `src/fetch.mjs` |
 | export | `BarkleyV120.exe` → `.gm6` → a GameMaker: Studio 1.4 GMX, in Java containers | `virt/run.sh` |
 | migrate | the GMX → one that GameMaker LTS can import (patches, AST transforms, the real music and fonts) | `src/migrate.mjs` |
 | import | → a GameMaker LTS project, with the page template and its extensions | `src/import.mjs` |

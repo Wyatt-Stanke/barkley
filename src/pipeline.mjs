@@ -4,7 +4,7 @@
 //
 //   node src/pipeline.mjs [--out=<dir>] [--mode=modernized|faithful] [--from=exe|pristine] [--no-playtest]
 //
-//   1. fetch     the original game (archive.org) and the GM6 decompiler's source  -> game/original/   (src/fetch.mjs)
+//   1. fetch     the original game (archive.org) -> game/original/, and the virt/upstream/ submodules  (src/fetch.mjs)
 //   2. export    BarkleyV120.exe -> .gm6 -> GMX, in containers                     -> <out>/BarkleyV120.gmx (virt/run.sh)
 //   3. migrate   the GMX -> a GMX that GameMaker LTS can import                    -> <out>/barkley-<version>.gmx
 //   4. import    -> a GameMaker LTS project, with the page and its extensions      -> <out>/barkley-<version>/

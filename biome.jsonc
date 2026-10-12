@@ -5,7 +5,8 @@
 	"vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
 	"files": {
 		// Generated: the Peggy parser (from gml.peggy) and npm's lockfile. docs/ holds a saved artifact page.
-		"includes": ["**", "!src/lib/gml.parser.mjs", "!**/package-lock.json", "!docs"]
+		// virt/upstream/ holds other projects' code (git submodules).
+		"includes": ["**", "!src/lib/gml.parser.mjs", "!**/package-lock.json", "!docs", "!virt/upstream"]
 	},
 	"formatter": { "indentStyle": "tab", "indentWidth": 2, "lineWidth": 120 },
 	"javascript": { "formatter": { "quoteStyle": "single" } },

@@ -21,10 +21,11 @@ OUT=${1:-$BARKLEY_ROOT/build/virt/BarkleyV120.gmx}
 GM6=$BARKLEY_ROOT/build/virt/BarkleyV120.gm6
 
 for input in "$BARKLEY_ROOT/game/original/BarkleyV120.exe" \
-             "$BARKLEY_ROOT/game/original/GMDecompilerDecompiled/src/main/java"; do
+             "$VIRT_DIR/upstream/GMDecompilerDecompiled/src/main/java" \
+             "$VIRT_DIR/upstream/LateralGM/modules/joshedit/src"; do
   if [ ! -e "$input" ]; then
     echo "missing input: $input" >&2
-    echo "(set BARKLEY_ROOT to the checkout that has game/original/)" >&2
+    echo "(node src/fetch.mjs provides it; or set BARKLEY_ROOT to the checkout that has game/original/)" >&2
     exit 1
   fi
 done

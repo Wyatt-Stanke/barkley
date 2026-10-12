@@ -26,7 +26,7 @@ Don't hand-edit the GMX resources in `game/BarkleyV120.gmx` (`objects/`, `script
 
 ```sh
 # 0. Everything, from the original exe to a play-tested site (~5 min on a GitHub runner; each step's output is kept, so a rerun resumes).
-#    fetch (archive.org zip, MD5-checked, + the GM6 decompiler's source at a pinned commit, into game/original/) ->
+#    fetch (archive.org zip, MD5-checked, into game/original/; checks out virt/upstream/'s submodules if needed) ->
 #    virt/run.sh -> migrate (fails unless the audit is clean) -> import -> build.mjs --minify -> play-test.
 #    Writes <out>/BarkleyV120.gmx, barkley-<version>.gmx, barkley-<version>/BarkleyLTS.yyp, site/, playtest/.
 #    --from=pristine migrates game/BarkleyV120.gmx instead of exporting. This is what the GitHub workflow runs.
@@ -206,7 +206,8 @@ barkley/
                  the Start screen, panels, touch overlay, and the functions the GML calls), public/ (sw.js, the font),
                  pwa/ (manifest and icon, Included Files); node_modules/ is untracked
     README.md    the full pipeline description
-  virt/          makes game/BarkleyV120.gmx from the original exe (see its README)
+  virt/          makes game/BarkleyV120.gmx from the original exe (see its README); upstream/ holds the two programs
+                 it runs as git submodules (GMDecompilerDecompiled, LateralGM)
   game/          inputs: large, immutable, untracked (except recovered-scripts/)
   docs/          an earlier audit page
   fuzz/          corpus.json.gz: the fuzzer's corpus, packed (paths, not snapshots; see src/README.md "Fuzzing")
@@ -225,7 +226,6 @@ scratchpad dir, never in the project.
   It is 28 MB (the migrated output is ~185 MB, because the migration brings in the real music). A copy is in
   `~/Documents/barkley copy/BarkleyV120.gmx.orig`, a backup of the pre-reorganisation layout from 2026-09-19.
 - `game/original/`: the original distribution (exe, `.gm6`, `Music/`, `Voice/`, `BG/`, `bgm.dll`), and `migrate.mjs`'s second argument. `src/fetch.mjs` recreates it (minus the `.gm6`) from `archive.org/download/BarkleyShutUpAndJamGaiden/BarkleyV120.zip`, whose contents are byte-identical to it.
-  - `GMDecompilerDecompiled/`: Java source of the GM6 decompiler that produced the export. It's the reference for the exe format `importFonts` reads.
 - `game/recovered-scripts/`: the 8 scripts lost to case collisions (the patch source for `sBeatAdd`). Small, so it's the one tracked part of `game/`.
 - `game/releases/`: zips of other releases (V106–V110, and OS X and RPG Maker 2003 versions).
 - `docs/Barkley Gaiden Port Audit.html`: an earlier audit page.
@@ -271,6 +271,15 @@ older deploy hash cited in this file is only a label now. Don't flatten again wi
 only matters when the export has to be regenerated or audited (the pipeline runs it from the exe).
 `virt/README.md` has the detail; what follows is what you need before opening it.
 
+**The two programs are git submodules in `virt/upstream/`**, each pinned to a commit:
+`GMDecompilerDecompiled` (`ButterscotchRunner/GMDecompilerDecompiled`, the Java source of the GM6
+decompiler that produced the export, and the reference for the exe format `importFonts` reads) and
+`LateralGM` (`IsmAvatar/LateralGM`, which has its own submodule, JoshEdit). Clone with
+`--recurse-submodules`, or let `src/fetch.mjs` run `git submodule update --init --recursive`. To move a
+pin, check out the new commit inside the submodule and commit the gitlink; a new LateralGM needs the
+patches re-checked. They live under `virt/upstream/`, not `virt/LateralGM`, because that would
+collide with `virt/lateralgm/` on a case-insensitive filesystem.
+
 ```sh
 virt/run.sh                  # both steps: the exe -> build/virt/BarkleyV120.gmx (~3 min)
 virt/decompile.sh [out.gm6]  # step 1 alone: the exe -> build/virt/BarkleyV120.gm6 (~75 s)
@@ -286,8 +295,8 @@ virt/convert.sh [in] [out]   # step 2 alone: the .gm6 -> the .gmx (~1 min)
   `virt/java/Decompile.java` is what makes it headless: the decompiler reads its input path out of a
   Swing text field (`GmDecompiler.sourceField`), so that field is filled in rather than a window built.
 - **Step 2, the `.gm6` to a `.gmx`, uses [LateralGM](https://github.com/IsmAvatar/LateralGM)**, which
-  reads GM6 and writes GMX directly — no IDE, no licence, no GUI automation. It is cloned at a pinned
-  commit, `virt/lateralgm/patches/*.patch` are applied at build time (nothing is vendored), and
+  reads GM6 and writes GMX directly — no IDE, no licence, no GUI automation. `virt/lateralgm/patches/*.patch`
+  are applied to a copy of the submodule at build time (nothing is vendored), and
   `virt/lateralgm/Gm6ToGmx.java` drives it headless. The four patches fix what its GMX writer loses:
   the transparency key (java.awt's `RGBImageFilter` clears the colour under the pixels it makes
   transparent, and backgrounds never got the key at all), smooth edges (`alpha = 255 - 32 *

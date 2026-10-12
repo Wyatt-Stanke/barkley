@@ -5,8 +5,8 @@
 #
 # This step is plain Java and runs in a container.
 #
-# The decompiler is compiled from the sources kept at
-# game/original/GMDecompilerDecompiled, together with the headless entry point
+# The decompiler is compiled from the sources in the submodule
+# virt/upstream/GMDecompilerDecompiled, together with the headless entry point
 # in virt/java/Decompile.java -- GmDecompilerCli cannot do this on its own
 # (that file explains why). Java 8 exactly: ProgressDialogListener calls
 # Thread.stop(), which has been gone since Java 20.
@@ -39,12 +39,12 @@ else
 fi
 
 EXE=$BARKLEY_ROOT/game/original/BarkleyV120.exe
-SRC=$BARKLEY_ROOT/game/original/GMDecompilerDecompiled/src/main/java
+SRC=$VIRT_DIR/upstream/GMDecompilerDecompiled/src/main/java
 
 for input in "$EXE" "$SRC" "$VIRT_DIR/java/Decompile.java"; do
   if [ ! -e "$input" ]; then
     echo "missing input: $input" >&2
-    echo "(set BARKLEY_ROOT to the checkout that has game/original/)" >&2
+    echo "(node src/fetch.mjs provides it; or set BARKLEY_ROOT to the checkout that has game/original/)" >&2
     exit 1
   fi
 done

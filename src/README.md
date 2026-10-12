@@ -20,8 +20,9 @@ imports are named after it too — `build/outputs/barkley-<version>.gmx` and `bu
 
 - Node.js 24+ (no npm packages; `playtest.mjs` uses the built-in `WebSocket`, the scripts `import.meta.main`). The page around the game, `web/`, is the exception: a Vite + SolidJS + TypeScript project whose packages `page.mjs` installs from `web/package-lock.json` with `npm ci` the first time it builds. Peggy is only needed to regenerate the parser after editing the grammar: `npx -y peggy@5.1.0 --format es --allowed-start-rules Program,Tokens -o src/lib/gml.parser.mjs src/lib/gml.peggy`
 - `ffmpeg`, `ffprobe` and `patch` on PATH (on Windows, Git Bash provides `patch`); `curl`, `unzip` and `git` for the downloads
-- The inputs: `node src/fetch.mjs` puts the original distribution (with `Music/`, `Voice/` and `BG/`) and the GM6
-  decompiler's source in `game/original/`, and `virt/run.sh` (podman or docker) makes the GMX export from them
+- The inputs: `node src/fetch.mjs` puts the original distribution (with `Music/`, `Voice/` and `BG/`) in
+  `game/original/` and checks out the submodules in `virt/upstream/` (the GM6 decompiler's source and LateralGM), and
+  `virt/run.sh` (podman or docker) makes the GMX export from them
 - For importing and building, GameMaker's tools and a licence, which `toolchain.mjs` finds or installs (below)
 - For play-testing: `python3` and a Chromium headless shell (`toolchain.mjs` again)
 
