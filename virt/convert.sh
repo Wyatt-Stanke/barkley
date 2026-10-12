@@ -6,10 +6,11 @@
 # LateralGM reads GM6 and writes GMX directly: plain Java, in a container, in
 # about a minute. virt/README.md has the comparison against game/BarkleyV120.gmx.
 #
-# LateralGM is cloned at the pinned commit below and the patches in
-# virt/lateralgm/patches are applied to it; virt/lateralgm/Gm6ToGmx.java is the
-# headless entry point. Nothing is vendored, so upstream's history still tells
-# you what you are running.
+# LateralGM is the submodule virt/upstream/LateralGM, pinned to a commit, and
+# the patches in virt/lateralgm/patches are applied to a copy of it;
+# virt/lateralgm/Gm6ToGmx.java is the headless entry point. Nothing is vendored,
+# so upstream's history still tells you what you are running. A newer commit
+# needs the patches re-checked.
 #
 # Java 8 exactly, and -source/-target 1.7: LateralGM's own Makefile builds that
 # way, and under 8 without it GMXFileWriter.java:1333 is an ambiguous println.
@@ -26,9 +27,6 @@ set -eu
 VIRT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
 BARKLEY_ROOT=${BARKLEY_ROOT:-$(cd -- "$VIRT_DIR/.." && pwd)}
 
-REPO=${BARKLEY_LGM_REPO:-https://github.com/IsmAvatar/LateralGM.git}
-# Master as of 2026-09-22. Anything newer needs the patches re-checked.
-COMMIT=${BARKLEY_LGM_COMMIT:-d315565a76f0186a123e6b3424a09b6ea5760d0c}
 IMAGE=${BARKLEY_JDK_IMAGE:-docker.io/library/eclipse-temurin:8u462-b08-jdk-noble}
 
 GM6=${1:-$BARKLEY_ROOT/build/virt/BarkleyV120.gm6}
@@ -48,29 +46,25 @@ fi
 
 [ -s "$GM6" ] || { echo "missing input: $GM6 (run virt/decompile.sh first)" >&2; exit 1; }
 
-# The clone is kept between runs -- it is 60 MB and the pin never moves on its
-# own. JoshEdit is a submodule and LateralGM does not compile without it.
-SRC=$BARKLEY_ROOT/build/virt/lateralgm-src
-if [ ! -d "$SRC/.git" ]; then
-  echo "==> Cloning LateralGM"
-  rm -rf "$SRC"
-  git clone --quiet "$REPO" "$SRC"
+# JoshEdit is LateralGM's own submodule and LateralGM does not compile without
+# it, so check for that as well.
+SRC=$VIRT_DIR/upstream/LateralGM
+if [ ! -d "$SRC/modules/joshedit/src" ]; then
+  echo "missing input: $SRC (with modules/joshedit)" >&2
+  echo "(node src/fetch.mjs, or git submodule update --init --recursive)" >&2
+  exit 1
 fi
-echo "==> LateralGM at $COMMIT"
-(
-  cd "$SRC"
-  git fetch --quiet origin
-  git checkout --quiet --force "$COMMIT"
-  git submodule --quiet update --init --recursive
-)
+echo "==> LateralGM at $(git -C "$SRC" rev-parse --short HEAD)"
 
 WORK=$BARKLEY_ROOT/build/virt/convert
 rm -rf "$WORK"
 mkdir -p "$WORK/out"
 
-# A copy, so the patches never touch the clone and the next run starts clean.
+# A copy, so the patches never touch the submodule and the next run starts
+# clean. A submodule's .git is a file pointing into the superproject's .git,
+# which the container cannot see, so those go.
 cp -R "$SRC" "$WORK/lgm"
-rm -rf "$WORK/lgm/.git"
+find "$WORK/lgm" -name .git -exec rm -rf {} +
 cp "$VIRT_DIR/lateralgm/Gm6ToGmx.java" "$WORK/lgm/"
 cp "$GM6" "$WORK/BarkleyV120.gm6"
 

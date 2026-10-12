@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
-// Fetches the pipeline's inputs into game/original/, skipping whatever is already there:
+// Fetches the pipeline's inputs, skipping whatever is already there:
 //
 //   node src/fetch.mjs
 //
 // - the original v1.20 distribution (BarkleyV120.exe, bass.dll, bgm.dll, ReadMe.txt, Music/, Voice/, BG/), from the
-//   Internet Archive's copy of the game, checked against its MD5;
-// - the GM6 decompiler's Java source (ButterscotchRunner/GMDecompilerDecompiled), cloned at a pinned commit, which
-//   virt/decompile.sh compiles.
+//   Internet Archive's copy of the game, checked against its MD5, into game/original/;
+// - the git submodules in virt/upstream/ (the GM6 decompiler's Java source and LateralGM, each pinned to a commit),
+//   which virt/ compiles, for a checkout made without --recurse-submodules.
 //
 // Needs curl, unzip and git on PATH.
 
@@ -18,8 +18,6 @@ import path from 'node:path';
 
 const ZIP_URL = 'https://archive.org/download/BarkleyShutUpAndJamGaiden/BarkleyV120.zip';
 const ZIP_MD5 = '28f07c58d08b47979fdab7a6c571200f';
-const DECOMPILER_REPO = 'https://github.com/ButterscotchRunner/GMDecompilerDecompiled.git';
-const DECOMPILER_COMMIT = '92a646dd22123d8472645ff0d7073b8684b27b4d';
 
 const root = path.resolve(import.meta.dirname, '..');
 const original = path.join(root, 'game', 'original');
@@ -47,15 +45,12 @@ export function fetchInputs() {
 		}
 	}
 
-	const decompiler = path.join(original, 'GMDecompilerDecompiled');
-	if (fs.existsSync(path.join(decompiler, 'src', 'main', 'java')))
-		console.log(`- decompiler: already in ${decompiler}`);
+	// A submodule that was never checked out shows as `-<commit> <path>`.
+	const status = execFileSync('git', ['-C', root, 'submodule', 'status', '--recursive'], { encoding: 'utf8' });
+	if (!/^-/m.test(status)) console.log('- upstream: already checked out in virt/upstream/');
 	else {
-		console.log(`- decompiler: cloning ${DECOMPILER_REPO} at ${DECOMPILER_COMMIT.slice(0, 7)}`);
-		fs.rmSync(decompiler, { recursive: true, force: true });
-		run('git', ['init', '-q', decompiler]);
-		run('git', ['-C', decompiler, 'fetch', '-q', '--depth', '1', DECOMPILER_REPO, DECOMPILER_COMMIT]);
-		run('git', ['-C', decompiler, 'checkout', '-q', 'FETCH_HEAD']);
+		console.log('- upstream: checking out the submodules in virt/upstream/');
+		run('git', ['-C', root, 'submodule', 'update', '--init', '--recursive']);
 	}
 }
 

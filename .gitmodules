@@ -1,0 +1,6 @@
+[submodule "virt/upstream/GMDecompilerDecompiled"]
+	path = virt/upstream/GMDecompilerDecompiled
+	url = https://github.com/ButterscotchRunner/GMDecompilerDecompiled.git
+[submodule "virt/upstream/LateralGM"]
+	path = virt/upstream/LateralGM
+	url = https://github.com/IsmAvatar/LateralGM.git

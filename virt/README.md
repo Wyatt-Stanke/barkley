@@ -6,11 +6,12 @@ the keyboard. Both steps are Java, run in a container:
 
 ```
 BarkleyV120.exe
-   |  the GM6 decompiler (game/original/GMDecompilerDecompiled), headless,
+   |  the GM6 decompiler (upstream/GMDecompilerDecompiled), headless,
    |  in a container -- about 75 seconds
    v
 BarkleyV120.gm6
-   |  LateralGM, patched and headless, in a container -- about a minute
+   |  LateralGM (upstream/LateralGM), patched and headless, in a container
+   |  -- about a minute
    v
 BarkleyV120.gmx
 ```
@@ -27,16 +28,17 @@ checkout that has `game/`) and `BARKLEY_CONTAINER` to pick podman or docker.
 ## What you need
 
 - **podman** or **docker** (podman preferred).
-- **git**, for the LateralGM clone (kept in `build/virt/lateralgm-src`).
-- The untracked inputs `game/original/BarkleyV120.exe` and
-  `game/original/GMDecompilerDecompiled/` (`node src/fetch.mjs` provides both).
-- An internet connection the first time: the JDK image and the clone.
+- The untracked input `game/original/BarkleyV120.exe`, and the submodules in
+  `upstream/` checked out (`git clone --recurse-submodules`, or
+  `git submodule update --init --recursive`). `node src/fetch.mjs` provides both.
+- An internet connection the first time, for the JDK image.
 - Around three minutes.
 
 ## The pieces
 
 | | |
 |---|---|
+| `upstream/` | the two programs, as git submodules pinned to a commit: [GMDecompilerDecompiled](https://github.com/ButterscotchRunner/GMDecompilerDecompiled) and [LateralGM](https://github.com/IsmAvatar/LateralGM) (with its own submodule, JoshEdit) |
 | `run.sh` | both steps, one command |
 | `decompile.sh` | step 1: the exe to a `.gm6` |
 | `java/Decompile.java` | the decompiler's "GM6 EXE" path with the window left out |
@@ -46,7 +48,7 @@ checkout that has `game/`) and `BARKLEY_CONTAINER` to pick podman or docker.
 
 ## Step 1: the exe to a `.gm6`
 
-Compiles the decompiler from the sources in `game/original/GMDecompilerDecompiled`
+Compiles the decompiler from the sources in `upstream/GMDecompilerDecompiled`
 together with `java/Decompile.java`, and checks the result's SHA-256: the output
 is byte-for-byte the `.gm6` the decompiler's GUI produces (`4b76af44…`,
 10,720,322 bytes).
@@ -64,8 +66,9 @@ macOS runs at about a fifth of the speed.
 ## Step 2: LateralGM
 
 [LateralGM](https://github.com/IsmAvatar/LateralGM) reads GM6 and writes GMX
-directly. It is cloned at a pinned commit and the patches in `lateralgm/patches`
-are applied at build time, so nothing is vendored. They fix four things in its
+directly. It is a submodule pinned to a commit, and the patches in
+`lateralgm/patches` are applied to a copy of it at build time, so nothing is
+vendored and the submodule stays clean. They fix four things in its
 GMX writer:
 
 1. **The transparency key.** The sprite path ran the pixels through java.awt's

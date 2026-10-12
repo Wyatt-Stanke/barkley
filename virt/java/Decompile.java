@@ -6,7 +6,7 @@ import javax.swing.JTextField;
 /**
  * The decompiler's "GM6 EXE -> .gm6" path, with no window.
  *
- * GmDecompilerCli in game/original/GMDecompilerDecompiled cannot do this on its
+ * GmDecompilerCli in virt/upstream/GMDecompilerDecompiled cannot do this on its
  * own: GmDecompiler.getSourceFile() reads the GUI's text field, and
  * GmExtractor.extractStandalone calls it to decide where the game's included
  * files (bass.dll, bgm.dll, Music/, Voice/, BG/) go. Left unset it is null, and
