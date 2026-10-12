@@ -5,14 +5,14 @@
 //
 //   node src/build.mjs <project .yyp> <build dir> [--minify]
 //
-// (fuzz.mjs build is the same.) It is its own file so that the fuzzer can change without changing what a build is:
-// CI reuses a build whose inputs are unchanged (.github/actions/prebuilt), and fuzz.mjs is not one of them. The one
-// thing it takes from the fuzzer is harness(), which only checks that the build is one the fuzzer can drive.
+// (fuzz/fuzz.mjs build is the same.) It is its own file so that the fuzzer can change without changing what a build
+// is: CI reuses a build whose inputs are unchanged (.github/actions/prebuilt), and the fuzzer (fuzz/) is not one of
+// them. The one thing it takes from the fuzzer is harness(), which only checks that the build is one it can drive.
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { harness } from './fuzz.mjs';
+import { harness } from '../fuzz/lib/harness.mjs';
 import { writeBuild } from './offline.mjs';
 import { igor } from './toolchain.mjs';
 

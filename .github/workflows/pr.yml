@@ -1,5 +1,5 @@
 # On every pull request: the whole port builds from the original executable and play-tests (node src/pipeline.mjs),
-# then the fuzzer checks the build against the corpus in git (node src/fuzz.mjs verify): the corpus's paths are played
+# then the fuzzer checks the build against the corpus in git (node fuzz/fuzz.mjs verify): the corpus's paths are played
 # again on it, it explores for a few minutes, and a crash the corpus doesn't know that replays fails the check. Nothing
 # is deployed. Needs the repository secret GAMEMAKER_ACCESS_KEY, which a pull request from a fork doesn't get.
 #
@@ -56,7 +56,7 @@ jobs:
       # replay browsers that verify rarely starts): on 2026-10-01 that replayed the corpus in 92 s rather than 121 s and
       # played 1.0M frames in 5 min rather than 673k, so 4 min still explores ~20% more than 2 browsers did in 5.
       - name: Fuzz (verify against the corpus)
-        run: node src/fuzz.mjs verify build/pipeline/site --workers=3 --minutes=4 --save=build/fuzz/verify
+        run: node fuzz/fuzz.mjs verify build/pipeline/site --workers=3 --minutes=4 --save=build/fuzz/verify
 
       - name: Keep the play-test and the fuzzer's findings
         if: always()

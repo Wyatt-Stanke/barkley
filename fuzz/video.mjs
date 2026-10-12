@@ -1,6 +1,6 @@
 // A video of one fuzz corpus path, played from a fresh page with the fuzzer's own restores (as fuzz.mjs replayChain).
 //
-//   node src/video.mjs <build dir> [out.mp4] [--node=<id>] [--corpus=<dir | corpus.json.gz>] [--speed=N] [--port=N]
+//   node fuzz/video.mjs <build dir> [out.mp4] [--node=<id>] [--corpus=<dir | corpus.json.gz>] [--speed=N] [--port=N]
 //
 // The build must be the unobfuscated or minified one the corpus was made on (fuzz.mjs build). --node picks the path's
 // last node; the default is the longest path in the corpus, by steps. The game runs at 60 steps a second (oController
@@ -15,8 +15,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { Browser, harness, serve, setPort } from './fuzz.mjs';
+import { PACK } from './lib/corpus.mjs';
 
-const HERE = path.dirname(new URL(import.meta.url).pathname);
 const args = process.argv.slice(2);
 const flag = (name, d) => args.find((a) => a.startsWith(`--${name}=`))?.split('=')[1] ?? d;
 const [root, outArg] = args.filter((a) => !a.startsWith('--')).map((a) => path.resolve(a));
@@ -34,7 +34,7 @@ if (flag('port')) setPort(+flag('port'));
 // the corpus: by default the packed one in the repo, whose paths all replay to where they were recorded (fuzz.mjs
 // verify checks them). The working copy (build/fuzz/corpus) has more paths, but one that owns nothing at its end can
 // depend on snapshots that are gone and replay somewhere else (its longest, 122,450 steps, sticks at plot 2).
-const corpusPath = path.resolve(flag('corpus', path.join(HERE, '..', 'fuzz', 'corpus.json.gz')));
+const corpusPath = path.resolve(flag('corpus', PACK));
 const { state, nodes } = statSync(corpusPath).isDirectory()
 	? {
 			state: JSON.parse(readFileSync(path.join(corpusPath, 'state.json'), 'utf8')),

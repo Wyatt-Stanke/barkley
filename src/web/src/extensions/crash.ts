@@ -2,7 +2,7 @@
 // step's frame time; this records the key events between steps, the touch overlay's and a game controller's too.
 // After an uncaught error, or when the player types BUG (in capitals) or asks from the touch controls' sheet, the page
 // shows a report (CrashPanel): the checkpoint about 10 s back, the frame times and key events
-// since, and the error or the state the game has now, gzipped and Base64-encoded. `node src/fuzz.mjs replay <build>
+// since, and the error or the state the game has now, gzipped and Base64-encoded. `node fuzz/fuzz.mjs replay <build>
 // <report file>` replays it, so the report's format is fixed: change it only with the replay.
 import { createSignal } from 'solid-js';
 import { folder, storage } from '../page';
